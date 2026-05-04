@@ -33,13 +33,20 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 5055 --reload
    - Click "Ask BROCKSTON"
    - See response in chat panel
 
-4. **Request code improvements**:
+4. **Try Claude integration**:
+   - Click the "CLAUDE" tab in the AI panel
+   - Type a question in the Claude input area
+   - Click "Ask Claude"
+   - See Claude's response below
+
+5. **Request code improvements**:
+   - Switch back to "BROCKSTON" tab
    - Type instruction: "Refactor for clarity and add comments"
    - Click "Suggest Fix"
    - Review changes in modal
    - Click "Apply Changes"
 
-5. **Save your work**:
+6. **Save your work**:
    - Click "Save" or press `Ctrl+S`
 
 ---
@@ -50,10 +57,12 @@ Create a `.env` file or export variables:
 
 ```bash
 export BROCKSTON_BASE_URL=http://localhost:6006  # Your BROCKSTON endpoint
+export ANTHROPIC_API_KEY=sk-ant-your-key-here    # For Claude integration
 export BROCKSTON_WORKSPACE=/path/to/your/code    # Where your code lives
 ```
 
 If `BROCKSTON_BASE_URL` is not set, the app runs in **mock mode** (useful for testing UI).
+If `ANTHROPIC_API_KEY` is not set, Claude features will be disabled.
 
 ---
 

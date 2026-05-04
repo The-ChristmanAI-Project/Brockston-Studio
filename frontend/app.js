@@ -18,6 +18,7 @@ const state = {
     mediaRecorder: null,
     audioChunks: [],
     isRecording: false,
+    claudeHook: null,
 };
 
 // DOM elements
@@ -57,6 +58,17 @@ const elements = {
     modelSelector: null,
     btnSpeech: null,
     audioPlayer: null,
+    // Claude elements
+    claudeInput: null,
+    btnAskClaude: null,
+    claudeResponse: null,
+    claudeLoading: null,
+    claudeError: null,
+    // Tab elements
+    tabBrockston: null,
+    tabClaude: null,
+    brockstonPanel: null,
+    claudePanel: null,
 };
 
 // Initialize application
@@ -97,6 +109,20 @@ function init() {
     elements.modelSelector = document.getElementById('model-selector');
     elements.btnSpeech = document.getElementById('btn-speech');
     elements.audioPlayer = document.getElementById('audio-player');
+    // Claude elements
+    elements.claudeInput = document.getElementById('claude-input');
+    elements.btnAskClaude = document.getElementById('btn-ask-claude');
+    elements.claudeResponse = document.getElementById('claude-response');
+    elements.claudeLoading = document.getElementById('claude-loading');
+    elements.claudeError = document.getElementById('claude-error');
+    // Tab elements
+    elements.tabBrockston = document.getElementById('tab-brockston');
+    elements.tabClaude = document.getElementById('tab-claude');
+    elements.brockstonPanel = document.getElementById('brockston-panel');
+    elements.claudePanel = document.getElementById('claude-panel');
+
+    // Initialize Claude hook
+    state.claudeHook = useClaude();
 
     // Initialize Split Panels
     initSplitPanels();
@@ -295,6 +321,11 @@ function attachEventListeners() {
     elements.modelSelector.addEventListener('change', handleModelChange);
     elements.btnSpeech.addEventListener('click', handleSpeechToggle);
 
+    // Claude event listeners
+    elements.btnAskClaude.addEventListener('click', handleAskClaude);
+    elements.tabBrockston.addEventListener('click', () => switchTab('brockston'));
+    elements.tabClaude.addEventListener('click', () => switchTab('claude'));
+
     // Enter key in file path opens file
     elements.filePathInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
@@ -429,7 +460,7 @@ async function handleAskBrockston() {
         const messages = [
             {
                 role: 'system',
-                content: 'You are BROCKSTON, a reasoning engine that helps developers understand and improve their code. Be concise, precise, and helpful.',
+                content: 'You are BROCKSTON, a reasoning engine that helps Everett, the architect, understand and improve his code. Be concise, precise, and helpful.',
             },
             {
                 role: 'user',
@@ -837,7 +868,7 @@ async function handleAudioRecorded(audioBlob) {
         const messages = [
             {
                 role: 'system',
-                content: 'You are an AI coding assistant. Be concise, precise, and helpful.',
+                content: 'You are BROCKSTON, a coding assistant for Everett, the architect. Be concise, precise, and helpful.',
             },
             {
                 role: 'user',
@@ -903,6 +934,63 @@ function playAudioResponse(audioBlob) {
     } catch (error) {
         console.error('Audio playback error:', error);
         showError('Failed to play audio response');
+    }
+}
+
+// ============================================================================
+// Claude Operations
+// ============================================================================
+
+// Handle asking Claude a question
+async function handleAskClaude() {
+    const input = elements.claudeInput.value.trim();
+    if (!input) {
+        showError('Please enter a question for Claude');
+        return;
+    }
+
+    // Clear previous response and error
+    if (elements.claudeResponse) elements.claudeResponse.textContent = '';
+    if (elements.claudeError) elements.claudeError.textContent = '';
+    if (elements.claudeLoading) elements.claudeLoading.style.display = 'block';
+
+    try {
+        const result = await state.claudeHook.ask([
+            { role: "user", content: input }
+        ], "You are Claude, integrated into Brockston Studios.");
+
+        if (result) {
+            if (elements.claudeResponse) elements.claudeResponse.textContent = result;
+        } else {
+            if (elements.claudeError) elements.claudeError.textContent = state.claudeHook.getError() || 'No response from Claude';
+        }
+    } catch (error) {
+        if (elements.claudeError) elements.claudeError.textContent = `Error: ${error.message}`;
+    } finally {
+        if (elements.claudeLoading) elements.claudeLoading.style.display = 'none';
+    }
+}
+
+// Switch between Brockston and Claude tabs
+function switchTab(tab) {
+    if (tab === 'brockston') {
+        elements.tabBrockston.classList.add('active');
+        elements.tabBrockston.style.borderBottom = '2px solid var(--neon-orange)';
+        elements.tabBrockston.style.color = 'var(--neon-orange)';
+        elements.tabClaude.classList.remove('active');
+        elements.tabClaude.style.borderBottom = 'none';
+        elements.tabClaude.style.color = '#666';
+        elements.brockstonPanel.style.display = 'block';
+        elements.claudePanel.style.display = 'none';
+    } else if (tab === 'claude') {
+        elements.tabClaude.classList.add('active');
+        elements.tabClaude.style.borderBottom = '2px solid var(--neon-orange)';
+        elements.tabClaude.style.color = 'var(--neon-orange)';
+        elements.tabBrockston.classList.remove('active');
+        elements.tabBrockston.style.borderBottom = 'none';
+        elements.tabBrockston.style.color = '#666';
+        elements.claudePanel.style.display = 'flex';
+        elements.brockstonPanel.style.display = 'none';
     }
 }
 

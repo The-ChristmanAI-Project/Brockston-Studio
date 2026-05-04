@@ -6,22 +6,37 @@ import json
 import logging
 import asyncio
 from pathlib import Path
+from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
-# Import your AI client (ensure ai_client.py is in the same folder)
-try:
-    from .ai_client import get_ai_response
-except ImportError:
-    # Fallback for direct execution
-    from ai_client import get_ai_response
+from .config import OLLAMA_BASE_URL, LLM_MODEL_GENERAL, LLM_MODEL_CODER, LLM_PROVIDER, BROCKSTON_BASE_URL, ULTIMATEEV_BASE_URL
+from .brockston_client import BrockstonClient
+from .claude_router import router as claude_router
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("BrockstonStudio")
+
+# Initialize AI clients
+brockston_client = BrockstonClient(base_url=BROCKSTON_BASE_URL, provider="brockston", model="brockston")
+ultimateev_client = BrockstonClient(base_url=ULTIMATEEV_BASE_URL, provider="ultimateev", model="ultimateev")
+ollama_client = BrockstonClient(base_url=OLLAMA_BASE_URL, provider=LLM_PROVIDER, model=LLM_MODEL_GENERAL)
+
+def get_client_for_model(model_name: str):
+    """Get the appropriate client based on model name."""
+    model_lower = model_name.lower() if model_name else "brockston"
+
+    if model_lower == "brockston":
+        return brockston_client
+    elif model_lower == "ultimateev":
+        return ultimateev_client
+    else:
+        # Default to Ollama for other models
+        return ollama_client
 
 app = FastAPI()
 
@@ -40,40 +55,93 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include Claude router
+app.include_router(claude_router)
+
 # --- DATA MODELS ---
 class ChatRequest(BaseModel):
     message: str
+
+class BrockstonChatRequest(BaseModel):
+    messages: list[dict]
+    context: Optional[dict] = None
+    model: Optional[str] = None
+
+class BrockstonSuggestFixRequest(BaseModel):
+    instruction: str
+    path: str
+    code: str
+    model: Optional[str] = None
 
 # --- API ENDPOINTS ---
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "10 Toes Down", "system": "Online"}
+    return {
+        "status": "10 Toes Down",
+        "system": "Online",
+        "llm_provider": LLM_PROVIDER,
+        "llm_model_general": LLM_MODEL_GENERAL,
+        "llm_model_coder": LLM_MODEL_CODER,
+        "ollama_url": OLLAMA_BASE_URL,
+    }
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    """Routes to UltimateEv Code Mechanic for hillbilly-to-tech translation"""
-    import httpx
     try:
-        logger.info(f"Sending to UltimateEv: {request.message}")
-        
-        # Call UltimateEv API
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                "http://localhost:5174/api/translate",
-                json={"message": request.message}
-            )
-            data = response.json()
-            return {"response": f"[ULTIMATE_EV]: {data['response']}"}
-            
+        logger.info(f"Sending to LLM provider {LLM_PROVIDER} model {LLM_MODEL_GENERAL}: {request.message}")
+        client = get_client_for_model(LLM_MODEL_GENERAL)
+        reply = await client.chat(
+            [
+                {
+                    "role": "system",
+                    "content": "You are BROCKSTON, the code reasoning engine for Everett, the architect. Answer Everett directly, with precision and clarity.",
+                },
+                {"role": "user", "content": request.message},
+            ],
+            None,
+            model=LLM_MODEL_GENERAL,
+        )
+        return {"response": reply}
     except Exception as e:
-        logger.error(f"UltimateEv Error: {e}")
-        # Fallback to regular AI
-        try:
-            response_text = get_ai_response(request.message)
-            return {"response": f"[BROCKSTON]: {response_text}"}
-        except:
-            raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"LLM chat error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/brockston/chat")
+async def brockston_chat(request: BrockstonChatRequest):
+    try:
+        response_model = request.model or LLM_MODEL_GENERAL
+        client = get_client_for_model(response_model)
+        logger.info(f"BROCKSTON chat using model {response_model} with client {client.provider}")
+        reply = await client.chat(
+            request.messages,
+            request.context,
+            model=response_model,
+        )
+        return {"reply": reply}
+    except Exception as e:
+        logger.error(f"BROCKSTON chat failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/brockston/suggest_fix")
+async def brockston_suggest_fix(request: BrockstonSuggestFixRequest):
+    try:
+        response_model = request.model or LLM_MODEL_CODER
+        client = get_client_for_model(response_model)
+        logger.info(f"BROCKSTON suggest_fix using model {response_model} with client {client.provider}")
+        result = await client.suggest_fix(
+            code=request.code,
+            instruction=request.instruction,
+            path=request.path,
+            model=response_model,
+        )
+        return {
+            "proposed_code": result.get("proposed_code", ""),
+            "summary": result.get("summary", ""),
+        }
+    except Exception as e:
+        logger.error(f"BROCKSTON suggest_fix failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/files")
 async def list_files(path: str = ""):

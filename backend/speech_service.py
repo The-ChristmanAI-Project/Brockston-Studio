@@ -2,7 +2,6 @@
 Speech Service
 
 Handles speech-to-text transcription and text-to-speech synthesis.
-Uses OpenAI's Whisper API for transcription and TTS API for synthesis.
 """
 
 import os
@@ -17,10 +16,6 @@ logger = logging.getLogger(__name__)
 class SpeechService:
     """
     Service for speech operations: transcription and synthesis.
-
-    Uses OpenAI's APIs for both operations:
-    - Whisper API for speech-to-text
-    - TTS API for text-to-speech
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -28,20 +23,20 @@ class SpeechService:
         Initialize speech service.
 
         Args:
-            api_key: OpenAI API key (optional, falls back to OPENAI_API_KEY env var)
+            api_key: Optional API key for the configured speech provider
         """
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.base_url = "https://api.openai.com/v1"
+        self.api_key = api_key or os.getenv("SPEECH_SERVICE_API_KEY")
+        self.base_url = "https://api.speech-service.local"
         self.timeout = 60.0  # 60 seconds for audio processing
 
         if self.api_key:
-            logger.info("Speech service initialized with OpenAI API")
+            logger.info("Speech service initialized with configured API key")
         else:
             logger.warning("Speech service initialized in MOCK mode (no API key)")
 
     async def transcribe_audio(self, audio_data: bytes, filename: str = "audio.webm") -> str:
         """
-        Transcribe audio to text using OpenAI Whisper API.
+        Transcribe audio to text using the configured speech service.
 
         Args:
             audio_data: Audio file bytes (supports mp3, mp4, mpeg, mpga, m4a, wav, webm)
@@ -58,7 +53,6 @@ class SpeechService:
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                # Prepare multipart form data
                 files = {
                     "file": (filename, audio_data, "audio/webm")
                 }
@@ -69,7 +63,6 @@ class SpeechService:
                     "Authorization": f"Bearer {self.api_key}"
                 }
 
-                # Make request to Whisper API
                 response = await client.post(
                     f"{self.base_url}/audio/transcriptions",
                     files=files,
@@ -90,11 +83,11 @@ class SpeechService:
 
     async def synthesize_speech(self, text: str, voice: str = "alloy") -> bytes:
         """
-        Convert text to speech using OpenAI TTS API.
+        Convert text to speech using the configured speech service.
 
         Args:
             text: Text to convert to speech
-            voice: Voice to use (alloy, echo, fable, onyx, nova, shimmer)
+            voice: Voice to use
 
         Returns:
             Audio data as bytes (MP3 format)
@@ -107,7 +100,6 @@ class SpeechService:
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                # Prepare request payload
                 payload = {
                     "model": "tts-1",
                     "input": text,
@@ -119,7 +111,6 @@ class SpeechService:
                     "Content-Type": "application/json"
                 }
 
-                # Make request to TTS API
                 response = await client.post(
                     f"{self.base_url}/audio/speech",
                     json=payload,
@@ -142,7 +133,7 @@ class SpeechService:
         logger.info(f"MOCK: Received {len(audio_data)} bytes of audio ({filename})")
         return (
             "This is a mock transcription. "
-            "Configure OPENAI_API_KEY to use real speech-to-text. "
+            "Configure SPEECH_SERVICE_API_KEY to use real speech-to-text. "
             f"Audio file size: {len(audio_data)} bytes."
         )
 
@@ -152,7 +143,5 @@ class SpeechService:
         Returns a minimal valid MP3 header to avoid errors.
         """
         logger.info(f"MOCK: Would synthesize with voice '{voice}': {text[:100]}...")
-        # Minimal MP3 header (valid but empty audio)
-        # This prevents errors when the frontend tries to play it
         mp3_header = b'\xff\xfb\x90\x00' + b'\x00' * 100
         return mp3_header

@@ -20,28 +20,33 @@ class BrockstonClient:
     whether BROCKSTON is accessed via HTTP, gRPC, or in-process.
     """
 
-    def __init__(self, base_url: Optional[str] = None, timeout: float = 120.0):
+    def __init__(self, base_url: Optional[str] = None, provider: str = "ollama", model: str = "llama3.2:3b", timeout: float = 120.0):
         """
         Initialize BROCKSTON client.
 
         Args:
-            base_url: HTTP endpoint for BROCKSTON (e.g., 'http://localhost:6006')
-                      If None, falls back to mock/in-process mode for development.
+            base_url: HTTP endpoint for BROCKSTON or Ollama.
+            provider: Model provider identifier (e.g. 'ollama').
+            model: Model name to select on the provider.
             timeout: Request timeout in seconds (default: 120s for LLM inference)
         """
         self.base_url = base_url
+        self.provider = provider.lower()
+        self.model = model
         self.timeout = timeout
         self.client = httpx.AsyncClient(timeout=timeout) if base_url else None
 
         if base_url:
             logger.info(f"BROCKSTON client initialized with endpoint: {base_url}")
+            logger.info(f"LLM provider: {self.provider}, model: {self.model}")
         else:
             logger.warning("BROCKSTON client initialized in MOCK mode (no base_url provided)")
 
     async def chat(
         self,
         messages: List[Dict[str, str]],
-        context: Optional[Dict[str, str]] = None
+        context: Optional[Dict[str, str]] = None,
+        model: Optional[str] = None,
     ) -> str:
         """
         Send a chat request to BROCKSTON.
@@ -53,6 +58,7 @@ class BrockstonClient:
                           {"role": "user", "content": "Explain this code..."}
                       ]
             context: Optional context dict with 'path' and 'code' keys
+            model: Optional model identifier to override the default.
 
         Returns:
             Assistant reply text from BROCKSTON
@@ -63,8 +69,39 @@ class BrockstonClient:
         if not self.base_url:
             return self._mock_chat_response(messages, context)
 
+        chosen_model = model or self.model
+
         try:
-            # Prepare request payload
+            # Prepare request payload and call the configured provider
+            if self.provider == "ollama":
+                payload = {
+                    "model": chosen_model,
+                    "messages": messages,
+                }
+                response = await self.client.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    json=payload,
+                )
+                response.raise_for_status()
+                result = response.json()
+                choice = result.get("choices", [])[0]
+                return choice.get("message", {}).get("content", "")
+
+            elif self.provider in ["brockston", "ultimateev"]:
+                # BROCKSTON and UltimateEV expect the same payload format
+                payload = {
+                    "messages": messages,
+                    "context": context or {}
+                }
+                response = await self.client.post(
+                    f"{self.base_url}/chat",
+                    json=payload
+                )
+                response.raise_for_status()
+                result = response.json()
+                return result.get("reply", "")
+
+            # Default fallback
             payload = {
                 "messages": messages,
                 "context": context or {}
@@ -88,7 +125,8 @@ class BrockstonClient:
         self,
         code: str,
         instruction: str,
-        path: Optional[str] = None
+        path: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> Dict[str, str]:
         """
         Request BROCKSTON to suggest code improvements.
@@ -97,6 +135,7 @@ class BrockstonClient:
             code: Current file contents
             instruction: What to do (e.g., "refactor for clarity", "fix bug")
             path: Optional file path for context
+            model: Optional model identifier to override the default.
 
         Returns:
             Dict with keys:
@@ -109,8 +148,42 @@ class BrockstonClient:
         if not self.base_url:
             return self._mock_suggest_fix_response(code, instruction, path)
 
+        chosen_model = model or self.model
+
         try:
-            # Prepare request payload
+            if self.provider == "ollama":
+                prompt = [
+                    {"role": "system", "content": "You are a helpful code assistant. Improve the user's code according to instruction."},
+                    {"role": "user", "content": f"Instruction: {instruction}\n\nCode:\n{code}"},
+                ]
+                response = await self.client.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    json={"model": chosen_model, "messages": prompt},
+                )
+                response.raise_for_status()
+                result = response.json()
+                choice = result.get("choices", [])[0]
+                return {
+                    "proposed_code": choice.get("message", {}).get("content", ""),
+                    "summary": f"Suggested fix from model {chosen_model}."
+                }
+
+            elif self.provider in ["brockston", "ultimateev"]:
+                # BROCKSTON and UltimateEV expect the same payload format
+                payload = {
+                    "code": code,
+                    "instruction": instruction,
+                    "path": path
+                }
+                response = await self.client.post(
+                    f"{self.base_url}/suggest_fix",
+                    json=payload
+                )
+                response.raise_for_status()
+                result = response.json()
+                return result
+
+            # Default fallback - assume BROCKSTON-style API
             payload = {
                 "code": code,
                 "instruction": instruction,
