@@ -21,16 +21,27 @@ const state = {
     claudeHook: null,
 };
 
-// DOM elements
+// DOM elements - mapped to actual HTML IDs
 const elements = {
-    filePathInput: null,
-    btnOpen: null,
-    btnSave: null,
-    btnAsk: null,
-    btnSuggest: null,
-    btnClearChat: null,
-    currentFileSpan: null,
-    chatLog: null,
+    // File operations (using textarea editor instead of Monaco)
+    editorContent: document.getElementById('editor-content'),
+    filePathInput: null,  // Not in current HTML
+    btnOpen: null,  // Not in current HTML
+    btnSave: null,  // Not in current HTML
+
+    // Chat elements
+    chatLog: document.getElementById('chat-history'),
+    chatInput: document.getElementById('chat-input'),
+    sendBtn: document.getElementById('send-btn'),
+    btnClearChat: null,  // Not in current HTML
+
+    // File explorer
+    fileList: document.getElementById('file-list'),
+
+    // Current file display
+    currentFileSpan: null,  // Not in current HTML
+
+    // Comparison modal (not in current HTML)
     instructionInput: null,
     comparisonModal: null,
     btnCloseModal: null,
@@ -41,7 +52,8 @@ const elements = {
     comparisonSummary: null,
     loadingOverlay: null,
     workspaceInfo: null,
-    // Git modal elements
+
+    // Git modal elements (not in current HTML)
     btnGit: null,
     gitModal: null,
     btnCloseGitModal: null,
@@ -50,117 +62,49 @@ const elements = {
     gitUrl: null,
     folderName: null,
     gitStatusMessage: null,
+
     // Terminal elements
-    terminalContainer: null,
-    btnClearTerminal: null,
-    btnNewTerminal: null,
-    // Model selection and speech elements
+    terminalContainer: document.getElementById('terminal'),
+    btnClearTerminal: null,  // Not in current HTML
+    btnNewTerminal: null,    // Not in current HTML
+
+    // Model selection and speech elements (not in current HTML)
     modelSelector: null,
     btnSpeech: null,
     audioPlayer: null,
+
     // Claude elements
-    claudeInput: null,
-    btnAskClaude: null,
-    claudeResponse: null,
-    claudeLoading: null,
-    claudeError: null,
+    claudeInput: document.getElementById('claude-input'),
+    btnAskClaude: document.getElementById('btn-ask-claude'),
+    claudeResponse: document.getElementById('claude-response'),
+    claudeLoading: document.getElementById('claude-loading'),
+    claudeError: document.getElementById('claude-error'),
+
     // Tab elements
-    tabBrockston: null,
-    tabClaude: null,
-    brockstonPanel: null,
-    claudePanel: null,
+    tabBrockston: document.getElementById('tab-brockston'),
+    tabClaude: document.getElementById('tab-claude'),
+    brockstonPanel: document.getElementById('brockston-panel'),
+    claudePanel: document.getElementById('claude-panel'),
 };
 
 // Initialize application
 function init() {
-    // Get DOM elements
-    elements.filePathInput = document.getElementById('file-path');
-    elements.btnOpen = document.getElementById('btn-open');
-    elements.btnSave = document.getElementById('btn-save');
-    elements.btnAsk = document.getElementById('btn-ask');
-    elements.btnSuggest = document.getElementById('btn-suggest');
-    elements.btnClearChat = document.getElementById('btn-clear-chat');
-    elements.currentFileSpan = document.getElementById('current-file');
-    elements.chatLog = document.getElementById('chat-log');
-    elements.instructionInput = document.getElementById('instruction-input');
-    elements.comparisonModal = document.getElementById('comparison-modal');
-    elements.btnCloseModal = document.getElementById('btn-close-modal');
-    elements.btnApply = document.getElementById('btn-apply');
-    elements.btnReject = document.getElementById('btn-reject');
-    elements.currentCodePre = document.getElementById('current-code');
-    elements.proposedCodePre = document.getElementById('proposed-code');
-    elements.comparisonSummary = document.getElementById('comparison-summary');
-    elements.loadingOverlay = document.getElementById('loading-overlay');
-    elements.workspaceInfo = document.getElementById('workspace-info');
-    // Git modal elements
-    elements.btnGit = document.getElementById('btn-git');
-    elements.gitModal = document.getElementById('git-modal');
-    elements.btnCloseGitModal = document.getElementById('btn-close-git-modal');
-    elements.btnCancelClone = document.getElementById('btn-cancel-clone');
-    elements.btnCloneRepo = document.getElementById('btn-clone-repo');
-    elements.gitUrl = document.getElementById('git-url');
-    elements.folderName = document.getElementById('folder-name');
-    elements.gitStatusMessage = document.getElementById('git-status-message');
-    // Terminal elements
-    elements.terminalContainer = document.getElementById('terminal');
-    elements.btnClearTerminal = document.getElementById('btn-clear-terminal');
-    elements.btnNewTerminal = document.getElementById('btn-new-terminal');
-    // Model selection and speech elements
-    elements.modelSelector = document.getElementById('model-selector');
-    elements.btnSpeech = document.getElementById('btn-speech');
-    elements.audioPlayer = document.getElementById('audio-player');
-    // Claude elements
-    elements.claudeInput = document.getElementById('claude-input');
-    elements.btnAskClaude = document.getElementById('btn-ask-claude');
-    elements.claudeResponse = document.getElementById('claude-response');
-    elements.claudeLoading = document.getElementById('claude-loading');
-    elements.claudeError = document.getElementById('claude-error');
-    // Tab elements
-    elements.tabBrockston = document.getElementById('tab-brockston');
-    elements.tabClaude = document.getElementById('tab-claude');
-    elements.brockstonPanel = document.getElementById('brockston-panel');
-    elements.claudePanel = document.getElementById('claude-panel');
-
     // Initialize Claude hook
     state.claudeHook = useClaude();
-
-    // Initialize Split Panels
-    initSplitPanels();
-
-    // Initialize Monaco Editor
-    initMonacoEditor();
 
     // Initialize Terminal
     initTerminal();
 
-    // Attach event listeners
+    // Attach event listeners for available elements
     attachEventListeners();
 
     // Load workspace info
     loadWorkspaceInfo();
-}
 
-// Initialize Split Panels
-function initSplitPanels() {
-    // Horizontal split (editor | brockston)
-    state.horizontalSplit = Split(['#editor-panel', '#brockston-panel'], {
-        sizes: [60, 40],
-        minSize: [300, 300],
-        gutterSize: 8,
-        cursor: 'col-resize',
-        direction: 'horizontal',
-    });
+    // Load file list
+    loadFiles();
 
-    // Vertical split (top panels | terminal)
-    state.verticalSplit = Split(['#top-panels', '#terminal-panel'], {
-        sizes: [70, 30],
-        minSize: [200, 150],
-        gutterSize: 8,
-        cursor: 'row-resize',
-        direction: 'vertical',
-    });
-
-    console.log('Split panels initialized');
+    console.log('BROCKSTON Studio initialized');
 }
 
 // Initialize Terminal
@@ -298,50 +242,28 @@ function initMonacoEditor() {
 
 // Attach event listeners
 function attachEventListeners() {
-    elements.btnOpen.addEventListener('click', handleOpenFile);
-    elements.btnSave.addEventListener('click', handleSaveFile);
-    elements.btnAsk.addEventListener('click', handleAskBrockston);
-    elements.btnSuggest.addEventListener('click', handleSuggestFix);
-    elements.btnClearChat.addEventListener('click', handleClearChat);
-    elements.btnCloseModal.addEventListener('click', closeComparisonModal);
-    elements.btnReject.addEventListener('click', closeComparisonModal);
-    elements.btnApply.addEventListener('click', handleApplyChanges);
+    // Tab switching (always available)
+    if (elements.tabBrockston) {
+        elements.tabBrockston.addEventListener('click', () => switchTab('brockston'));
+    }
+    if (elements.tabClaude) {
+        elements.tabClaude.addEventListener('click', () => switchTab('claude'));
+    }
 
-    // Git modal event listeners
-    elements.btnGit.addEventListener('click', openGitModal);
-    elements.btnCloseGitModal.addEventListener('click', closeGitModal);
-    elements.btnCancelClone.addEventListener('click', closeGitModal);
-    elements.btnCloneRepo.addEventListener('click', handleCloneRepo);
+    // Claude ask button
+    if (elements.btnAskClaude) {
+        elements.btnAskClaude.addEventListener('click', handleAskClaude);
+    }
 
-    // Terminal event listeners
-    elements.btnClearTerminal.addEventListener('click', handleClearTerminal);
-    elements.btnNewTerminal.addEventListener('click', handleNewTerminal);
-
-    // Model selection and speech event listeners
-    elements.modelSelector.addEventListener('change', handleModelChange);
-    elements.btnSpeech.addEventListener('click', handleSpeechToggle);
-
-    // Claude event listeners
-    elements.btnAskClaude.addEventListener('click', handleAskClaude);
-    elements.tabBrockston.addEventListener('click', () => switchTab('brockston'));
-    elements.tabClaude.addEventListener('click', () => switchTab('claude'));
-
-    // Enter key in file path opens file
-    elements.filePathInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            handleOpenFile();
-        }
-    });
-
-    // Ctrl+S to save
+    // Ctrl+S to save (global shortcut)
     document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 's') {
             e.preventDefault();
-            if (!elements.btnSave.disabled) {
-                handleSaveFile();
-            }
+            handleSaveFile();
         }
     });
+
+    console.log('Event listeners attached');
 }
 
 // Load workspace info
@@ -357,41 +279,39 @@ async function loadWorkspaceInfo() {
     }
 }
 
-// Handle opening a file
-async function handleOpenFile() {
-    const path = elements.filePathInput.value.trim();
-    if (!path) {
-        showError('Please enter a file path');
-        return;
+// Get editor content (works with textarea)
+function getEditorContent() {
+    if (elements.editorContent) {
+        return elements.editorContent.value;
     }
+    return state.editor ? state.editor.getValue() : '';
+}
 
+// Set editor content (works with textarea)
+function setEditorContent(content) {
+    if (elements.editorContent) {
+        elements.editorContent.value = content;
+    } else if (state.editor) {
+        state.editor.setValue(content);
+    }
+}
+
+// Handle opening a file from file explorer
+async function openFileFromExplorer(filepath) {
     showLoading();
 
     try {
-        const response = await fetch(`/api/files/open?path=${encodeURIComponent(path)}`);
+        const response = await fetch(`/api/read_file?filename=${encodeURIComponent(filepath)}`);
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to open file');
+            throw new Error('Read failed');
         }
 
         const data = await response.json();
+        setEditorContent(data.content);
+        state.currentFilePath = filepath;
 
-        // Update editor
-        state.editor.setValue(data.content);
-        state.currentFilePath = data.path;
-
-        // Detect and set language
-        const language = detectLanguage(data.path);
-        monaco.editor.setModelLanguage(state.editor.getModel(), language);
-
-        // Update UI
-        elements.currentFileSpan.textContent = data.path;
-        elements.btnSave.disabled = false;
-        elements.btnAsk.disabled = false;
-        elements.btnSuggest.disabled = false;
-
-        addChatMessage('system', `File opened: ${data.path}`);
+        addChatMessage('system', `File opened: ${filepath}`);
 
     } catch (error) {
         showError(`Failed to open file: ${error.message}`);
@@ -410,7 +330,7 @@ async function handleSaveFile() {
     showLoading();
 
     try {
-        const content = state.editor.getValue();
+        const content = getEditorContent();
 
         const response = await fetch('/api/files/save', {
             method: 'POST',
@@ -1027,6 +947,60 @@ function handleNewTerminal() {
 
         connectTerminalWebSocket();
         console.log('New terminal session created');
+    }
+}
+
+// ============================================================================
+// File Explorer
+// ============================================================================
+
+let currentExplorerPath = '';
+
+// Load files from the workspace
+async function loadFiles(path = '') {
+    if (!elements.fileList) return;
+
+    try {
+        const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+        const data = await res.json();
+
+        elements.fileList.innerHTML = '';
+
+        // Add back button if not at root
+        if (currentExplorerPath !== '') {
+            const backBtn = document.createElement('div');
+            backBtn.className = 'file-item';
+            backBtn.innerHTML = '<i class="fas fa-arrow-left"></i> ..';
+            backBtn.onclick = () => {
+                const parts = currentExplorerPath.split('/').filter(p => p);
+                parts.pop();
+                currentExplorerPath = parts.join('/');
+                loadFiles(currentExplorerPath);
+            };
+            elements.fileList.appendChild(backBtn);
+        }
+
+        // Add files and folders
+        (data.files || []).forEach(file => {
+            const el = document.createElement('div');
+            el.className = 'file-item';
+            const icon = file.type === 'folder' ? 'fa-folder' : 'fa-file-code';
+            el.innerHTML = `<i class="fas ${icon}"></i> ${file.name}`;
+
+            if (file.type === 'file') {
+                const filepath = currentExplorerPath ? `${currentExplorerPath}/${file.name}` : file.name;
+                el.onclick = () => openFileFromExplorer(filepath);
+            } else {
+                el.onclick = () => {
+                    currentExplorerPath = currentExplorerPath ? `${currentExplorerPath}/${file.name}` : file.name;
+                    loadFiles(currentExplorerPath);
+                };
+            }
+
+            elements.fileList.appendChild(el);
+        });
+    } catch (err) {
+        elements.fileList.innerHTML = `<div style="color:red">Failed to load files: ${err.message}</div>`;
     }
 }
 
