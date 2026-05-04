@@ -3,6 +3,7 @@
 **Local code workbench powered by BROCKSTON.**
 
 BROCKSTON Studio lets you open a file, edit code, and ask BROCKSTON to explain, refactor, or repair it – with no external models, no GitHub billing, and no cloud dependencies.
+Built by Everett, the architect, for local code reasoning.
 
 ---
 
@@ -12,6 +13,7 @@ BROCKSTON Studio lets you open a file, edit code, and ask BROCKSTON to explain, 
 
 - **Open and edit files** from your local workspace
 - **Chat with BROCKSTON** about your code - ask questions, get explanations
+- **Chat with Claude** - Anthropic's AI assistant integrated for general questions
 - **Request code improvements** - BROCKSTON proposes full rewrites with explanations
 - **Review and apply changes** with a side-by-side comparison view
 - **Monaco Editor** integration (same engine as VS Code)
@@ -83,10 +85,17 @@ BROCKSTON-Studio/
 
    ```bash
    export BROCKSTON_HOST=127.0.0.1        # Server host (default: 127.0.0.1)
-   export BROCKSTON_PORT=5055              # Server port (default: 5055)
+   export BROCKSTON_PORT=5055            # Server port (default: 5055)
    export BROCKSTON_BASE_URL=http://localhost:6006  # BROCKSTON endpoint
+   export OLLAMA_BASE_URL=http://127.0.0.1:11434    # Ollama local API endpoint
+   export LLM_PROVIDER=ollama
+   export LLM_MODEL_GENERAL=llama3.2:3b
+   export LLM_MODEL_CODER=qwen2.5-coder:32b
    export BROCKSTON_WORKSPACE=/path/to/your/code    # Workspace root
    ```
+
+   `LLM_MODEL_GENERAL` will be used for general chat, and `LLM_MODEL_CODER` will be used for code suggestion/fixing operations.
+
 
    If `BROCKSTON_BASE_URL` is not set, the app runs in **mock mode** for testing.
 
@@ -215,6 +224,29 @@ Navigate to **http://localhost:5055** in your browser.
 }
 ```
 
+### Claude Operations
+
+#### `POST /api/claude`
+
+**Request Body:**
+```json
+{
+  "messages": [
+    {"role": "user", "content": "Your question here"}
+  ],
+  "system": "You are Claude, integrated into Brockston Studios.",
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 4096
+}
+```
+
+**Response:**
+```json
+{
+  "content": "Claude's response text"
+}
+```
+
 ---
 
 ## Configuration
@@ -226,6 +258,7 @@ Navigate to **http://localhost:5055** in your browser.
 | `BROCKSTON_HOST` | `127.0.0.1` | Server bind address |
 | `BROCKSTON_PORT` | `5055` | Server port |
 | `BROCKSTON_BASE_URL` | `http://localhost:6006` | BROCKSTON model endpoint |
+| `ANTHROPIC_API_KEY` | None | Claude API key for Anthropic integration |
 | `BROCKSTON_WORKSPACE` | `~/Code` | Workspace root directory |
 
 ### Security

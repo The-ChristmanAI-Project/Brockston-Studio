@@ -16,6 +16,11 @@ PORT = int(os.getenv("BROCKSTON_PORT", "7777"))
 # AI Model endpoints
 BROCKSTON_BASE_URL = os.getenv("BROCKSTON_BASE_URL", "http://localhost:6006")
 ULTIMATEEV_BASE_URL = os.getenv("ULTIMATEEV_BASE_URL", "http://localhost:6007")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
+LLM_MODEL_GENERAL = os.getenv("LLM_MODEL_GENERAL", "llama3.2:3b")
+LLM_MODEL_CODER = os.getenv("LLM_MODEL_CODER", "qwen2.5-coder:32b")
+LLM_MODEL = os.getenv("LLM_MODEL", LLM_MODEL_GENERAL)
 
 # Default AI model
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "brockston")
