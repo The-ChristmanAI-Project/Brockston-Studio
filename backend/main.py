@@ -13,9 +13,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
-from .config import OLLAMA_BASE_URL, LLM_MODEL_GENERAL, LLM_MODEL_CODER, LLM_PROVIDER, BROCKSTON_BASE_URL, ULTIMATEEV_BASE_URL
+from .config import OLLAMA_BASE_URL, LLM_MODEL_GENERAL, LLM_MODEL_CODER, LLM_PROVIDER, BROCKSTON_BASE_URL, ULTIMATEEV_BASE_URL, resolve_path, WORKSPACE_ROOT
 from .brockston_client import BrockstonClient
 from .claude_router import router as claude_router
+from .git_service import clone_repo
+from .speech_service import SpeechService
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)
@@ -42,8 +44,8 @@ app = FastAPI()
 
 # --- CORS POLICY (The Fix for "Failed to Fetch") ---
 origins = [
-    "http://localhost:7777",
-    "http://127.0.0.1:7777",
+    "http://localhost:5055",
+    "http://127.0.0.1:5055",
     "*"  # Open for dev speed
 ]
 
@@ -75,11 +77,15 @@ class BrockstonSuggestFixRequest(BaseModel):
 
 # --- API ENDPOINTS ---
 
+# Initialize speech service
+speech_service = SpeechService()
+
 @app.get("/api/health")
 async def health_check():
     return {
         "status": "10 Toes Down",
         "system": "Online",
+        "workspace": str(WORKSPACE_ROOT),
         "llm_provider": LLM_PROVIDER,
         "llm_model_general": LLM_MODEL_GENERAL,
         "llm_model_coder": LLM_MODEL_CODER,
@@ -184,6 +190,162 @@ async def read_file(filename: str):
     except Exception as e:
         logger.error(f"Read Error: {e}")
         raise HTTPException(status_code=404, detail="File not found or unreadable")
+
+
+# --- SECURE FILE OPERATIONS (using resolve_path) ---
+
+class FileOpenRequest(BaseModel):
+    path: str
+
+class FileSaveRequest(BaseModel):
+    path: str
+    content: str
+
+@app.get("/api/files/open")
+async def open_file(path: str):
+    """Securely opens a file within the workspace"""
+    try:
+        resolved_path = resolve_path(path)
+        if not resolved_path.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        with open(resolved_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        return {"path": str(resolved_path), "content": content}
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"File open error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/files/save")
+async def save_file(request: FileSaveRequest):
+    """Securely saves a file within the workspace"""
+    try:
+        resolved_path = resolve_path(request.path)
+        
+        with open(resolved_path, "w", encoding="utf-8") as f:
+            f.write(request.content)
+        
+        logger.info(f"File saved: {resolved_path}")
+        return {"status": "ok", "path": str(resolved_path)}
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"File save error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/files/list")
+async def list_workspace_files(path: str = ""):
+    """Lists files in a workspace directory securely"""
+    try:
+        if path:
+            dir_path = resolve_path(path)
+        else:
+            dir_path = WORKSPACE_ROOT
+        
+        if not dir_path.is_dir():
+            raise HTTPException(status_code=404, detail="Directory not found")
+        
+        files = []
+        for item in dir_path.iterdir():
+            if item.name.startswith(".") or item.name.startswith("__"):
+                continue
+            kind = "folder" if item.is_dir() else "file"
+            files.append({"name": item.name, "type": kind})
+        
+        return {"files": files, "path": str(dir_path)}
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"File listing error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- GIT OPERATIONS ---
+
+class GitCloneRequest(BaseModel):
+    git_url: str
+    folder_name: Optional[str] = None
+
+@app.post("/api/git/clone")
+async def git_clone(request: GitCloneRequest):
+    """Clone a Git repository into the workspace"""
+    try:
+        cloned_path = clone_repo(request.git_url, request.folder_name)
+        return {
+            "status": "ok",
+            "local_path": str(cloned_path),
+            "workspace_name": cloned_path.name
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Git clone error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- SPEECH OPERATIONS ---
+
+from fastapi import UploadFile, File as FileDep
+
+@app.post("/api/speech/transcribe")
+async def transcribe_audio(audio: UploadFile = FileDep(...)):
+    """Transcribe audio to text"""
+    try:
+        audio_data = await audio.read()
+        transcribed_text = await speech_service.transcribe_audio(audio_data, audio.filename)
+        return {"text": transcribed_text}
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Transcription error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/speech/synthesize")
+async def synthesize_speech(text: str, voice: str = "alloy"):
+    """Synthesize speech from text"""
+    try:
+        audio_data = await speech_service.synthesize_speech(text, voice)
+        return Response(content=audio_data, media_type="audio/mpeg")
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Speech synthesis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class SpeechChatRequest(BaseModel):
+    messages: list[dict]
+    context: Optional[dict] = None
+    model: Optional[str] = None
+    voice: Optional[str] = "alloy"
+
+@app.post("/api/speech/chat")
+async def speech_chat(request: SpeechChatRequest):
+    """Process speech chat and return audio response"""
+    try:
+        # Get AI response
+        client = get_client_for_model(request.model or LLM_MODEL_GENERAL)
+        reply = await client.chat(request.messages, request.context, model=request.model)
+        
+        # Synthesize speech
+        audio_data = await speech_service.synthesize_speech(reply, request.voice or "alloy")
+        
+        from fastapi.responses import Response
+        return Response(
+            content=audio_data,
+            media_type="audio/mpeg",
+            headers={"X-Response-Text": reply}
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Speech chat error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # --- TERMINAL WEBSOCKET (FIXED VERSION) ---
 @app.websocket("/ws/terminal")
