@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -87,7 +86,7 @@
             flex-shrink: 0;
         }
 
-        /* SIDEBAR - Enhanced with features */
+        /* SIDEBAR */
         #sidebar {
             background: linear-gradient(180deg, #0a0a0a 0%, #050505 100%);
             display: flex;
@@ -141,7 +140,6 @@
             opacity: 1;
         }
 
-        /* Sidebar bottom tools */
         .sidebar-bottom {
             margin-top: auto;
             padding-top: 20px;
@@ -196,7 +194,7 @@
             flex-direction: column;
         }
 
-        /* WATERMARK - 55% opacity, orange text */
+        /* WATERMARK */
         #watermark {
             position: absolute;
             top: 40%;
@@ -216,7 +214,6 @@
             align-items: flex-end;
             padding-bottom: 40px;
         }
-
 
         #editor-content {
             position: relative;
@@ -334,7 +331,6 @@
 </head>
 
 <body>
-
     <!-- HEADER -->
     <div id="header">
         <span class="title">BROCKSTON STUDIO // PROFESSIONAL</span>
@@ -389,37 +385,16 @@
             </div>
         </div>
 
-        <!-- AI PANEL -->
+        <!-- AI PANEL: BROCKSTON ONLY -->
         <div id="ai-panel" class="split">
-            <div class="explorer-header" style="padding: 15px;">ASK BROCKSTON / CLAUDE</div>
-            <div style="display: flex; border-bottom: 1px solid var(--border-dim);">
-                <button id="tab-brockston" class="tab-btn active"
-                    style="flex: 1; padding: 10px; background: transparent; border: none; color: var(--neon-orange); cursor: pointer; border-bottom: 2px solid var(--neon-orange);">BROCKSTON</button>
-                <button id="tab-claude" class="tab-btn"
-                    style="flex: 1; padding: 10px; background: transparent; border: none; color: #666; cursor: pointer;">CLAUDE</button>
-            </div>
-            <div id="brockston-panel" style="display: block;">
+            <div class="explorer-header" style="padding: 15px;">ASK BROCKSTON</div>
+            <div id="brockston-panel" style="display: block; height: 100%; display: flex; flex-direction: column;">
                 <div id="chat-history">
                     <span class="system-tag">[SYSTEM]: Neural Link Active.</span>
                 </div>
                 <div id="chat-input-area">
                     <input type="text" id="chat-input" placeholder="Enter query..." autocomplete="off">
                     <button id="send-btn">SEND</button>
-                </div>
-            </div>
-            <div id="claude-panel" style="display: none; height: 100%; display: flex; flex-direction: column;">
-                <div style="padding: 15px; flex: 1;">
-                    <textarea id="claude-input" placeholder="Ask Claude a question..."
-                        style="width: 100%; height: 80px; background: #111; border: 1px solid #333; color: white; padding: 10px; font-family: var(--font-term); outline: none; border-radius: 5px; resize: vertical;"></textarea>
-                    <button id="btn-ask-claude"
-                        style="margin-top: 10px; background: var(--neon-orange); color: black; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 5px; width: 100%;">Ask
-                        Claude</button>
-                    <div id="claude-loading" style="display: none; margin-top: 10px; color: var(--neon-orange);">
-                        Thinking...</div>
-                    <div id="claude-error" style="display: none; margin-top: 10px; color: #ff4444;"></div>
-                    <div id="claude-response"
-                        style="margin-top: 10px; color: #e0e0e0; white-space: pre-wrap; max-height: 300px; overflow-y: auto;">
-                    </div>
                 </div>
             </div>
         </div>
@@ -460,7 +435,6 @@
 
                 const data = await response.json();
                 appendMessage('BROCKSTON', data.response, 'ai');
-
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[ERROR]: ${err.message}`, 'error');
@@ -501,7 +475,7 @@
                     fileList.appendChild(backBtn);
                 }
 
-                data.files.forEach(file => {
+                (data.files || []).forEach(file => {
                     const el = document.createElement('div');
                     el.className = 'file-item';
                     const icon = file.type === 'folder' ? 'fa-folder' : 'fa-file-code';
@@ -616,8 +590,7 @@
         window.addEventListener('focus', () => term.focus());
     </script>
 
-    <script src="hooks/useClaude.js"></script>
+    <!-- Core app script, no Claude hook -->
     <script src="app.js"></script>
 </body>
-
 </html>
