@@ -10,9 +10,15 @@ from pathlib import Path
 # This resolves to /Users/EverettN/Brockston-IDE-Studio
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+<<<<<<< HEAD
 # Server Settings
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 5055
+=======
+# Server configuration
+HOST = os.getenv("BROCKSTON_HOST", "127.0.0.1")
+PORT = int(os.getenv("BROCKSTON_PORT", "5055"))
+>>>>>>> dbb5f601697d6dc0f41d9b98198aeded8fa706bc
 
 # Model Settings
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
