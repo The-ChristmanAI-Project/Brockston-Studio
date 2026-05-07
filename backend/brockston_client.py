@@ -1,258 +1,150 @@
 """
-BROCKSTON Client
+BROCKSTON Client - Ollama Integration
 
-Bridge interface for communicating with the BROCKSTON model.
-Supports both HTTP endpoint and in-process calls.
+Bridge for communicating with local Ollama models.
+Supports chat, code suggestions, and analysis.
 """
 
 import httpx
-from typing import List, Dict, Optional
+import json
 import logging
+import re
+from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class BrockstonClient:
     """
-    Client for interacting with the BROCKSTON model.
-
-    Abstracts the communication layer so the backend doesn't need to know
-    whether BROCKSTON is accessed via HTTP, gRPC, or in-process.
+    Client for interacting with BROCKSTON models via Ollama.
     """
 
-    def __init__(self, base_url: Optional[str] = None, provider: str = "ollama", model: str = "llama3.2:3b", timeout: float = 120.0):
-        """
-        Initialize BROCKSTON client.
-
-        Args:
-            base_url: HTTP endpoint for BROCKSTON or Ollama.
-            provider: Model provider identifier (e.g. 'ollama').
-            model: Model name to select on the provider.
-            timeout: Request timeout in seconds (default: 120s for LLM inference)
-        """
-        self.base_url = base_url
-        self.provider = provider.lower()
+    def __init__(
+        self,
+        base_url: str = "http://localhost:11434",
+        model: str = "qwen2.5-coder:32b",
+        timeout: float = 120.0
+    ):
+        """Initialize BROCKSTON client pointing to Ollama."""
+        self.base_url = base_url.rstrip('/')
         self.model = model
         self.timeout = timeout
-        self.client = httpx.AsyncClient(timeout=timeout) if base_url else None
+        self.client = httpx.AsyncClient(timeout=timeout)
 
-        if base_url:
-            logger.info(f"BROCKSTON client initialized with endpoint: {base_url}")
-            logger.info(f"LLM provider: {self.provider}, model: {self.model}")
-        else:
-            logger.warning("BROCKSTON client initialized in MOCK mode (no base_url provided)")
+        logger.info(f"BROCKSTON client initialized with endpoint: {self.base_url}")
+        logger.info(f"Model: {self.model}")
 
     async def chat(
         self,
         messages: List[Dict[str, str]],
-        context: Optional[Dict[str, str]] = None,
-        model: Optional[str] = None,
+        context: Optional[Dict] = None
     ) -> str:
         """
-        Send a chat request to BROCKSTON.
-
+        Send a chat request to Ollama and get a response.
+        
         Args:
             messages: List of message dicts with 'role' and 'content' keys
-                      Example: [
-                          {"role": "system", "content": "You are BROCKSTON..."},
-                          {"role": "user", "content": "Explain this code..."}
-                      ]
-            context: Optional context dict with 'path' and 'code' keys
-            model: Optional model identifier to override the default.
-
+            context: Optional additional context (currently unused)
+        
         Returns:
-            Assistant reply text from BROCKSTON
-
-        Raises:
-            RuntimeError: If BROCKSTON request fails
+            Response text from the model
         """
-        if not self.base_url:
-            return self._mock_chat_response(messages, context)
-
-        chosen_model = model or self.model
-
         try:
-            # Prepare request payload and call the configured provider
-            if self.provider == "ollama":
-                payload = {
-                    "model": chosen_model,
-                    "messages": messages,
-                }
-                response = await self.client.post(
-                    f"{self.base_url}/v1/chat/completions",
-                    json=payload,
-                )
-                response.raise_for_status()
-                result = response.json()
-                choice = result.get("choices", [])[0]
-                return choice.get("message", {}).get("content", "")
+            # Extract the last user message
+            user_message = None
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    user_message = msg.get("content", "")
+                    break
 
-            elif self.provider in ["brockston", "ultimateev"]:
-                # BROCKSTON and UltimateEV expect the same payload format
-                payload = {
-                    "messages": messages,
-                    "context": context or {}
-                }
-                response = await self.client.post(
-                    f"{self.base_url}/chat",
-                    json=payload
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result.get("reply", "")
+            if not user_message:
+                return "No user message provided"
 
-            # Default fallback
-            payload = {
-                "messages": messages,
-                "context": context or {}
-            }
-
-            # Make HTTP request to BROCKSTON
+            # Call Ollama chat API
             response = await self.client.post(
-                f"{self.base_url}/chat",
-                json=payload
+                f"{self.base_url}/api/chat",
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "stream": False
+                }
             )
-            response.raise_for_status()
 
-            result = response.json()
-            return result.get("reply", "")
+            if response.status_code != 200:
+                logger.error(f"Ollama error: {response.status_code} - {response.text}")
+                return f"Error from model: {response.status_code}"
 
-        except httpx.HTTPError as e:
-            logger.error(f"BROCKSTON chat request failed: {e}")
-            raise RuntimeError(f"Failed to communicate with BROCKSTON: {e}")
+            data = response.json()
+            reply = data.get("message", {}).get("content", "")
+
+            return reply if reply else "No response from model"
+
+        except Exception as e:
+            logger.error(f"Chat error: {e}")
+            return f"Error: {str(e)}"
 
     async def suggest_fix(
         self,
         code: str,
         instruction: str,
-        path: Optional[str] = None,
-        model: Optional[str] = None,
-    ) -> Dict[str, str]:
+        path: Optional[str] = None
+    ) -> Dict:
         """
-        Request BROCKSTON to suggest code improvements.
-
+        Suggest fixes for code based on instruction.
+        
         Args:
-            code: Current file contents
-            instruction: What to do (e.g., "refactor for clarity", "fix bug")
+            code: The code to analyze
+            instruction: What to fix or improve
             path: Optional file path for context
-            model: Optional model identifier to override the default.
-
+        
         Returns:
-            Dict with keys:
-                - 'proposed_code': Full rewritten version of the file
-                - 'summary': Short description of changes
-
-        Raises:
-            RuntimeError: If BROCKSTON request fails
+            Dict with 'suggestion' and 'fixed_code' keys
         """
-        if not self.base_url:
-            return self._mock_suggest_fix_response(code, instruction, path)
-
-        chosen_model = model or self.model
-
         try:
-            if self.provider == "ollama":
-                prompt = [
-                    {"role": "system", "content": "You are a helpful code assistant. Improve the user's code according to instruction."},
-                    {"role": "user", "content": f"Instruction: {instruction}\n\nCode:\n{code}"},
-                ]
-                response = await self.client.post(
-                    f"{self.base_url}/v1/chat/completions",
-                    json={"model": chosen_model, "messages": prompt},
-                )
-                response.raise_for_status()
-                result = response.json()
-                choice = result.get("choices", [])[0]
-                return {
-                    "proposed_code": choice.get("message", {}).get("content", ""),
-                    "summary": f"Suggested fix from model {chosen_model}."
-                }
+            prompt = f"""You are a code expert. Analyze the following code and {instruction}.
 
-            elif self.provider in ["brockston", "ultimateev"]:
-                # BROCKSTON and UltimateEV expect the same payload format
-                payload = {
-                    "code": code,
-                    "instruction": instruction,
-                    "path": path
-                }
-                response = await self.client.post(
-                    f"{self.base_url}/suggest_fix",
-                    json=payload
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result
+File: {path or 'unknown'}
 
-            # Default fallback - assume BROCKSTON-style API
-            payload = {
-                "code": code,
-                "instruction": instruction,
-                "path": path
-            }
+```
+{code}
+```
 
-            # Make HTTP request to BROCKSTON
+Provide a clear suggestion and corrected code."""
+
+            messages = [
+                {"role": "user", "content": prompt}
+            ]
+
             response = await self.client.post(
-                f"{self.base_url}/suggest_fix",
-                json=payload
+                f"{self.base_url}/api/chat",
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "stream": False
+                }
             )
-            response.raise_for_status()
 
-            result = response.json()
+            if response.status_code != 200:
+                logger.error(f"Ollama error: {response.status_code}")
+                return {"suggestion": "Error contacting model", "fixed_code": code}
+
+            data = response.json()
+            suggestion = data.get("message", {}).get("content", "")
+
             return {
-                "proposed_code": result.get("proposed_code", ""),
-                "summary": result.get("summary", "")
+                "suggestion": suggestion,
+                "fixed_code": code
             }
 
-        except httpx.HTTPError as e:
-            logger.error(f"BROCKSTON suggest_fix request failed: {e}")
-            raise RuntimeError(f"Failed to communicate with BROCKSTON: {e}")
+        except Exception as e:
+            logger.error(f"Suggest fix error: {e}")
+            return {
+                "suggestion": f"Error: {str(e)}",
+                "fixed_code": code
+            }
 
-    def _mock_chat_response(
-        self,
-        messages: List[Dict[str, str]],
-        context: Optional[Dict[str, str]]
-    ) -> str:
-        """
-        Mock chat response for development/testing when BROCKSTON is unavailable.
-        """
-        last_message = messages[-1]["content"] if messages else "No message"
-        return (
-            f"[MOCK BROCKSTON RESPONSE]\n\n"
-            f"You asked: '{last_message}'\n\n"
-            f"This is a mock response. Configure BROCKSTON_BASE_URL to connect "
-            f"to the real BROCKSTON model.\n\n"
-            f"Context: {context.get('path', 'No file') if context else 'No context'}"
-        )
-
-    def _mock_suggest_fix_response(
-        self,
-        code: str,
-        instruction: str,
-        path: Optional[str]
-    ) -> Dict[str, str]:
-        """
-        Mock suggest_fix response for development/testing.
-        """
-        # Add a mock comment to the code
-        mock_code = f"# MOCK FIX: {instruction}\n# File: {path or 'unknown'}\n\n{code}"
-
-        return {
-            "proposed_code": mock_code,
-            "summary": (
-                f"[MOCK] Applied instruction: '{instruction}'. "
-                f"Configure BROCKSTON_BASE_URL to connect to the real BROCKSTON model."
-            )
-        }
-
-    async def close(self):
-        """Close the HTTP client."""
-        if self.client:
-            await self.client.aclose()
-
-    async def __aenter__(self):
-        """Async context manager entry."""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
-        await self.close()
+    def _clean_code_response(self, text: str) -> str:
+        """Remove markdown code fences from response."""
+        text = re.sub(r'```[\w]*\n?', '', text)
+        text = re.sub(r'```', '', text)
+        return text.strip()
