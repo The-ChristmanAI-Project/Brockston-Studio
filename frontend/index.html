@@ -69,10 +69,12 @@
         }
 
         .gutter {
-            background-color: var(--border-dim);
+            background-color: var(--neon-orange);
             background-repeat: no-repeat;
             background-position: 50%;
             cursor: col-resize;
+            width: 4px !important;
+            flex-shrink: 0;
         }
 
         /* SIDEBAR - Enhanced with features */
@@ -325,7 +327,7 @@
     <!-- HEADER -->
     <div id="header">
         <span class="title">BROCKSTON STUDIO // PROFESSIONAL</span>
-        <span class="status">HOST: 127.0.0.1 : 7777</span>
+        <span class="status">HOST: 127.0.0.1 : 5055</span>
     </div>
 
     <!-- MAIN GRID -->
@@ -412,8 +414,8 @@
             cursor: 'col-resize'
         });
 
-        const API_BASE = window.location.origin + "/api";
-        const WS_BASE = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + "/ws/terminal";
+        const API_BASE = "http://localhost:5055/api";
+        const WS_BASE = "ws://localhost:5055/ws/terminal";
 
         const chatInput = document.getElementById('chat-input');
         const chatHistory = document.getElementById('chat-history');
@@ -535,23 +537,59 @@
 
         new ResizeObserver(() => fitAddon.fit()).observe(document.getElementById('terminal-container'));
 
-        const ws = new WebSocket(WS_BASE);
+        let ws;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        const baseReconnectDelay = 1000;
 
-        ws.onopen = () => {
-            term.write('\r\n\x1b[1;32m[SYSTEM]: UPLINK ESTABLISHED.\x1b[0m\r\n');
-        };
+        function connectWebSocket() {
+            ws = new WebSocket(WS_BASE);
 
-        ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'output') {
-                let clean = msg.data;
-                clean = clean.replace(/\[\?2004h/g, '').replace(/\[\?2004l/g, '');
-                term.write(clean);
-            }
-        };
+            ws.onopen = () => {
+                reconnectAttempts = 0;
+                term.write('\r\n\x1b[1;32m[SYSTEM]: UPLINK ESTABLISHED.\x1b[0m\r\n');
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'output') {
+                        let clean = msg.data;
+                        clean = clean.replace(/\[\?2004h/g, '').replace(/\[\?2004l/g, '');
+                        term.write(clean);
+                    }
+                } catch (err) {
+                    console.error('Failed to parse message:', err);
+                    term.write('\r\n\x1b[1;31m[ERROR]: Invalid server message format\x1b[0m\r\n');
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                term.write('\r\n\x1b[1;31m[ERROR]: Connection failed. Attempting to reconnect...\x1b[0m\r\n');
+            };
+
+            ws.onclose = () => {
+                term.write('\r\n\x1b[1;33m[SYSTEM]: CONNECTION LOST.\x1b[0m\r\n');
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts);
+                    reconnectAttempts++;
+                    term.write(`\x1b[1;33m[SYSTEM]: Reconnecting in ${delay / 1000}s... (Attempt ${reconnectAttempts}/${maxReconnectAttempts})\x1b[0m\r\n`);
+                    setTimeout(connectWebSocket, delay);
+                } else {
+                    term.write('\x1b[1;31m[ERROR]: Max reconnection attempts reached. Please refresh the page.\x1b[0m\r\n');
+                }
+            };
+        }
+
+        connectWebSocket();
 
         term.onData(data => {
-            ws.send(JSON.stringify({ type: 'input', data: data }));
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'input', data: data }));
+            } else {
+                term.write('\x1b[1;31m[ERROR]: Not connected to server\x1b[0m\r\n');
+            }
         });
 
         loadFiles();
