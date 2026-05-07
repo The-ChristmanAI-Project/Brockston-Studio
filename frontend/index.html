@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,7 +12,11 @@
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
 
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
         :root {
             --void-black: #000000;
@@ -23,9 +28,14 @@
         }
 
         body {
-            margin: 0; height: 100vh; background-color: var(--void-black);
-            color: var(--text-main); font-family: var(--font-term);
-            overflow: hidden; display: flex; flex-direction: column;
+            margin: 0;
+            height: 100vh;
+            background-color: var(--void-black);
+            color: var(--text-main);
+            font-family: var(--font-term);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         /* HEADER - Fixed height */
@@ -322,6 +332,7 @@
         }
     </style>
 </head>
+
 <body>
 
     <!-- HEADER -->
@@ -350,7 +361,7 @@
                 <i class="fas fa-search"></i>
                 <span class="tooltip">Search</span>
             </div>
-            
+
             <div class="sidebar-bottom">
                 <div class="icon-btn" title="Settings">
                     <i class="fas fa-cog"></i>
@@ -382,8 +393,10 @@
         <div id="ai-panel" class="split">
             <div class="explorer-header" style="padding: 15px;">ASK BROCKSTON / CLAUDE</div>
             <div style="display: flex; border-bottom: 1px solid var(--border-dim);">
-                <button id="tab-brockston" class="tab-btn active" style="flex: 1; padding: 10px; background: transparent; border: none; color: var(--neon-orange); cursor: pointer; border-bottom: 2px solid var(--neon-orange);">BROCKSTON</button>
-                <button id="tab-claude" class="tab-btn" style="flex: 1; padding: 10px; background: transparent; border: none; color: #666; cursor: pointer;">CLAUDE</button>
+                <button id="tab-brockston" class="tab-btn active"
+                    style="flex: 1; padding: 10px; background: transparent; border: none; color: var(--neon-orange); cursor: pointer; border-bottom: 2px solid var(--neon-orange);">BROCKSTON</button>
+                <button id="tab-claude" class="tab-btn"
+                    style="flex: 1; padding: 10px; background: transparent; border: none; color: #666; cursor: pointer;">CLAUDE</button>
             </div>
             <div id="brockston-panel" style="display: block;">
                 <div id="chat-history">
@@ -396,11 +409,17 @@
             </div>
             <div id="claude-panel" style="display: none; height: 100%; display: flex; flex-direction: column;">
                 <div style="padding: 15px; flex: 1;">
-                    <textarea id="claude-input" placeholder="Ask Claude a question..." style="width: 100%; height: 80px; background: #111; border: 1px solid #333; color: white; padding: 10px; font-family: var(--font-term); outline: none; border-radius: 5px; resize: vertical;"></textarea>
-                    <button id="btn-ask-claude" style="margin-top: 10px; background: var(--neon-orange); color: black; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 5px; width: 100%;">Ask Claude</button>
-                    <div id="claude-loading" style="display: none; margin-top: 10px; color: var(--neon-orange);">Thinking...</div>
+                    <textarea id="claude-input" placeholder="Ask Claude a question..."
+                        style="width: 100%; height: 80px; background: #111; border: 1px solid #333; color: white; padding: 10px; font-family: var(--font-term); outline: none; border-radius: 5px; resize: vertical;"></textarea>
+                    <button id="btn-ask-claude"
+                        style="margin-top: 10px; background: var(--neon-orange); color: black; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 5px; width: 100%;">Ask
+                        Claude</button>
+                    <div id="claude-loading" style="display: none; margin-top: 10px; color: var(--neon-orange);">
+                        Thinking...</div>
                     <div id="claude-error" style="display: none; margin-top: 10px; color: #ff4444;"></div>
-                    <div id="claude-response" style="margin-top: 10px; color: #e0e0e0; white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></div>
+                    <div id="claude-response"
+                        style="margin-top: 10px; color: #e0e0e0; white-space: pre-wrap; max-height: 300px; overflow-y: auto;">
+                    </div>
                 </div>
             </div>
         </div>
@@ -467,7 +486,7 @@
                 const data = await res.json();
 
                 fileList.innerHTML = '';
-                
+
                 if (currentPath !== '') {
                     const backBtn = document.createElement('div');
                     backBtn.className = 'file-item';
@@ -481,14 +500,14 @@
                     };
                     fileList.appendChild(backBtn);
                 }
-                
+
                 data.files.forEach(file => {
                     const el = document.createElement('div');
                     el.className = 'file-item';
                     const icon = file.type === 'folder' ? 'fa-folder' : 'fa-file-code';
                     el.innerHTML = `<i class="fas ${icon}"></i> ${file.name}`;
                     el.style.cursor = 'pointer';
-                    
+
                     if (file.type === 'file') {
                         el.onclick = () => openFile(currentPath ? currentPath + '/' + file.name : file.name);
                     } else {
@@ -497,7 +516,7 @@
                             loadFiles(currentPath);
                         };
                     }
-                    
+
                     fileList.appendChild(el);
                 });
             } catch (err) {
@@ -508,7 +527,7 @@
         async function openFile(filepath) {
             try {
                 const res = await fetch(`${API_BASE}/read_file?filename=${encodeURIComponent(filepath)}`);
-                if(!res.ok) throw new Error("Read failed");
+                if (!res.ok) throw new Error("Read failed");
                 const data = await res.json();
                 editor.value = data.content;
             } catch (err) {
@@ -600,4 +619,5 @@
     <script src="hooks/useClaude.js"></script>
     <script src="app.js"></script>
 </body>
+
 </html>
