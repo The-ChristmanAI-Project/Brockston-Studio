@@ -1,3 +1,8 @@
+# ==============================================================================
+# Patent Pending
+# Christman-AI Family
+# Shared-neutral implementation for internal system use.
+# ==============================================================================
 """
 Brockston Studio - AI Client
 Part of The Christman AI Project
@@ -112,7 +117,8 @@ def suggest_fix(code: str, instruction: str = "", path: str = "", language: str 
     except Exception as e:
         logger.error(f"suggest_fix error: {e}")
 
-    return {"fixed": False, "explanation": f"Brockston API unreachable: {e}", "fixed_code": code}
+    return {"fixed": False, "explanation": f"Brockston API unreachable: {e}",
+"fixed_code": code}
 
 
 def get_embedding(text: str) -> list:
@@ -172,3 +178,5 @@ if __name__ == "__main__":
         print(f"Brockston: {resp}")
     else:
         print("Start Brockston API: cd /Users/EverettN/BrockstonAICore/src && python3.11 api_server.py")
+
+        # Patent pending — The Christman AI Project

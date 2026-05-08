@@ -74,8 +74,8 @@ async def synthesize_speech_route(request: Request):
     try:
         data = await request.json()
         text = data.get("text", "")
-        # Defaults to Bella's Voice ID in ElevenLabs
-        voice = data.get("voice", "EXAVITQu4vr4xnSDxMaL") 
+        # Voice ID for local synthesis
+        voice = data.get("voice", "default") 
         
         speech_svc = SpeechService()
         audio_bytes = await speech_svc.synthesize_speech(text=text, voice_id=voice)
