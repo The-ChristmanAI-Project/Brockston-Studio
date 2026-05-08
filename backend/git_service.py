@@ -4,6 +4,7 @@ Git Service Module for BROCKSTON Studio
 Handles Git operations like cloning repositories.
 """
 
+import os
 import logging
 import subprocess
 from pathlib import Path
@@ -15,7 +16,8 @@ from .config import WORKSPACE_ROOT, GITHUB_TOKEN
 logger = logging.getLogger(__name__)
 
 
-def clone_repo(git_url: str, folder_name: Optional[str] = None) -> Path:
+def clone_repo(git_url: str, folder_name: str | None = None) -> Path:
+    
     """
     Clone a GitHub repository into WORKSPACE_ROOT.
 
@@ -89,6 +91,13 @@ def clone_repo(git_url: str, folder_name: Optional[str] = None) -> Path:
     else:
         logger.info(f"Cloning repository without authentication: {git_url}")
 
+    # Prepare environment for git
+    env = os.environ.copy()
+    if GITHUB_TOKEN:
+        env["GIT_ASKPASS"] = "echo"
+        env["GIT_USERNAME"] = "token"
+        env["GIT_PASSWORD"] = GITHUB_TOKEN
+
     # Execute git clone
     try:
         result = subprocess.run(
@@ -96,6 +105,7 @@ def clone_repo(git_url: str, folder_name: Optional[str] = None) -> Path:
             capture_output=True,
             text=True,
             timeout=300,  # 5 minute timeout for clone
+            env=env,
         )
 
         if result.returncode != 0:
@@ -177,3 +187,12 @@ def get_repo_status(repo_path: Path) -> dict:
         raise RuntimeError("Git command not found")
     except Exception as e:
         raise RuntimeError(f"Failed to get repository status: {e}")
+
+
+def get_remote_url(repo_path: Path) -> str | None:
+    """Get the remote origin URL of a repo."""
+    result = subprocess.run(
+        ["git", "-C", str(repo_path), "remote", "get-url", "origin"],
+        capture_output=True, text=True, timeout=10
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
