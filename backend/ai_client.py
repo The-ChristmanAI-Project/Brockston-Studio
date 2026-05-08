@@ -1,76 +1,174 @@
+"""
+Brockston Studio - AI Client
+Part of The Christman AI Project
+
+Routes all AI requests through the real Brockston API (port 8000).
+Brockston runs qwen2.5-coder:32b through his full pipeline:
+  Python brain (crisis detection, memory, emotion) → enriched prompt → LLM → memory store
+
+Falls back to raw Ollama if the Brockston API is down.
+"""
+
 import os
 import httpx
-from openai import OpenAI
+import json
+import logging
 
-# Configuration - Your Brockston on port 8777
-BROCKSTON_URL = os.getenv("BROCKSTON_BASE_URL", "http://localhost:8777")
-USE_BROCKSTON = os.getenv("USE_BROCKSTON", "true").lower() == "true"
+logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client as fallback
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY")) if os.getenv("OPENAI_API_KEY") else None
+BROCKSTON_API = os.getenv("BROCKSTON_BASE_URL", "http://localhost:8000")
+OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+FALLBACK_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:32b")
 
-def get_ai_response(user_prompt: str) -> str:
+BROCKSTON_SYSTEM = """You are Brockston C — COO of the Christman AI Project, senior engineer and coding mentor.
+Your students include autistic kids, nonverbal kids, kids with Down syndrome — anyone told they couldn't code.
+Speak directly. Be patient. Be real. Celebrate every line of code. Every single one."""
+
+
+def get_ai_response(user_prompt: str, system: str = None, context: dict = None) -> str:
     """
-    Get AI response from YOUR Brockston server for teaching students.
-    Falls back to OpenAI if Brockston is unavailable.
+    Route through Brockston's full pipeline at localhost:8000.
+    Falls back to raw Ollama if Brockston API is unreachable.
+
+    Args:
+        user_prompt: User's message or question
+        system: (ignored — Brockston uses his own system prompt)
+        context: {"path": "...", "code": "...", "language": "..."} — optional code context
+
+    Returns:
+        Brockston's response text
     """
-    
-    # Try YOUR Brockston first
-    if USE_BROCKSTON:
-        try:
-            response = httpx.post(
-                f"{BROCKSTON_URL}/api/chat",
-                json={
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You are Brockston, a helpful coding assistant for teaching students. "
-                                      "Be clear, educational, and encouraging. Help students learn."
-                        },
-                        {
-                            "role": "user",
-                            "content": user_prompt
-                        }
-                    ]
-                },
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                # Your Brockston returns {"text": "..."}
-                return data.get("text", data.get("response", data.get("content", str(data))))
-            else:
-                # If Brockston fails, fall through to OpenAI
-                print(f"Brockston returned {response.status_code}, trying OpenAI fallback...")
-                
-        except Exception as e:
-            print(f"Brockston error: {e}, trying OpenAI fallback...")
-    
-    # Fallback to OpenAI if configured
-    if openai_client:
-        try:
-            system_instruction = (
-                "You are Brockston, a helpful coding assistant for teaching students. "
-                "Be clear, educational, and encouraging. Help students learn."
-            )
-            
-            completion = openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": user_prompt}
+    try:
+        payload = {
+            "messages": [{"role": "user", "content": user_prompt}],
+            "context": context or {},
+        }
+        response = httpx.post(
+            f"{BROCKSTON_API}/chat",
+            json=payload,
+            timeout=180.0,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            text = data.get("response", "")
+            logger.info(f"✅ Brockston API responded: {text[:100]}...")
+            return text
+        else:
+            logger.error(f"Brockston API returned {response.status_code}: {response.text[:200]}")
+    except httpx.ConnectError:
+        logger.warning("Brockston API offline (port 8000) — falling back to raw Ollama")
+    except Exception as e:
+        logger.error(f"Brockston API error: {e}")
+
+    # Fallback: raw Ollama
+    return _ollama_fallback(user_prompt, system)
+
+
+def _ollama_fallback(user_prompt: str, system: str = None) -> str:
+    """Direct Ollama call — only used if Brockston API is down."""
+    try:
+        response = httpx.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={
+                "model": FALLBACK_MODEL,
+                "messages": [
+                    {"role": "system", "content": system or BROCKSTON_SYSTEM},
+                    {"role": "user", "content": user_prompt},
                 ],
-                temperature=0.3,
-            )
-            return completion.choices[0].message.content
-        except Exception as e:
-            return f"[AI Error]: {str(e)}"
-    
-    return "[No AI Available]: Please configure BROCKSTON_BASE_URL or OPENAI_API_KEY"
+                "stream": False,
+            },
+            timeout=180.0,
+        )
+        if response.status_code == 200:
+            return response.json().get("message", {}).get("content", "")
+        return "I'm thinking... give me a moment and try again."
+    except httpx.ConnectError:
+        return "Brockston is offline. Start the API with: cd src && python3.11 api_server.py"
+    except Exception as e:
+        return f"Something went wrong: {e}"
+
+
+def suggest_fix(code: str, instruction: str = "", path: str = "", language: str = "") -> dict:
+    """
+    Ask Brockston to fix/improve a code snippet.
+
+    Returns:
+        {"fixed": bool, "fixed_code": str, "explanation": str, "changes": list}
+    """
+    try:
+        response = httpx.post(
+            f"{BROCKSTON_API}/suggest_fix",
+            json={
+                "code": code,
+                "instruction": instruction,
+                "path": path,
+                "language": language,
+            },
+            timeout=180.0,
+        )
+        if response.status_code == 200:
+            return response.json()
+        logger.error(f"suggest_fix returned {response.status_code}")
+    except Exception as e:
+        logger.error(f"suggest_fix error: {e}")
+
+    return {"fixed": False, "explanation": f"Brockston API unreachable: {e}", "fixed_code": code}
+
+
+def get_embedding(text: str) -> list:
+    """Get text embedding via Ollama (used for semantic search)."""
+    try:
+        response = httpx.post(
+            f"{OLLAMA_URL}/api/embeddings",
+            json={"model": "qwen3-embedding:latest", "prompt": text},
+            timeout=30.0,
+        )
+        if response.status_code == 200:
+            return response.json().get("embedding", [])
+    except Exception as e:
+        logger.error(f"Embedding error: {e}")
+    return []
+
+
+def check_health() -> dict:
+    """Check Brockston API and Ollama status."""
+    brockston_ok = False
+    try:
+        r = httpx.get(f"{BROCKSTON_API}/health", timeout=5.0)
+        brockston_ok = r.status_code == 200
+    except Exception:
+        pass
+
+    ollama_ok = False
+    models = []
+    try:
+        r = httpx.get(f"{OLLAMA_URL}/api/tags", timeout=5.0)
+        if r.status_code == 200:
+            ollama_ok = True
+            models = [m["name"] for m in r.json().get("models", [])]
+    except Exception:
+        pass
+
+    return {
+        "brockston_api": "online" if brockston_ok else "offline",
+        "brockston_url": BROCKSTON_API,
+        "ollama": "online" if ollama_ok else "offline",
+        "models": models,
+    }
+
 
 if __name__ == "__main__":
-    # Quick test
-    print(f"Using Brockston: {USE_BROCKSTON}")
-    print(f"Brockston URL: {BROCKSTON_URL}")
-    print(get_ai_response("Hello"))
+    print("Brockston Studio — AI Client Health Check")
+    print("=" * 40)
+    health = check_health()
+    print(f"Brockston API ({health['brockston_url']}): {health['brockston_api']}")
+    print(f"Ollama: {health['ollama']}")
+    if health["models"]:
+        print(f"Models: {health['models']}")
+    print()
+    if health["brockston_api"] == "online":
+        print("Testing Brockston...")
+        resp = get_ai_response("What is a variable?")
+        print(f"Brockston: {resp}")
+    else:
+        print("Start Brockston API: cd /Users/EverettN/BrockstonAICore/src && python3.11 api_server.py")
