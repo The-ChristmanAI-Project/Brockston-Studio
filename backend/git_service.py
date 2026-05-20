@@ -7,19 +7,18 @@ Handles Git operations like cloning repositories.
 import os
 import logging
 import subprocess
-from pathlib import Path
-from typing import Optional
-from urllib.parse import urlparse
+import pathlib
+import urllib.parse
 
-from .config import WORKSPACE_ROOT, GITHUB_TOKEN
+from config import BROCKSTON_WORKSPACE, GITHUB_TOKEN
 
 logger = logging.getLogger(__name__)
 
 
-def clone_repo(git_url: str, folder_name: str | None = None) -> Path:
+def clone_repo(git_url: str, folder_name: str | None = None) -> pathlib.Path:
     
     """
-    Clone a GitHub repository into WORKSPACE_ROOT.
+    Clone a GitHub repository into BROCKSTON_WORKSPACE.
 
     Args:
         git_url: The Git repository URL (HTTPS format)
@@ -34,7 +33,7 @@ def clone_repo(git_url: str, folder_name: str | None = None) -> Path:
     """
     # Validate URL is HTTPS and points to GitHub
     try:
-        parsed = urlparse(git_url)
+        parsed = urllib.parse.urlparse(git_url)
         if parsed.scheme not in ("https", "http"):
             raise ValueError("Only HTTPS/HTTP URLs are supported")
         if "github.com" not in parsed.netloc.lower():
@@ -56,14 +55,14 @@ def clone_repo(git_url: str, folder_name: str | None = None) -> Path:
         raise ValueError(f"Invalid folder name: {folder_name}")
 
     # Build target directory path
-    target_dir = (WORKSPACE_ROOT / folder_name).resolve()
+    target_dir = (BROCKSTON_WORKSPACE / folder_name).resolve()
 
     # Security check: ensure target is within workspace
     try:
-        target_dir.relative_to(WORKSPACE_ROOT)
+        target_dir.relative_to(BROCKSTON_WORKSPACE)
     except ValueError:
         raise ValueError(
-            f"Target directory '{target_dir}' is outside workspace root '{WORKSPACE_ROOT}'. "
+            f"Target directory '{target_dir}' is outside workspace root '{BROCKSTON_WORKSPACE}'. "
             "Access denied for security."
         )
 
@@ -131,7 +130,7 @@ def clone_repo(git_url: str, folder_name: str | None = None) -> Path:
         raise RuntimeError(f"Git clone failed: {e}")
 
 
-def get_repo_status(repo_path: Path) -> dict:
+def get_repo_status(repo_path: pathlib.Path) -> dict:
     """
     Get the status of a Git repository.
 
@@ -148,7 +147,7 @@ def get_repo_status(repo_path: Path) -> dict:
     # Validate path is within workspace
     try:
         repo_path = repo_path.resolve()
-        repo_path.relative_to(WORKSPACE_ROOT)
+        repo_path.relative_to(BROCKSTON_WORKSPACE)
     except ValueError:
         raise ValueError(f"Path '{repo_path}' is outside workspace root")
 
@@ -189,7 +188,7 @@ def get_repo_status(repo_path: Path) -> dict:
         raise RuntimeError(f"Failed to get repository status: {e}")
 
 
-def get_remote_url(repo_path: Path) -> str | None:
+def get_remote_url(repo_path: pathlib.Path) -> str | None:
     """Get the remote origin URL of a repo."""
     result = subprocess.run(
         ["git", "-C", str(repo_path), "remote", "get-url", "origin"],
