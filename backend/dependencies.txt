@@ -1,0 +1,21 @@
+#-----------------# ---------
+annotated-doc
+annotated-types
+anyio
+certifi
+dotenv
+fastapi           
+h11              
+httpcore          
+httpx             
+idna             
+packaging         
+pip               
+pydantic         
+pydantic_core     
+python-dotenv    
+setuptools        
+starlette         
+typing_extensions
+typing-inspection 
+wheel            

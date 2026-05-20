@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BROCKSTON STUDIO // PROFESSIONAL</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/split.js/1.6.0/split.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --void-black: #030303;
+            --panel-black: #0a0a0c;
+            --neon-orange: #FF5F1F;
+            --neon-glow: 0 0 10px rgba(255, 95, 31, 0.5), 0 0 20px rgba(255, 95, 31, 0.3);
+            --border-dim: var(--neon-orange); 
+            --text-main: #f0f0f0;
+            --font-term: 'Fira Code', 'Menlo', 'Consolas', monospace;
+            --font-ui: 'Inter', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            background-color: var(--void-black);
+            color: var(--text-main);
+            font-family: var(--font-term);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #header {
+            height: 50px;
+            padding: 0 20px;
+            border-bottom: 2px solid var(--neon-orange);
+            box-shadow: 0 2px 15px rgba(255, 95, 31, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--panel-black);
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        #header .title {
+            color: var(--neon-orange);
+            font-weight: 700;
+            letter-spacing: 2px;
+            font-size: 1.2rem;
+            text-shadow: var(--neon-glow);
+        }
+
+        #header .status {
+            font-size: 0.85rem;
+            color: #888;
+            font-family: var(--font-term);
+        }
+
+        #app-container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 50px);
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .split {
+            overflow-y: auto;
+            overflow-x: hidden;
+            position: relative;
+            height: 100%;
+        }
+
+        /* GLOWING GUTTER - Handles both vertical and horizontal dragging */
+        .gutter {
+<<<<<<< HEAD
+            background-color: var(--border-dim);
+            box-shadow: var(--neon-glow);
+=======
+            background-color: var(--neon-orange);
+>>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
+            background-repeat: no-repeat;
+            background-position: 50%;
+            transition: background-color 0.2s;
+            z-index: 50; 
+        }
+        
+        .gutter.gutter-horizontal {
+            cursor: col-resize;
+            width: 4px !important;
+            flex-shrink: 0;
+        }
+
+<<<<<<< HEAD
+        .gutter.gutter-vertical {
+            cursor: row-resize;
+        }
+
+        .gutter:hover {
+            background-color: #fff; 
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+        }
+
+=======
+        /* SIDEBAR */
+>>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
+        #sidebar {
+            background: linear-gradient(180deg, #0f0f12 0%, #050505 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px 5px;
+            border-right: 1px solid var(--border-dim);
+            box-shadow: 2px 0 10px rgba(255, 95, 31, 0.15); 
+            min-width: 65px;
+            z-index: 10;
+        }
+
+        .icon-btn {
+            color: #777;
+            font-size: 1.4rem;
+            margin-bottom: 25px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 10px;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .icon-btn:hover {
+            color: var(--neon-orange);
+            background: rgba(255, 95, 31, 0.1);
+            transform: scale(1.15);
+            box-shadow: inset 0 0 10px rgba(255, 95, 31, 0.1);
+        }
+
+        .icon-btn.active {
+            color: var(--neon-orange);
+            background: rgba(255, 95, 31, 0.15);
+            border-left: 3px solid var(--neon-orange);
+            text-shadow: var(--neon-glow);
+        }
+
+        .icon-btn .tooltip {
+            position: absolute;
+            left: 65px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--neon-orange);
+            color: #000;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s, transform 0.3s;
+            box-shadow: var(--neon-glow);
+        }
+
+        .icon-btn:hover .tooltip {
+            opacity: 1;
+            transform: translateY(-50%) translateX(5px);
+        }
+
+        .sidebar-bottom {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-dim);
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #explorer {
+            background-color: var(--panel-black);
+            padding: 15px;
+        }
+
+        .explorer-header {
+            color: var(--neon-orange);
+            font-size: 0.8rem;
+            letter-spacing: 1.5px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-dim);
+            padding-bottom: 8px;
+            font-weight: 700;
+            font-family: var(--font-ui);
+            text-shadow: var(--neon-glow);
+        }
+
+        .file-item {
+            padding: 8px 10px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: #999;
+            display: flex;
+            align-items: center;
+            border-radius: 4px;
+            transition: all 0.2s;
+            margin-bottom: 2px;
+        }
+
+        .file-item:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateX(3px);
+        }
+
+        #workspace {
+            background-color: var(--void-black);
+            display: flex;
+            flex-direction: column;
+        }
+
+<<<<<<< HEAD
+        #editor-wrapper {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+=======
+        /* WATERMARK */
+>>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
+        #watermark {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0.3;
+            pointer-events: none;
+            z-index: 0;
+            background-image: url('/static/family_crest.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            width: 400px;
+            height: 400px;
+            filter: drop-shadow(0 0 10px rgba(255, 95, 31, 0.2));
+        }
+
+        #editor-content {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            flex: 1;
+            background: transparent;
+            color: #f8f8f2;
+            border: none;
+            resize: none;
+            font-family: var(--font-term);
+            font-size: 15px;
+            padding: 20px;
+            outline: none;
+            line-height: 1.6;
+            caret-color: var(--neon-orange);
+        }
+
+        #terminal-container {
+            background: #020202;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: inset 0 5px 15px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        #terminal { flex: 1; }
+
+        #ai-panel {
+            background-color: var(--panel-black);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #chat-history {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            font-size: 0.95rem;
+        }
+
+        .msg {
+            margin-bottom: 18px;
+            line-height: 1.6;
+            padding: 12px 15px;
+            border-radius: 8px;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .msg.user {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 3px solid #555;
+        }
+
+        .msg.ai {
+            color: #fff;
+            background: rgba(255, 95, 31, 0.08);
+            border-left: 3px solid var(--neon-orange);
+            box-shadow: 0 2px 10px rgba(255, 95, 31, 0.05);
+        }
+
+        .msg.error {
+            color: #ff4444;
+            background: rgba(255, 68, 68, 0.1);
+            border-left: 3px solid #ff4444;
+        }
+
+        .ai-header {
+            color: var(--neon-orange);
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+            text-shadow: 0 0 5px rgba(255, 95, 31, 0.4);
+        }
+
+        .system-tag {
+            color: #00B4D8;
+            font-size: 0.75rem;
+            margin-bottom: 10px;
+            display: block;
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-shadow: 0 0 5px rgba(0, 180, 216, 0.5);
+        }
+
+        #chat-input-area {
+            padding: 20px;
+            border-top: 1px solid var(--border-dim);
+            display: flex;
+            gap: 12px;
+            background: #080808;
+            box-shadow: 0 -5px 15px rgba(255, 95, 31, 0.05);
+        }
+
+        #chat-input {
+            flex: 1;
+            background: #111;
+            border: 1px solid var(--border-dim);
+            color: white;
+            padding: 14px;
+            font-family: var(--font-term);
+            font-size: 0.95rem;
+            outline: none;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+
+        #chat-input:focus {
+            border-color: var(--neon-orange);
+            box-shadow: 0 0 10px rgba(255, 95, 31, 0.3);
+            background: #1a1a1a;
+        }
+
+        #send-btn {
+            background: var(--neon-orange);
+            color: #000;
+            border: none;
+            padding: 0 25px;
+            font-weight: 700;
+            font-family: var(--font-ui);
+            letter-spacing: 1px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.3s;
+            box-shadow: 0 0 10px rgba(255, 95, 31, 0.4);
+        }
+
+        #send-btn:hover {
+            background: #ff7f4d;
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px rgba(255, 95, 31, 0.6);
+        }
+        
+        audio { display: none; }
+    </style>
+</head>
+
+<<<<<<< HEAD
+    <audio id="bg-music" loop>
+        <source src="/static/focus_music.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="tts-player"></audio>
+
+    <div id="header">
+        <span class="title"><i class="fas fa-bolt" style="margin-right: 8px;"></i>BROCKSTON STUDIO // PROFESSIONAL</span>
+        <span class="status">HOST: 127.0.0.1 : 7777</span>
+=======
+<body>
+    <!-- HEADER -->
+    <div id="header">
+        <span class="title">BROCKSTON STUDIO // PROFESSIONAL</span>
+        <span class="status">HOST: 127.0.0.1 : 5055</span>
+>>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
+    </div>
+
+    <div id="app-container">
+        <div id="sidebar">
+            <div class="icon-btn active" title="Code Editor">
+                <i class="fas fa-code"></i>
+                <span class="tooltip">Code Editor</span>
+            </div>
+            <div class="icon-btn" title="Terminal">
+                <i class="fas fa-terminal"></i>
+                <span class="tooltip">Terminal</span>
+            </div>
+            <div class="icon-btn" title="Git">
+                <i class="fab fa-git-alt"></i>
+                <span class="tooltip">Git</span>
+            </div>
+<<<<<<< HEAD
+            
+=======
+            <div class="icon-btn" title="Search">
+                <i class="fas fa-search"></i>
+                <span class="tooltip">Search</span>
+            </div>
+
+>>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
+            <div class="sidebar-bottom">
+                <div class="icon-btn" id="btn-music" title="Background Music">
+                    <i class="fas fa-music"></i>
+                    <span class="tooltip">Focus Music</span>
+                </div>
+                <div class="icon-btn" id="btn-voice" title="Voice Mode">
+                    <i class="fas fa-volume-up"></i>
+                    <span class="tooltip">Voice Mode (Off)</span>
+                </div>
+                <div class="icon-btn" title="Settings">
+                    <i class="fas fa-cog"></i>
+                    <span class="tooltip">Settings</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="explorer" class="split">
+            <div class="explorer-header"><i class="fas fa-folder-open" style="margin-right: 5px;"></i> PROJECT EXPLORER</div>
+            <div id="file-list">
+                <div style="color: #444; font-style: italic;">Loading...</div>
+            </div>
+        </div>
+
+        <div id="workspace" class="split">
+            <div id="editor-wrapper">
+                <div id="watermark"></div>
+                <textarea id="editor-content" spellcheck="false" placeholder="// Select a file to begin coding..."></textarea>
+            </div>
+            <div id="terminal-container">
+                <div id="terminal"></div>
+            </div>
+        </div>
+
+<<<<<<< HEAD
+        <div id="ai-panel" class="split">
+            <div class="explorer-header" style="padding: 15px 20px 0;"><i class="fas fa-brain" style="margin-right: 5px;"></i> ASK BROCKSTON / ULTIMATE_EV</div>
+            <div id="chat-history">
+                <span class="system-tag">[SYSTEM]: Neural Link Active. Ready to help you learn.</span>
+            </div>
+            <div id="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Ask a question..." autocomplete="off">
+                <button id="send-btn">SEND</button>
+=======
+        <!-- AI PANEL: BROCKSTON ONLY -->
+        <div id="ai-panel" class="split">
+            <div class="explorer-header" style="padding: 15px;">ASK BROCKSTON</div>
+            <div id="brockston-panel" style="display: block; height: 100%; display: flex; flex-direction: column;">
+                <div id="chat-history">
+                    <span class="system-tag">[SYSTEM]: Neural Link Active.</span>
+                </div>
+                <div id="chat-input-area">
+                    <input type="text" id="chat-input" placeholder="Enter query..." autocomplete="off">
+                    <button id="send-btn">SEND</button>
+                </div>
+>>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Horizontal Splits (Columns)
+        Split(['#explorer', '#workspace', '#ai-panel'], {
+            sizes: [15, 55, 30],
+            minSize: [150, 400, 300],
+            gutterSize: 4,
+            cursor: 'col-resize'
+        });
+
+<<<<<<< HEAD
+        // Vertical Split for the Terminal (The missing bottom line)
+        Split(['#editor-wrapper', '#terminal-container'], {
+            direction: 'vertical',
+            sizes: [65, 35],
+            minSize: [100, 100],
+            gutterSize: 4,
+            cursor: 'row-resize'
+        });
+
+        const API_BASE = window.location.origin + "/api";
+        const WS_BASE = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + "/ws/terminal";
+=======
+        const API_BASE = "http://localhost:5055/api";
+        const WS_BASE = "ws://localhost:5055/ws/terminal";
+>>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
+
+        const chatInput = document.getElementById('chat-input');
+        const chatHistory = document.getElementById('chat-history');
+        const sendBtn = document.getElementById('send-btn');
+        const fileList = document.getElementById('file-list');
+        const editor = document.getElementById('editor-content');
+        
+        // Audio Elements
+        const bgMusic = document.getElementById('bg-music');
+        const ttsPlayer = document.getElementById('tts-player');
+        const btnMusic = document.getElementById('btn-music');
+        const btnVoice = document.getElementById('btn-voice');
+        
+        let isMusicPlaying = false;
+        let isVoiceModeEnabled = false;
+
+        btnMusic.addEventListener('click', () => {
+            if (isMusicPlaying) {
+                bgMusic.pause();
+                btnMusic.classList.remove('active');
+                btnMusic.querySelector('i').className = 'fas fa-music';
+            } else {
+                bgMusic.volume = 0.2; 
+                bgMusic.play().catch(e => console.log("Audio play prevented by browser:", e));
+                btnMusic.classList.add('active');
+                btnMusic.querySelector('i').className = 'fas fa-pause-circle';
+            }
+            isMusicPlaying = !isMusicPlaying;
+        });
+
+        btnVoice.addEventListener('click', () => {
+            isVoiceModeEnabled = !isVoiceModeEnabled;
+            if (isVoiceModeEnabled) {
+                btnVoice.classList.add('active');
+                btnVoice.querySelector('.tooltip').innerText = 'Voice Mode (On)';
+                appendMessage('SYSTEM', 'Voice Mode Activated. Brockston will now speak aloud.', 'system');
+            } else {
+                btnVoice.classList.remove('active');
+                btnVoice.querySelector('.tooltip').innerText = 'Voice Mode (Off)';
+                ttsPlayer.pause();
+            }
+        });
+
+        async function speakText(text) {
+            if (!isVoiceModeEnabled) return;
+            try {
+                const res = await fetch(`${API_BASE}/speech/synthesize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text }) 
+                });
+                if (!res.ok) throw new Error("Speech synthesis failed");
+                
+                const blob = await res.blob();
+                const audioUrl = URL.createObjectURL(blob);
+                ttsPlayer.src = audioUrl;
+                ttsPlayer.play();
+            } catch (err) {
+                console.error("TTS Error:", err);
+            }
+        }
+
+        async function sendChat() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            appendMessage('YOU', text, 'user');
+            chatInput.value = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+
+                if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+                const data = await response.json();
+                appendMessage('BROCKSTON', data.response, 'ai');
+<<<<<<< HEAD
+                
+                speakText(data.response.replace(/\[.*?\]/g, '')); 
+
+=======
+>>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
+            } catch (err) {
+                console.error(err);
+                appendMessage('SYSTEM', `[ERROR]: ${err.message}`, 'error');
+            }
+        }
+
+        function appendMessage(sender, text, type) {
+            const div = document.createElement('div');
+            div.className = `msg ${type}`;
+            
+            let icon = 'fa-user';
+            if (type === 'ai') icon = 'fa-robot';
+            if (type === 'system' || type === 'error') icon = 'fa-server';
+            
+            div.innerHTML = `<div class="ai-header"><i class="fas ${icon}"></i> ${sender}</div> ${text}`;
+            chatHistory.appendChild(div);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        sendBtn.addEventListener('click', sendChat);
+        chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChat(); });
+        
+        let currentPath = '';
+
+        async function loadFiles(path = '') {
+            try {
+                const res = await fetch(`${API_BASE}/files?path=${encodeURIComponent(path)}`);
+                const data = await res.json();
+
+                fileList.innerHTML = '';
+
+                if (currentPath !== '') {
+                    const backBtn = document.createElement('div');
+                    backBtn.className = 'file-item';
+                    backBtn.innerHTML = `<i class="fas fa-level-up-alt"></i> ..`;
+                    backBtn.onclick = () => {
+                        const parts = currentPath.split('/').filter(p => p);
+                        parts.pop();
+                        currentPath = parts.join('/');
+                        loadFiles(currentPath);
+                    };
+                    fileList.appendChild(backBtn);
+                }
+
+                (data.files || []).forEach(file => {
+                    const el = document.createElement('div');
+                    el.className = 'file-item';
+                    const icon = file.type === 'folder' ? 'fa-folder' : 'fa-file-code';
+<<<<<<< HEAD
+                    const color = file.type === 'folder' ? '#FF5F1F' : '#00B4D8';
+                    el.innerHTML = `<i class="fas ${icon}" style="color: ${color}"></i> ${file.name}`;
+                    
+=======
+                    el.innerHTML = `<i class="fas ${icon}"></i> ${file.name}`;
+                    el.style.cursor = 'pointer';
+
+>>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
+                    if (file.type === 'file') {
+                        el.onclick = () => openFile(currentPath ? currentPath + '/' + file.name : file.name);
+                    } else {
+                        el.onclick = () => {
+                            currentPath = currentPath ? currentPath + '/' + file.name : file.name;
+                            loadFiles(currentPath);
+                        };
+                    }
+
+                    fileList.appendChild(el);
+                });
+            } catch (err) {
+                fileList.innerHTML = `<div style="color:red; padding: 10px;">Failed to load files: ${err.message}</div>`;
+            }
+        }
+
+        async function openFile(filepath) {
+            try {
+                const res = await fetch(`${API_BASE}/read_file?filename=${encodeURIComponent(filepath)}`);
+                if (!res.ok) throw new Error("Read failed");
+                const data = await res.json();
+                editor.value = data.content;
+            } catch (err) {
+                alert("Cannot read file: " + err.message);
+            }
+        }
+
+        const term = new Terminal({
+            theme: {
+                background: '#020202',
+                foreground: '#f8f8f2',
+                cursor: '#FF5F1F',
+                selection: 'rgba(255, 95, 31, 0.3)'
+            },
+            fontFamily: 'var(--font-term)',
+            fontSize: 14,
+            cursorBlink: true,
+            cols: 80,
+            rows: 12
+        });
+
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById('terminal'));
+        fitAddon.fit();
+
+        new ResizeObserver(() => fitAddon.fit()).observe(document.getElementById('terminal-container'));
+
+        let ws;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        const baseReconnectDelay = 1000;
+
+<<<<<<< HEAD
+        ws.onopen = () => {
+            term.write('\r\n\x1b[1;38;2;255;95;31m[BROCKSTON TERMINAL LINKED]\x1b[0m\r\n');
+            term.write('\x1b[1;32m> Ready for input...\x1b[0m\r\n');
+        };
+=======
+        function connectWebSocket() {
+            ws = new WebSocket(WS_BASE);
+>>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
+
+            ws.onopen = () => {
+                reconnectAttempts = 0;
+                term.write('\r\n\x1b[1;32m[SYSTEM]: UPLINK ESTABLISHED.\x1b[0m\r\n');
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'output') {
+                        let clean = msg.data;
+                        clean = clean.replace(/\[\?2004h/g, '').replace(/\[\?2004l/g, '');
+                        term.write(clean);
+                    }
+                } catch (err) {
+                    console.error('Failed to parse message:', err);
+                    term.write('\r\n\x1b[1;31m[ERROR]: Invalid server message format\x1b[0m\r\n');
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                term.write('\r\n\x1b[1;31m[ERROR]: Connection failed. Attempting to reconnect...\x1b[0m\r\n');
+            };
+
+            ws.onclose = () => {
+                term.write('\r\n\x1b[1;33m[SYSTEM]: CONNECTION LOST.\x1b[0m\r\n');
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts);
+                    reconnectAttempts++;
+                    term.write(`\x1b[1;33m[SYSTEM]: Reconnecting in ${delay / 1000}s... (Attempt ${reconnectAttempts}/${maxReconnectAttempts})\x1b[0m\r\n`);
+                    setTimeout(connectWebSocket, delay);
+                } else {
+                    term.write('\x1b[1;31m[ERROR]: Max reconnection attempts reached. Please refresh the page.\x1b[0m\r\n');
+                }
+            };
+        }
+
+        connectWebSocket();
+
+        term.onData(data => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'input', data: data }));
+            } else {
+                term.write('\x1b[1;31m[ERROR]: Not connected to server\x1b[0m\r\n');
+            }
+        });
+
+        loadFiles();
+        window.addEventListener('focus', () => term.focus());
+    </script>
+
+    <!-- Core app script, no Claude hook -->
+    <script src="app.js"></script>
+</body>
+</html>
