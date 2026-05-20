@@ -13,6 +13,7 @@ Centralized settings for the environment.
 
 import os
 from pathlib import Path
+from config import OLLAMA_BASE_URL, LLM_MODEL_CODER, BROCKSTON_WORKSPACE, SERVER_HOST, SERVER_PORT
 
 # Base directory of the project
 # This resolves to /Users/EverettN/Brockston-IDE-Studio
