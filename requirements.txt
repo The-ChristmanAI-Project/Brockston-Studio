@@ -1,0 +1,24 @@
+# BROCKSTON Studio Backend Requirements
+
+# Web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# HTTP client for AI model communication
+httpx==0.25.1
+
+# Data validation
+pydantic==2.4.2
+
+# Anthropic Claude API
+anthropic==0.40.0
+
+# Environment variable handling
+python-dotenv==1.0.0
+
+# Terminal/PTY support
+ptyprocess==0.7.0
+
+# Python version: 3.10+
+
