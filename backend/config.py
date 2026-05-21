@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Server configuration
 HOST = os.getenv("BROCKSTON_HOST", "127.0.0.1")
-PORT = int(os.getenv("BROCKSTON_PORT", "5055"))
+PORT = int(os.getenv("BROCKSTON_PORT", "7777"))
 
 # Model Settings
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
