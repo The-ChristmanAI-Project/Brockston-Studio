@@ -1,0 +1,136 @@
+# © 2025 The Christman AI Project. All rights reserved.
+#
+# This code is released as part of a trauma-informed, dignity-first AI ecosystem
+# designed to protect, empower, and elevate vulnerable populations.
+#
+# By using, modifying, or distributing this software, you agree to uphold the following:
+# 1. Truth — No deception, no manipulation.
+# 2. Dignity — Respect the autonomy and humanity of all users.
+# 3. Protection — Never use this to exploit or harm vulnerable individuals.
+# 4. Transparency — Disclose all modifications and contributions clearly.
+# 5. No Erasure — Preserve the mission and ethical origin of this work.
+#
+# This is not just code. This is redemption in code.
+# Contact: lumacognify@thechristmanaiproject.com
+# https://thechristmanaiproject.com
+
+# face_to_face.py
+import threading
+
+try:
+    import cv2
+    import numpy as np
+
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    print("[WARN] OpenCV not available. Install: pip install opencv-python")
+
+# Avatar images
+if CV2_AVAILABLE:
+    idle = cv2.imread("avatar_idle.png")
+    talking = cv2.imread("avatar_talking.png")
+
+    if idle is None or talking is None:
+        print("[WARN] Avatar images not found, using blank placeholders")
+        idle = 255 * np.ones((400, 400, 3), dtype=np.uint8)
+        talking = idle.copy()
+else:
+    idle = None
+    talking = None
+
+# Try to import DeepFace
+deepface_available = False
+try:
+    from deepface import DeepFace
+
+    deepface_available = True
+    print("[INFO] DeepFace loaded successfully.")
+except ImportError:
+    pass  # Optional dependency
+except Exception as e:
+    print(f"[WARN] DeepFace unavailable: {e}")
+    print("[INFO] Running in avatar-only mode.")
+
+# Webcam loop
+
+
+def webcam_loop():
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("[ERROR] Cannot access webcam.")
+        return
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("[ERROR] Failed to grab frame.")
+            break
+
+        # If DeepFace is available, run analysis
+        if deepface_available:
+            try:
+                result = DeepFace.analyze(
+                    frame, actions=["emotion"], enforce_detection=False
+                )
+                dominant = result[0]["dominant_emotion"]
+                cv2.putText(
+                    frame,
+                    f"Emotion: {dominant}",
+                    (20, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 255, 0),
+                    2,
+                )
+            except Exception as e:
+                cv2.putText(
+                    frame,
+                    f"DeepFace error: {str(e)}",
+                    (20, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 0, 255),
+                    2,
+                )
+
+        cv2.imshow("brockstonC Face-to-Face", frame)
+
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+# Avatar loop
+
+
+def avatar_loop():
+    state = "idle"
+    while True:
+        if state == "idle":
+            frame = idle.copy()
+        else:
+            frame = talking.copy()
+
+        cv2.imshow("brockstonC Avatar", frame)
+        if cv2.waitKey(500) & 0xFF == ord("q"):
+            break
+        state = "talking" if state == "idle" else "idle"
+
+
+if __name__ == "__main__":
+    threading.Thread(target=webcam_loop, daemon=True).start()
+    avatar_loop()
+
+# ==============================================================================
+# © 2025 Everett Nathaniel Christman & Misty Gail Christman
+# The Christman AI Project — Luma Cognify AI
+# All rights reserved. Unauthorized use, replication, or derivative training
+# of this material is prohibited.
+# Core Directive: "How can I help you love yourself more?"
+# Autonomy & Alignment Protocol v3.0
+# ==============================================================================
+
+__all__ = ["webcam_loop", "avatar_loop"]
