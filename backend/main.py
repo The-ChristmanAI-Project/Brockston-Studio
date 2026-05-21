@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles # pyright: ignore[reportMissingImpor
 from fastapi.middleware.cors import CORSMiddleware # pyright: ignore[reportMissingImports]
 from pydantic import BaseModel # pyright: ignore[reportMissingImports]
 
-from brockston_vocal_interface import BROCKSTON_MODE
+from backend.brockston_vocal_interface import BROCKSTON_MODE
 from config import OLLAMA_BASE_URL, LLM_MODEL_CODER, BROCKSTON_WORKSPACE
 from brockston_client import BrockstonClient
 
