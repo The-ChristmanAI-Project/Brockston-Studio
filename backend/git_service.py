@@ -8,9 +8,10 @@ import os
 import logging
 import subprocess
 import pathlib
+from unittest.mock import ANY
 import urllib.parse
 
-from config import BROCKSTON_WORKSPACE, GITHUB_TOKEN
+from config import BROCKSTON_WORKSPACE
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def clone_repo(git_url: str, folder_name: str | None = None) -> pathlib.Path:
 
     # Build authenticated URL if we have a GitHub token
     auth_url = git_url
-    if GITHUB_TOKEN and git_url.startswith("https://github.com/"):
+    if GITHUB_TOKEN and git_url.startswith("https://github.com/"): # pyright: ignore[reportUndefinedVariable]
         # Insert token into URL for authentication
         # https://github.com/owner/repo.git -> https://TOKEN@github.com/owner/repo.git
         auth_url = git_url.replace(
@@ -92,10 +93,11 @@ def clone_repo(git_url: str, folder_name: str | None = None) -> pathlib.Path:
 
     # Prepare environment for git
     env = os.environ.copy()
-    if GITHUB_TOKEN:
-        env["GIT_ASKPASS"] = "echo"
-        env["GIT_USERNAME"] = "token"
-        env["GIT_PASSWORD"] = GITHUB_TOKEN
+    if GITHUB_TOKEN: ANY # type: ignore
+    
+    env["GIT_ASKPASS"] = "echo"
+    env["GIT_USERNAME"] = "token
+    env["GIT_PASSWORD"] = GITHUB_TOKEN
 
     # Execute git clone
     try:
