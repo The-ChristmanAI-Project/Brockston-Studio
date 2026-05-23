@@ -13,14 +13,14 @@ from fastapi.responses import HTMLResponse, FileResponse, Response
 from pydantic import BaseModel
 
 try:
-    from .ai_client import get_ai_response
+    from backend.ai_client import get_ai_response
 except ImportError:
-    from ai_client import get_ai_response
+    from backend.ai_client import get_ai_response
     
 try:
-    from .speech_service import SpeechService
+    from backend.speech_service import SpeechService
 except ImportError:
-    from speech_service import SpeechService
+    from backend.speech_service import SpeechService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("BrockstonStudio")
