@@ -21,7 +21,7 @@ if PROJECT_ROOT not in sys.path:
 # -------------------------------------------------------------
 # Now import BROCKSTON's brain and TTS safely
 # -------------------------------------------------------------
-from tts_bridge import speak_response
+from christman_sound import speak as speak_response
 
 try:
     from brockston_core import brain as brockston

@@ -15,8 +15,9 @@ from fastapi.staticfiles import StaticFiles # pyright: ignore[reportMissingImpor
 from fastapi.middleware.cors import CORSMiddleware # pyright: ignore[reportMissingImports]
 from pydantic import BaseModel # pyright: ignore[reportMissingImports]
 
-from frontend.brockston_vocal_interface import BROCKSTON_MODE
-from config import OLLAMA_BASE_URL, LLM_MODEL_CODER, BROCKSTON_WORKSPACE
+from config import OLLAMA_BASE_URL, LLM_MODEL_CODER, BROCKSTON_WORKSPACE, HOST, PORT
+
+BROCKSTON_MODE = os.getenv("BROCKSTON_MODE", "educator")
 from brockston_client import BrockstonClient
 
 logging.basicConfig(level=logging.INFO)
@@ -316,4 +317,4 @@ async def websocket_terminal(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn # pyright: ignore[reportMissingImports]
-    uvicorn.run(app, host=BROCKSTON_MODE, port=BROCKSTON_MODE)
+    uvicorn.run(app, host=HOST, port=PORT)

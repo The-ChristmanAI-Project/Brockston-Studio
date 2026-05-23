@@ -15,16 +15,15 @@ from pydantic import BaseModel # pyright: ignore[reportMissingImports]
 try:
     from backend.ai_client import get_ai_response
 except ImportError:
-    from backend.ai_client import get_ai_response
-    
+    get_ai_response = None
+
 try:
-
-    from frontend.speech_service import SpeechService
+    from backend.speech_service import SpeechService
 except ImportError:
-    from frontend.speech_service import SpeechService
+    SpeechService = None
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("BrockstonStudio")
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("BrockstonStudio")
 
 app = fastapi.FastAPI()
 
@@ -158,5 +157,5 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
         process.kill()
 
 backend_dir = Path(__file__).parent
-frontend_dir = backend_dir.parent / "frontend"
+frontend_dir = backend_dir / "frontend"
 app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
