@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 import math
 
-from .conv import Conv2dTranspose, Conv2d, nonorm_Conv2d
+from backend.embodiment.avatar.legacy.conv import Conv2dTranspose, Conv2d, nonorm_Conv2d
 
 
 class Wav2Lip(nn.Module):

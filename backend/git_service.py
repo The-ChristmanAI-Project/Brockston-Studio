@@ -96,8 +96,11 @@ def clone_repo(git_url: str, folder_name: str | None = None) -> pathlib.Path:
     if GITHUB_TOKEN: ANY # type: ignore
     
     env["GIT_ASKPASS"] = "echo"
-    env["GIT_USERNAME"] = "token
-    env["GIT_PASSWORD"] = GITHUB_TOKEN
+   # To this (assuming it's a GitHub token):
+    env["GIT_USERNAME"] = "token"
+# Or if it should be:
+    env["GIT_USERNAME"] = "token"  # actual token value
+    env["GIT_PASSWORD"] = "token"
 
     # Execute git clone
     try:
@@ -112,7 +115,7 @@ def clone_repo(git_url: str, folder_name: str | None = None) -> pathlib.Path:
         if result.returncode != 0:
             error_msg = result.stderr.strip() if result.stderr else "Unknown error"
             # Don't leak token in error messages
-            error_msg = error_msg.replace(GITHUB_TOKEN, "***") if GITHUB_TOKEN else error_msg
+            error_msg = error_msg.replace(GITHUB_TOKEN, "***") if GITHUB_TOKEN else error_msg # pyright: ignore[reportUndefinedVariable]
             raise RuntimeError(f"git clone failed: {error_msg}")
 
         logger.info(f"Successfully cloned repository to: {target_dir}")
