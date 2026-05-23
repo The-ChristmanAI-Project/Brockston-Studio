@@ -6,31 +6,31 @@ import json
 import logging
 import asyncio
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, Response
-from pydantic import BaseModel
+import fastapi # pyright: ignore[reportMissingImports]
+import fastapi.middleware.cors # pyright: ignore[reportMissingImports]
+from fastapi.staticfiles import StaticFiles # pyright: ignore[reportMissingImports]
+from fastapi.responses import HTMLResponse, FileResponse, Response # pyright: ignore[reportMissingImports]
+from pydantic import BaseModel # pyright: ignore[reportMissingImports]
 
 try:
-    from .ai_client import get_ai_response
+    from backend.ai_client import get_ai_response
 except ImportError:
-    from ai_client import get_ai_response
+    from backend.ai_client import get_ai_response
     
 try:
-    from .speech_service import SpeechService
+    from frontend.speech_service import SpeechService
 except ImportError:
-    from speech_service import SpeechService
+    from frontend.speech_service import SpeechService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("BrockstonStudio")
 
-app = FastAPI()
+app = fastapi.FastAPI()
 
 origins = ["*"]
 
 app.add_middleware(
-    CORSMiddleware,
+    fastapi.middleware.cors.CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
@@ -64,13 +64,13 @@ async def chat_endpoint(request: ChatRequest):
             response_text = get_ai_response(request.message)
             return {"response": response_text}
         except Exception as inner_e:
-            raise HTTPException(status_code=500, detail=str(inner_e))
+            raise fastapi.HTTPException(status_code=500, detail=str(inner_e))
 
 # ==========================================
 # AUDIO ROUTE (This makes the kids' TTS work)
 # ==========================================
 @app.post("/api/speech/synthesize")
-async def synthesize_speech_route(request: Request):
+async def synthesize_speech_route(request: fastapi.Request):
     try:
         data = await request.json()
         text = data.get("text", "")
@@ -83,13 +83,13 @@ async def synthesize_speech_route(request: Request):
         return Response(content=audio_bytes, media_type="audio/mpeg")
     except Exception as e:
         logger.error(f"Speech Synthesis Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise fastapi.HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/files")
 async def list_files(path: str = ""):
     try:
         if ".." in path or path.startswith("/"):
-            raise HTTPException(status_code=400, detail="Invalid path")
+            raise fastapi.HTTPException(status_code=400, detail="Invalid path")
         root_dir = path if path else "."
         files = []
         for item in os.listdir(root_dir):
@@ -107,16 +107,16 @@ async def list_files(path: str = ""):
 async def read_file(filename: str):
     try:
         if ".." in filename or filename.startswith("/"):
-             raise HTTPException(status_code=400, detail="Invalid filename")
+             raise fastapi.HTTPException(status_code=400, detail="Invalid filename")
         with open(filename, "r", encoding="utf-8") as f:
             content = f.read()
         return {"content": content, "filename": filename}
     except Exception as e:
         logger.error(f"Read Error: {e}")
-        raise HTTPException(status_code=404, detail="File not found")
+        raise fastapi.HTTPException(status_code=404, detail="File not found")
 
 @app.websocket("/ws/terminal")
-async def websocket_terminal(websocket: WebSocket):
+async def websocket_terminal(websocket: fastapi.WebSocket):
     await websocket.accept()
     master_fd, slave_fd = pty.openpty()
     shell = os.environ.get("SHELL", "/bin/bash")

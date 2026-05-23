@@ -2,7 +2,7 @@ import torch
 import cv2
 import numpy as np
 from PIL import Image
-from .model import BiSeNet
+from backend.embodiment.avatar.legacy.model import BiSeNet
 import torchvision.transforms as transforms
 
 
