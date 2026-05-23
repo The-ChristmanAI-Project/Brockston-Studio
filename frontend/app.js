@@ -1,7 +1,7 @@
-/**
- * BROCKSTON Studio - Frontend Logic
- * FULL RESTORATION: Maintaining Visual Sovereignty and Uplink.
- */
+/
+  BROCKSTON Studio - Frontend Logic
+  FULL RESTORATION: Maintaining Visual Sovereignty and Uplink.
+/
 
 const BACKEND_URL = "http://127.0.0.1:5055";
 
