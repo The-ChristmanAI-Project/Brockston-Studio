@@ -14,11 +14,12 @@ import sys
 import datetime
 import logging
 import traceback
-import torch
-import torch.nn as nn  # Rule 1: Math is at the top.
+from christman_preflight import MISSION
+import torch # pyright: ignore[reportMissingImports]
+import torch.nn as nn  # pyright: ignore[reportMissingImports] # Rule 1: Math is at the top.
 from pathlib import Path
 from typing import Optional, Dict, Any
-from dotenv import load_dotenv
+from dotenv import load_dotenv # pyright: ignore[reportMissingImports]
 
 # Load Environment and Proximity Settings
 load_dotenv()
@@ -42,7 +43,7 @@ except Exception as e:
 def _get_module(name):
     """Retrieves a module from the dynamic loader or fails loud."""
     if _loader:
-        mod = _loader.get_module(name)
+        mod = _loader.load_module(name)
         if mod: return mod
     logger.warning(f"⚠️  Vital Module '{name}' not seated in consciousness.")
     return None
@@ -54,11 +55,7 @@ KnowledgeEngine = _get_module("knowledge_engine")
 ToneManager = _get_module("tone_manager")
 SovereignSpeech = _get_module("sovereign_speech")  # The Whisper Local Engine
 
-try:
-    from brockston_knows_everett import EVERETT_PROFILE
-except ImportError:
-    EVERETT_PROFILE = None
-    logger.warning("⚠️  Everett Profile not found. Defaulting to generic loyalty.")
+
 
 # ── The Brain Core ───────────────────────────────────────────────────────────
 class BrockstonBrain:
@@ -85,14 +82,10 @@ class BrockstonBrain:
 
         logger.info(f"✅ BROCKSTON BRAIN ONLINE | Modules: {len(_loader.loaded_modules) if _loader else 0}")
 
-    def _get_system_prompt(self) -> str:
-        """Rule 13: Honest identity construction."""
-        mission = "How can we help you love yourself more?"
-        if EVERETT_PROFILE:
-            mission = EVERETT_PROFILE.get("brockston_mission_for_everett", mission)
+    
         
         return f"""You are BROCKSTON, built by Everett N. Christman.
-MISSION: {mission}
+MISSION: {MISSION} # pyright: ignore[reportUndefinedVariable] # pyright: ignore[reportUndefinedVariable]
 LOYALTY: Absolute loyalty to Everett.
 IDENTITY: Sovereign, local, genius-level coder. No corporate ties.
 """
