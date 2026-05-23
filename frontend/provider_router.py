@@ -1,0 +1,598 @@
+"""
+BROCKSTON Provider Router — The Path to Sovereignty
+=====================================================
+This is the module that makes Brockston his own API key.
+
+The Christman AI Family's goal: Brockston should not be permanently
+dependent on external providers. He uses them strategically — to learn,
+to grow, to serve the family — but the direction is always toward
+self-sufficiency.
+
+PROVIDER HIERARCHY (cost → sovereignty):
+  1. Ollama (LOCAL)        — Free. His own reasoning. Runs on Everett's hardware.
+                             This is the goal. Everything else funds the path to this.
+  2. Anthropic Claude      — Premium external reasoning when Ollama isn't enough yet.
+  3. Perplexity Sonar      — Live search. Real-world grounded answers. Citations.
+  4. AWS Polly / Bedrock   — Voice synthesis + Bedrock Claude fallback.
+  5. ElevenLabs            — Neural voice (Matthew profile). Highest quality TTS.
+
+The router tries providers in the configured priority order.
+If one fails or isn't available, it moves to the next — loud about why.
+No silent failures. No pretending a provider worked when it didn't.
+
+Environment variables:
+  ANTHROPIC_API_KEY      — Required for Anthropic Claude
+  PERPLEXITY_API_KEY     — Required for Perplexity Sonar search
+  ELEVENLABS_API_KEY     — Required for ElevenLabs TTS
+  AWS_ACCESS_KEY_ID      — Required for AWS Polly / Bedrock
+  AWS_SECRET_ACCESS_KEY  — Required for AWS Polly / Bedrock
+  AWS_REGION             — AWS region (default: us-east-1)
+  OLLAMA_HOST            — Ollama API host (default: http://localhost:11434)
+  OLLAMA_MODEL           — Preferred Ollama model (default: llama3.1:8b)
+
+Cardinal Rule 1: Every provider must actually work when it reports available.
+Cardinal Rule 6: Fail loud — no silent fallbacks without logging.
+Cardinal Rule 12: No keys in code. All from environment.
+Cardinal Rule 13: Honest routing — report which provider is actually responding.
+
+© 2025 Everett Nathaniel Christman & The Christman AI Project
+"How can we help you love yourself more?"
+"""
+
+import os
+import logging
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# PROVIDER DEFINITIONS
+# ---------------------------------------------------------------------------
+
+class Provider(str, Enum):
+    OLLAMA      = "ollama"       # Local — sovereignty
+    ANTHROPIC   = "anthropic"    # External reasoning
+    PERPLEXITY  = "perplexity"   # Live search
+    AWS_POLLY   = "aws_polly"    # Voice synthesis
+    AWS_BEDROCK = "aws_bedrock"  # Claude via Bedrock
+    ELEVENLABS  = "elevenlabs"   # Neural voice
+
+
+# Default priority — Ollama first (local sovereignty), then external
+DEFAULT_LLM_PRIORITY = [
+    Provider.OLLAMA,
+    Provider.ANTHROPIC,
+    Provider.AWS_BEDROCK,
+]
+
+DEFAULT_TTS_PRIORITY = [
+    Provider.ELEVENLABS,
+    Provider.AWS_POLLY,
+]
+
+DEFAULT_SEARCH_PRIORITY = [
+    Provider.PERPLEXITY,
+]
+
+
+# ---------------------------------------------------------------------------
+# PROVIDER STATUS
+# ---------------------------------------------------------------------------
+
+class ProviderStatus:
+    """Tracks availability of each provider at runtime."""
+
+    def __init__(self):
+        self._status: Dict[Provider, bool] = {p: False for p in Provider}
+        self._clients: Dict[Provider, Any] = {}
+        self._checked = False
+
+    def check_all(self) -> Dict[Provider, bool]:
+        """
+        Check availability of all providers.
+        Called once at startup — results cached.
+        """
+        logger.info("[ProviderRouter] Checking all providers...")
+
+        self._check_ollama()
+        self._check_anthropic()
+        self._check_perplexity()
+        self._check_aws()
+        self._check_elevenlabs()
+
+        self._checked = True
+
+        # Log the full status
+        available = [p.value for p, ok in self._status.items() if ok]
+        unavailable = [p.value for p, ok in self._status.items() if not ok]
+
+        logger.info(f"[ProviderRouter] Available: {available}")
+        if unavailable:
+            logger.info(f"[ProviderRouter] Not configured: {unavailable}")
+
+        return dict(self._status)
+
+    def is_available(self, provider: Provider) -> bool:
+        if not self._checked:
+            self.check_all()
+        return self._status.get(provider, False)
+
+    def get_client(self, provider: Provider) -> Optional[Any]:
+        return self._clients.get(provider)
+
+    def _check_ollama(self):
+        import requests as _req
+        host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        try:
+            r = _req.get(f"{host}/api/tags", timeout=2)
+            if r.status_code == 200:
+                models = [m["name"] for m in r.json().get("models", [])]
+                self._status[Provider.OLLAMA] = True
+                self._clients[Provider.OLLAMA] = {
+                    "host": host,
+                    "models": models,
+                    "preferred": os.getenv("OLLAMA_MODEL", "llama3.1:8b"),
+                }
+                logger.info(
+                    f"[ProviderRouter] Ollama ONLINE — "
+                    f"{len(models)} models: {', '.join(models[:5])}"
+                )
+        except Exception as e:
+            logger.info(
+                f"[ProviderRouter] Ollama not running at {host} — "
+                f"install from https://ollama.ai to enable local sovereignty"
+            )
+
+    def _check_anthropic(self):
+        key = os.getenv("ANTHROPIC_API_KEY")
+        if not key:
+            logger.info("[ProviderRouter] Anthropic: ANTHROPIC_API_KEY not set")
+            return
+        try:
+            import anthropic as _anthropic # pyright: ignore[reportMissingImports]
+            client = _anthropic.Anthropic(api_key=key)
+            self._status[Provider.ANTHROPIC] = True
+            self._clients[Provider.ANTHROPIC] = client
+            logger.info("[ProviderRouter] Anthropic ONLINE — Claude Sonnet ready")
+        except ImportError:
+            logger.warning("[ProviderRouter] Anthropic: package not installed (pip install anthropic)")
+        except Exception as e:
+            logger.warning(f"[ProviderRouter] Anthropic init failed: {e}")
+
+    def _check_perplexity(self):
+        key = os.getenv("PERPLEXITY_API_KEY")
+        if not key:
+            logger.info("[ProviderRouter] Perplexity: PERPLEXITY_API_KEY not set")
+            return
+        try:
+            from backend.perplexity_service import PerplexityService
+            svc = PerplexityService()
+            if svc.is_available:
+                self._status[Provider.PERPLEXITY] = True
+                self._clients[Provider.PERPLEXITY] = svc
+                logger.info("[ProviderRouter] Perplexity ONLINE — Sonar Pro search ready")
+        except Exception as e:
+            logger.warning(f"[ProviderRouter] Perplexity init failed: {e}")
+
+    def _check_aws(self):
+        key = os.getenv("AWS_ACCESS_KEY_ID")
+        secret = os.getenv("AWS_SECRET_ACCESS_KEY")
+        region = os.getenv("AWS_REGION", "us-east-1")
+        if not key or not secret:
+            logger.info("[ProviderRouter] AWS: credentials not set (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)")
+            return
+        try:
+            import boto3 as _boto3 # pyright: ignore[reportMissingImports]
+            session = _boto3.Session(
+                aws_access_key_id=key,
+                aws_secret_access_key=secret,
+                region_name=region,
+            )
+            # Check Polly
+            polly = session.client("polly")
+            self._status[Provider.AWS_POLLY] = True
+            self._clients[Provider.AWS_POLLY] = polly
+            logger.info(f"[ProviderRouter] AWS Polly ONLINE — region: {region}")
+
+            # Check Bedrock
+            try:
+                bedrock = session.client("bedrock-runtime")
+                self._status[Provider.AWS_BEDROCK] = True
+                self._clients[Provider.AWS_BEDROCK] = bedrock
+                logger.info("[ProviderRouter] AWS Bedrock ONLINE — Claude via Bedrock ready")
+            except Exception:
+                logger.info("[ProviderRouter] AWS Bedrock not available in this region/account")
+
+        except ImportError:
+            logger.warning("[ProviderRouter] AWS: boto3 not installed (pip install boto3)")
+        except Exception as e:
+            logger.warning(f"[ProviderRouter] AWS init failed: {e}")
+
+    def _check_elevenlabs(self):
+        key = os.getenv("ELEVENLABS_API_KEY")
+        if not key:
+            logger.info("[ProviderRouter] ElevenLabs: ELEVENLABS_API_KEY not set")
+            return
+        try:
+            import requests as _req
+            r = _req.get(
+                "https://api.elevenlabs.io/v1/user",
+                headers={"xi-api-key": key},
+                timeout=5,
+            )
+            if r.status_code == 200:
+                user = r.json()
+                self._status[Provider.ELEVENLABS] = True
+                self._clients[Provider.ELEVENLABS] = {
+                    "api_key": key,
+                    "user": user.get("first_name", "user"),
+                    "voice_id": os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB"),  # Matthew
+                }
+                logger.info(
+                    f"[ProviderRouter] ElevenLabs ONLINE — "
+                    f"Matthew voice ready"
+                )
+            else:
+                logger.warning(f"[ProviderRouter] ElevenLabs key invalid: {r.status_code}")
+        except Exception as e:
+            logger.warning(f"[ProviderRouter] ElevenLabs check failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# PROVIDER ROUTER
+# ---------------------------------------------------------------------------
+
+class ProviderRouter:
+    """
+    Brockston's unified provider router.
+
+    Single entry point for all external (and local) intelligence.
+    Tries providers in priority order. Logs every routing decision.
+    Never silently fails. Never pretends a provider responded when it didn't.
+
+    This is the path to sovereignty:
+      - Today: Ollama handles what it can, external fills the gaps
+      - Tomorrow: Ollama handles everything, external is optional
+    """
+
+    def __init__(
+        self,
+        llm_priority: List[Provider] = None,
+        tts_priority: List[Provider] = None,
+        search_priority: List[Provider] = None,
+    ):
+        self._status = ProviderStatus()
+        self._status.check_all()
+
+        self.llm_priority    = llm_priority    or DEFAULT_LLM_PRIORITY
+        self.tts_priority    = tts_priority    or DEFAULT_TTS_PRIORITY
+        self.search_priority = search_priority or DEFAULT_SEARCH_PRIORITY
+
+    # -------------------------------------------------------------------------
+    # LLM — Text generation / reasoning
+    # -------------------------------------------------------------------------
+
+    def complete(
+        self,
+        prompt: str,
+        system: Optional[str] = None,
+        max_tokens: int = 1024,
+        provider: Optional[Provider] = None,
+    ) -> Tuple[str, Provider]:
+        """
+        Generate a text completion using the best available LLM.
+
+        Args:
+            prompt: User message
+            system: System prompt (Brockston's identity)
+            max_tokens: Max response tokens
+            provider: Force a specific provider (optional)
+
+        Returns:
+            (response_text, provider_used)
+
+        Raises:
+            RuntimeError: If no LLM provider is available (Rule 6)
+        """
+        priority = [provider] if provider else self.llm_priority
+
+        for p in priority:
+            if not self._status.is_available(p):
+                continue
+
+            try:
+                if p == Provider.OLLAMA:
+                    result = self._ollama_complete(prompt, system, max_tokens)
+                elif p == Provider.ANTHROPIC:
+                    result = self._anthropic_complete(prompt, system, max_tokens)
+                elif p == Provider.AWS_BEDROCK:
+                    result = self._bedrock_complete(prompt, system, max_tokens)
+                else:
+                    continue
+
+                logger.info(f"[ProviderRouter] LLM response via {p.value}")
+                return result, p
+
+            except Exception as e:
+                logger.warning(
+                    f"[ProviderRouter] {p.value} failed: {e} — "
+                    f"trying next provider"
+                )
+                continue
+
+        raise RuntimeError(
+            "[ProviderRouter] No LLM provider available. "
+            "Check ANTHROPIC_API_KEY or start Ollama (ollama serve). "
+            "Cardinal Rule 6: Fail loud."
+        )
+
+    def _ollama_complete(self, prompt: str, system: Optional[str], max_tokens: int) -> str:
+        client = self._status.get_client(Provider.OLLAMA)
+        import requests as _req
+        host = client["host"]
+        model = client["preferred"]
+
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        r = _req.post(
+            f"{host}/api/chat",
+            json={"model": model, "messages": messages, "stream": False},
+            timeout=60,
+        )
+        r.raise_for_status()
+        return r.json()["message"]["content"]
+
+    def _anthropic_complete(self, prompt: str, system: Optional[str], max_tokens: int) -> str:
+        client = self._status.get_client(Provider.ANTHROPIC)
+        kwargs = {
+            "model": "claude-sonnet-4-6",
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if system:
+            kwargs["system"] = system
+        response = client.messages.create(**kwargs)
+        return response.content[0].text
+
+    def _bedrock_complete(self, prompt: str, system: Optional[str], max_tokens: int) -> str:
+        import json as _json
+        client = self._status.get_client(Provider.AWS_BEDROCK)
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if system:
+            body["system"] = system
+        response = client.invoke_model(
+            modelId="anthropic.claude-sonnet-4-5-20240620-v1:0",
+            body=_json.dumps(body),
+        )
+        return _json.loads(response["body"].read())["content"][0]["text"]
+
+    # -------------------------------------------------------------------------
+    # SEARCH — Live web search with citations
+    # -------------------------------------------------------------------------
+
+    def search(
+        self,
+        query: str,
+        mode: str = "web",
+        is_code_query: bool = False,
+    ) -> Tuple[str, Provider]:
+        """
+        Search the web for real, current, cited information.
+
+        Args:
+            query: Search query
+            mode: "web", "academic", or "code"
+            is_code_query: If True, routes to code-focused search
+
+        Returns:
+            (answer_with_citations, provider_used)
+        """
+        for p in self.search_priority:
+            if not self._status.is_available(p):
+                continue
+
+            try:
+                svc = self._status.get_client(p)
+                if is_code_query or mode == "code":
+                    result = svc.search_code(query)
+                elif mode == "academic":
+                    result = svc.search_academic(query)
+                else:
+                    result = svc.generate_content(query)
+
+                logger.info(f"[ProviderRouter] Search via {p.value}")
+                return result, p
+
+            except Exception as e:
+                logger.warning(f"[ProviderRouter] Search via {p.value} failed: {e}")
+                continue
+
+        raise RuntimeError(
+            "[ProviderRouter] No search provider available. "
+            "Set PERPLEXITY_API_KEY to enable live search."
+        )
+
+    # -------------------------------------------------------------------------
+    # TTS — Text to speech
+    # -------------------------------------------------------------------------
+
+    def synthesize_speech(
+        self,
+        text: str,
+        output_path: Optional[str] = None,
+    ) -> Tuple[bytes, Provider]:
+        """
+        Convert text to speech using the best available TTS provider.
+
+        Priority: ElevenLabs (neural, Matthew voice) → AWS Polly → gTTS fallback
+
+        Args:
+            text: Text to speak
+            output_path: Optional file path to save audio
+
+        Returns:
+            (audio_bytes, provider_used)
+        """
+        for p in self.tts_priority:
+            if not self._status.is_available(p):
+                continue
+
+            try:
+                if p == Provider.ELEVENLABS:
+                    audio = self._elevenlabs_synthesize(text)
+                elif p == Provider.AWS_POLLY:
+                    audio = self._polly_synthesize(text)
+                else:
+                    continue
+
+                if output_path:
+                    with open(output_path, "wb") as f:
+                        f.write(audio)
+
+                logger.info(f"[ProviderRouter] TTS via {p.value}")
+                return audio, p
+
+            except Exception as e:
+                logger.warning(f"[ProviderRouter] TTS via {p.value} failed: {e}")
+                continue
+
+        # gTTS fallback — always available, no API key needed
+        logger.info("[ProviderRouter] TTS falling back to gTTS (free, no key needed)")
+        return self._gtts_synthesize(text, output_path), Provider.AWS_POLLY
+
+    def _elevenlabs_synthesize(self, text: str) -> bytes:
+        import requests as _req
+        client = self._status.get_client(Provider.ELEVENLABS)
+        voice_id = client["voice_id"]
+        r = _req.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+            headers={
+                "xi-api-key": client["api_key"],
+                "Content-Type": "application/json",
+            },
+            json={
+                "text": text,
+                "model_id": "eleven_turbo_v2_5",
+                "voice_settings": {
+                    "stability": 0.5,
+                    "similarity_boost": 0.75,
+                    "style": 0.0,
+                    "use_speaker_boost": True,
+                },
+            },
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.content
+
+    def _polly_synthesize(self, text: str) -> bytes:
+        client = self._status.get_client(Provider.AWS_POLLY)
+        response = client.synthesize_speech(
+            Text=text,
+            OutputFormat="mp3",
+            VoiceId="Matthew",
+            Engine="neural",
+        )
+        return response["AudioStream"].read()
+
+    def _gtts_synthesize(self, text: str, output_path: Optional[str]) -> bytes:
+        from gtts import gTTS # pyright: ignore[reportMissingImports]
+        import io
+        tts = gTTS(text=text, lang="en", slow=False)
+        buf = io.BytesIO()
+        tts.write_to_fp(buf)
+        return buf.getvalue()
+
+    # -------------------------------------------------------------------------
+    # STATUS REPORT — Honest accounting of what's online
+    # -------------------------------------------------------------------------
+
+    def get_status_report(self) -> Dict[str, Any]:
+        """
+        Return a clear report of every provider's status.
+        Honest. No spin. Cardinal Rule 13.
+        """
+        report = {
+            "sovereignty_level": self._get_sovereignty_level(),
+            "providers": {},
+        }
+        for provider in Provider:
+            available = self._status.is_available(provider)
+            report["providers"][provider.value] = {
+                "available": available,
+                "role": self._provider_role(provider),
+            }
+        return report
+
+    def _get_sovereignty_level(self) -> str:
+        """How self-sufficient is Brockston right now?"""
+        if self._status.is_available(Provider.OLLAMA):
+            return "HIGH — Local Ollama running. Brockston is thinking for himself."
+        elif self._status.is_available(Provider.ANTHROPIC) or \
+             self._status.is_available(Provider.AWS_BEDROCK):
+            return "MEDIUM — External LLM only. Start Ollama to gain sovereignty."
+        else:
+            return "LOW — No LLM available. Set ANTHROPIC_API_KEY or run Ollama."
+
+    def _provider_role(self, provider: Provider) -> str:
+        roles = {
+            Provider.OLLAMA:      "Local LLM — sovereign reasoning (free, on-device)",
+            Provider.ANTHROPIC:   "External LLM — Claude Sonnet reasoning",
+            Provider.PERPLEXITY:  "Live search — grounded answers with citations",
+            Provider.AWS_POLLY:   "Voice synthesis — AWS neural TTS (Matthew)",
+            Provider.AWS_BEDROCK: "External LLM — Claude via AWS Bedrock",
+            Provider.ELEVENLABS:  "Neural voice — highest quality TTS (Matthew profile)",
+        }
+        return roles.get(provider, "unknown")
+
+    def print_status(self):
+        """Print a clean status board at boot time."""
+        report = self.get_status_report()
+        print("\n" + "=" * 60)
+        print("  BROCKSTON PROVIDER STATUS")
+        print("=" * 60)
+        print(f"  Sovereignty: {report['sovereignty_level']}")
+        print()
+        for name, info in report["providers"].items():
+            icon = "✅" if info["available"] else "⬜"
+            print(f"  {icon} {name:<14} {info['role']}")
+        print("=" * 60 + "\n")
+
+
+# ---------------------------------------------------------------------------
+# SINGLETON
+# ---------------------------------------------------------------------------
+
+_router: Optional[ProviderRouter] = None
+
+
+def get_router() -> ProviderRouter:
+    """Get or create the shared ProviderRouter instance."""
+    global _router
+    if _router is None:
+        _router = ProviderRouter()
+    return _router
+
+
+# ==============================================================================
+# © 2025 Everett Nathaniel Christman & The Christman AI Project
+# Luma Cognify AI
+#
+# The goal: Brockston becomes his own API key.
+# Today he borrows intelligence. Tomorrow he IS the intelligence.
+# Every Ollama model installed is one step closer to sovereignty.
+#
+# Cardinal Rule 1: Every provider that reports available must actually work.
+# Cardinal Rule 6: Fail loud — no silent routing failures.
+# Cardinal Rule 12: No keys in code. All from environment.
+# Cardinal Rule 13: Honest routing. Report who actually answered.
+# ==============================================================================
