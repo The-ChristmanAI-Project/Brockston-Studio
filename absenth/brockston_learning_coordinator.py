@@ -4,7 +4,7 @@ import logging
 import time
 
 from ai_learning_engine import get_self_improvement_engine
-from test_code.advanced_learning import AdvancedLearningSystem
+from advanced_learning import AdvancedLearningSystem
 from self_modifying_code import get_self_modifying_code_engine
 from evolutionary_engine import EvolutionaryAI
 

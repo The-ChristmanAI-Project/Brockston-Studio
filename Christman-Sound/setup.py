@@ -16,8 +16,6 @@ setup(
         "torchaudio",
         "transformers",
         "pygame",
-        "gtts",
-        "pyttsx3",
         "flask",
         "fastapi",
         "rich",

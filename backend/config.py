@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 # Base directory of the project
-# This resolves to /Users/EverettN/Brockston-IDE-Studio
+# This resolves to /Users/EverettN/Brockston-Studio
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Server configuration
