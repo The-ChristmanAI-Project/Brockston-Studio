@@ -227,6 +227,19 @@
             text-shadow: var(--neon-glow);
         }
 
+        #explorer-path {
+            font-family: var(--font-term);
+            font-size: 0.7rem;
+            color: #888;
+            padding: 4px 8px;
+            margin-bottom: 10px;
+            border-radius: 3px;
+            background: rgba(255, 95, 31, 0.06);
+            border-left: 2px solid var(--neon-orange);
+            word-break: break-all;
+            cursor: default;
+        }
+
         .file-item {
             padding: 8px 10px;
             cursor: pointer;
@@ -464,6 +477,7 @@
 
         <div id="explorer" class="split">
             <div class="explorer-header"><i class="fas fa-folder-open" style="margin-right: 5px;"></i> PROJECT EXPLORER</div>
+            <div id="explorer-path" title="Current working directory (synced with terminal)">/</div>
             <div id="file-list">
                 <div style="color: #444; font-style: italic;">Loading...</div>
             </div>
@@ -543,6 +557,36 @@
         let currentPath = '';
         let currentFile = null;
         let monacoEditor = null;
+        let workspaceRoot = null;
+        let lastSyncedCwd = null;
+
+        // Sync the file explorer when the terminal changes directory.
+        // Called with an absolute path from the shell's OSC 7 emission.
+        function handleTerminalCwd(absPath) {
+            if (!absPath || absPath === lastSyncedCwd) return;
+            lastSyncedCwd = absPath;
+
+            // Update the breadcrumb regardless of whether the path is in-workspace
+            const breadcrumb = document.getElementById('explorer-path');
+            if (breadcrumb) {
+                breadcrumb.textContent = absPath;
+                breadcrumb.title = absPath;
+            }
+
+            // Only refresh the file list if the terminal is inside the workspace
+            if (workspaceRoot && absPath.startsWith(workspaceRoot)) {
+                let rel = absPath.slice(workspaceRoot.length);
+                if (rel.startsWith('/')) rel = rel.slice(1);
+                // /api/files rejects '..' and absolute paths; rel is workspace-relative
+                loadFiles(rel);
+            } else if (workspaceRoot) {
+                // Outside workspace: show a clear indicator instead of stale files
+                const fl = document.getElementById('file-list');
+                if (fl) {
+                    fl.innerHTML = '<div style="color:#888;font-style:italic;padding:10px;font-size:0.85rem;">Terminal is outside workspace.<br>cd back inside to browse files.</div>';
+                }
+            }
+        }
 
         // ----- Music toggle
         btnMusic.addEventListener('click', () => {
@@ -818,10 +862,31 @@
                 try {
                     const msg = JSON.parse(event.data);
                     if (msg.type === 'output') {
-                        let clean = msg.data
+                        // Parse and strip OSC 7 escape sequences (cwd reports from shell)
+                        // Format: ESC ] 7 ; file://hostname/path ESC \ (or BEL)
+                        let data = msg.data;
+                        const osc7 = /\x1b\]7;file:\/\/[^\/]*([^\x07\x1b]+)(?:\x1b\\|\x07)/g;
+                        let match;
+                        let lastPath = null;
+                        while ((match = osc7.exec(data)) !== null) {
+                            lastPath = decodeURIComponent(match[1]);
+                        }
+                        if (lastPath) {
+                            handleTerminalCwd(lastPath);
+                        }
+                        // Strip OSC 7 from the visible output so it doesn't render
+                        data = data.replace(osc7, '');
+                        // Strip bracketed-paste mode toggles
+                        data = data
+                            .replace(/\x1b\[\?2004h/g, '')
+                            .replace(/\x1b\[\?2004l/g, '')
                             .replace(/\[\?2004h/g, '')
                             .replace(/\[\?2004l/g, '');
-                        term.write(clean);
+                        term.write(data);
+                    } else if (msg.type === 'cwd') {
+                        // Initial cwd from backend on socket open
+                        workspaceRoot = msg.workspace || msg.path;
+                        handleTerminalCwd(msg.path);
                     }
                 } catch (err) {
                     console.error('Parse error:', err);

@@ -150,13 +150,64 @@ async def write_file(request: WriteFileRequest):
 
 @app.websocket("/ws/terminal")
 async def websocket_terminal(websocket: fastapi.WebSocket):
+    """
+    PTY-backed terminal. Spawns the user's shell with an OSC 7 hook so every
+    prompt emits its working directory, which the frontend uses to sync the
+    file explorer (real IDE behavior: cd in terminal -> explorer follows).
+    """
     await websocket.accept()
     master_fd, slave_fd = pty.openpty()
     shell = os.environ.get("SHELL", "/bin/bash")
+    workspace_root = str(Path(".").resolve())
+
+    # Inject OSC 7 emission into the shell so every prompt reports its cwd.
+    # Works for bash, zsh, fish-style POSIX shells via PROMPT_COMMAND / precmd.
+    shell_name = os.path.basename(shell)
+    env = os.environ.copy()
+    env["BROCKSTON_WORKSPACE"] = workspace_root
+
+    # OSC 7 sequence: ESC ] 7 ; file://hostname/path ESC \
+    # We embed it in the prompt setup so it fires after every command.
+    if "zsh" in shell_name:
+        # zsh: precmd functions are called before each prompt
+        env["ZDOTDIR"] = env.get("ZDOTDIR", os.path.expanduser("~"))
+        # Use a startup command instead of writing files
+        startup_cmd = (
+            'precmd_brockston_cwd() { printf "\\033]7;file://%s%s\\033\\\\" "$HOST" "$PWD"; }; '
+            'precmd_functions+=(precmd_brockston_cwd); '
+            'precmd_brockston_cwd\n'
+        )
+    else:
+        # bash and other POSIX-ish: PROMPT_COMMAND fires before each prompt
+        startup_cmd = (
+            'export PROMPT_COMMAND=\'printf "\\033]7;file://%s%s\\033\\\\" "$HOSTNAME" "$PWD"\'$\'\\n\'"${PROMPT_COMMAND:-:}"; '
+            'printf "\\033]7;file://%s%s\\033\\\\" "$HOSTNAME" "$PWD"\n'
+        )
+
     process = subprocess.Popen(
-        [shell], preexec_fn=os.setsid, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, universal_newlines=True
+        [shell],
+        preexec_fn=os.setsid,
+        stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+        universal_newlines=True,
+        env=env,
+        cwd=workspace_root,
     )
     os.close(slave_fd)
+
+    # Send the initial working directory to the client immediately.
+    await websocket.send_text(json.dumps({
+        "type": "cwd",
+        "path": workspace_root,
+        "workspace": workspace_root,
+    }))
+
+    # Push the OSC 7 setup into the shell once it's ready.
+    # Short delay so the shell finishes its own init before we inject.
+    await asyncio.sleep(0.15)
+    try:
+        os.write(master_fd, startup_cmd.encode())
+    except Exception as e:
+        logger.warning(f"OSC 7 hook injection failed: {e}")
 
     async def read_from_pty():
         try:
