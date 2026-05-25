@@ -566,44 +566,20 @@
 
         // Sync the file explorer when the terminal changes directory.
         // Called with an absolute path from the shell's OSC 7 emission.
+        // The explorer follows the terminal anywhere inside the user's HOME,
+        // not just inside the original workspace.
         function handleTerminalCwd(absPath) {
             if (!absPath || absPath === lastSyncedCwd) return;
             lastSyncedCwd = absPath;
 
-            // Update the breadcrumb regardless of whether the path is in-workspace
             const breadcrumb = document.getElementById('explorer-path');
             if (breadcrumb) {
                 breadcrumb.textContent = absPath;
                 breadcrumb.title = absPath;
             }
 
-            // Only refresh the file list if the terminal is inside the workspace
-            if (workspaceRoot && absPath.startsWith(workspaceRoot)) {
-                let rel = absPath.slice(workspaceRoot.length);
-                if (rel.startsWith('/')) rel = rel.slice(1);
-                // /api/files rejects '..' and absolute paths; rel is workspace-relative
-                loadFiles(rel);
-            } else if (workspaceRoot) {
-                // Outside workspace: show a clear indicator + a button to jump back
-                const fl = document.getElementById('file-list');
-                if (fl) {
-                    fl.innerHTML = '';
-                    const wrap = document.createElement('div');
-                    wrap.style.cssText = 'color:#888;font-style:italic;padding:10px;font-size:0.85rem;';
-                    wrap.innerHTML = 'Terminal is outside workspace.<br><br>';
-                    const btn = document.createElement('button');
-                    btn.textContent = '← Return to workspace';
-                    btn.style.cssText = 'background:rgba(255,95,31,0.15);color:var(--neon-orange);border:1px solid var(--neon-orange);padding:6px 10px;border-radius:3px;cursor:pointer;font-family:var(--font-term);font-size:0.75rem;width:100%;';
-                    btn.onclick = () => {
-                        if (ws && ws.readyState === WebSocket.OPEN && workspaceRoot) {
-                            ws.send(JSON.stringify({type:'input', data:`cd '${workspaceRoot}'\n`}));
-                            term.focus();
-                        }
-                    };
-                    wrap.appendChild(btn);
-                    fl.appendChild(wrap);
-                }
-            }
+            // Pass the absolute path; the backend resolves it against $HOME.
+            loadFiles(absPath);
         }
 
         // ----- Music toggle
@@ -763,6 +739,9 @@
         });
 
         // ----- File explorer
+        // path can be relative (resolved by backend against workspace root)
+        // or absolute (anywhere inside $HOME). Backend echoes the resolved
+        // absolute path back in data.path so we always know where we are.
         async function loadFiles(path = '') {
             try {
                 const url = path
@@ -771,19 +750,32 @@
                 const res = await fetch(url);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
-                currentPath = path;
+                currentPath = data.path || path;
+                const homeRoot = data.home || '';
                 fileList.innerHTML = '';
 
-                if (currentPath !== '') {
+                // Up-one-level button, available as long as we're not at $HOME root
+                if (currentPath && currentPath !== homeRoot) {
                     const backBtn = document.createElement('div');
                     backBtn.className = 'file-item';
                     backBtn.innerHTML = `<i class="fas fa-level-up-alt"></i> ..`;
                     backBtn.onclick = () => {
                         const parts = currentPath.split('/').filter(p => p);
                         parts.pop();
-                        loadFiles(parts.join('/'));
+                        const parent = '/' + parts.join('/');
+                        loadFiles(parent);
                     };
                     fileList.appendChild(backBtn);
+                }
+
+                // Workspace home button when we've wandered off
+                if (workspaceRoot && currentPath !== workspaceRoot) {
+                    const homeBtn = document.createElement('div');
+                    homeBtn.className = 'file-item';
+                    homeBtn.style.color = 'var(--neon-orange)';
+                    homeBtn.innerHTML = `<i class="fas fa-home" style="color:var(--neon-orange)"></i> Back to workspace`;
+                    homeBtn.onclick = () => loadFiles(workspaceRoot);
+                    fileList.appendChild(homeBtn);
                 }
 
                 (data.files || []).forEach(file => {
@@ -792,10 +784,14 @@
                     const icon  = file.type === 'folder' ? 'fa-folder' : 'fa-file-code';
                     const color = file.type === 'folder' ? '#FF5F1F'  : '#00B4D8';
                     el.innerHTML = `<i class="fas ${icon}" style="color:${color}"></i> ${escapeHtml(file.name)}`;
+                    // Always pass absolute child path; backend handles either form
+                    const childPath = currentPath
+                        ? (currentPath.endsWith('/') ? currentPath + file.name : currentPath + '/' + file.name)
+                        : file.name;
                     if (file.type === 'file') {
-                        el.onclick = () => openFile(currentPath ? currentPath + '/' + file.name : file.name);
+                        el.onclick = () => openFile(childPath);
                     } else {
-                        el.onclick = () => loadFiles(currentPath ? currentPath + '/' + file.name : file.name);
+                        el.onclick = () => loadFiles(childPath);
                     }
                     fileList.appendChild(el);
                 });
