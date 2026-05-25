@@ -1,7 +1,7 @@
 # BROCKSTON Studio Backend Requirements
 
 # Web framework
-fastapi==0.104.1
+fastapi
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
