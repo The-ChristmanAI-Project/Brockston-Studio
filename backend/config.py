@@ -25,9 +25,9 @@ PORT = int(os.getenv("BROCKSTON_PORT", "7777"))
 
 # Model Settings
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
-OLLAMA_BASE_URL = "http://localhost:11434"
-LLM_MODEL_CODER = "qwen2.5-coder:32b"
-LLM_MODEL_GENERAL = os.getenv("LLM_MODEL_GENERAL", "llama3.2:3b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+LLM_MODEL_CODER = os.getenv("LLM_MODEL_CODER", "qwen3-coder-next")
+LLM_MODEL_GENERAL = os.getenv("LLM_MODEL_GENERAL", "qwen3-coder-next")
 
 # Workspace Settings
 # Pointing directly to the project root for v1
