@@ -446,19 +446,19 @@
 
     <div id="app-container">
         <div id="sidebar">
-            <div class="icon-btn active" title="Code Editor">
+            <div class="icon-btn active" id="btn-code" title="Code Editor">
                 <i class="fas fa-code"></i>
                 <span class="tooltip">Code Editor</span>
             </div>
-            <div class="icon-btn" title="Terminal">
+            <div class="icon-btn" id="btn-terminal" title="Terminal">
                 <i class="fas fa-terminal"></i>
                 <span class="tooltip">Terminal</span>
             </div>
-            <div class="icon-btn" title="Git">
+            <div class="icon-btn" id="btn-git" title="Git">
                 <i class="fab fa-git-alt"></i>
                 <span class="tooltip">Git</span>
             </div>
-            
+
             <div class="sidebar-bottom">
                 <div class="icon-btn" id="btn-music" title="Background Music">
                     <i class="fas fa-music"></i>
@@ -468,7 +468,7 @@
                     <i class="fas fa-volume-up"></i>
                     <span class="tooltip">Voice Mode (Off)</span>
                 </div>
-                <div class="icon-btn" title="Settings">
+                <div class="icon-btn" id="btn-settings" title="Settings">
                     <i class="fas fa-cog"></i>
                     <span class="tooltip">Settings</span>
                 </div>
@@ -551,6 +551,10 @@
         const ttsPlayer   = document.getElementById('tts-player');
         const btnMusic    = document.getElementById('btn-music');
         const btnVoice    = document.getElementById('btn-voice');
+        const btnCode     = document.getElementById('btn-code');
+        const btnTerminal = document.getElementById('btn-terminal');
+        const btnGit      = document.getElementById('btn-git');
+        const btnSettings = document.getElementById('btn-settings');
 
         let isMusicPlaying = false;
         let isVoiceModeEnabled = false;
@@ -580,10 +584,24 @@
                 // /api/files rejects '..' and absolute paths; rel is workspace-relative
                 loadFiles(rel);
             } else if (workspaceRoot) {
-                // Outside workspace: show a clear indicator instead of stale files
+                // Outside workspace: show a clear indicator + a button to jump back
                 const fl = document.getElementById('file-list');
                 if (fl) {
-                    fl.innerHTML = '<div style="color:#888;font-style:italic;padding:10px;font-size:0.85rem;">Terminal is outside workspace.<br>cd back inside to browse files.</div>';
+                    fl.innerHTML = '';
+                    const wrap = document.createElement('div');
+                    wrap.style.cssText = 'color:#888;font-style:italic;padding:10px;font-size:0.85rem;';
+                    wrap.innerHTML = 'Terminal is outside workspace.<br><br>';
+                    const btn = document.createElement('button');
+                    btn.textContent = '← Return to workspace';
+                    btn.style.cssText = 'background:rgba(255,95,31,0.15);color:var(--neon-orange);border:1px solid var(--neon-orange);padding:6px 10px;border-radius:3px;cursor:pointer;font-family:var(--font-term);font-size:0.75rem;width:100%;';
+                    btn.onclick = () => {
+                        if (ws && ws.readyState === WebSocket.OPEN && workspaceRoot) {
+                            ws.send(JSON.stringify({type:'input', data:`cd '${workspaceRoot}'\n`}));
+                            term.focus();
+                        }
+                    };
+                    wrap.appendChild(btn);
+                    fl.appendChild(wrap);
                 }
             }
         }
@@ -675,6 +693,74 @@
 
         sendBtn.addEventListener('click', sendChat);
         chatInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendChat(); });
+
+        // ----- Sidebar buttons
+        // Simple modal helper (used by Git and Settings panels)
+        function showModal(title, bodyHtml) {
+            // Remove existing modal if any
+            const existing = document.getElementById('modal-overlay');
+            if (existing) existing.remove();
+            const overlay = document.createElement('div');
+            overlay.id = 'modal-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(2px);';
+            overlay.innerHTML = `
+                <div style="background:#0a0a0c;border:1px solid var(--neon-orange);border-radius:6px;min-width:420px;max-width:560px;box-shadow:0 0 30px rgba(255,95,31,0.25);">
+                    <div style="padding:14px 18px;border-bottom:1px solid rgba(255,95,31,0.3);display:flex;justify-content:space-between;align-items:center;">
+                        <div style="color:var(--neon-orange);font-family:var(--font-ui);font-weight:700;letter-spacing:1px;">${title}</div>
+                        <div id="modal-close" style="color:#888;cursor:pointer;font-size:1.1rem;">✕</div>
+                    </div>
+                    <div style="padding:18px;color:#ccc;font-family:var(--font-term);font-size:0.85rem;line-height:1.6;">${bodyHtml}</div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            const close = () => overlay.remove();
+            document.getElementById('modal-close').onclick = close;
+            overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+            document.addEventListener('keydown', function esc(ev) {
+                if (ev.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
+            });
+        }
+
+        // Visually mark the active sidebar button
+        function setActiveSidebar(btn) {
+            document.querySelectorAll('#sidebar .icon-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+        }
+
+        btnCode.addEventListener('click', () => {
+            setActiveSidebar(btnCode);
+            if (monacoEditor) monacoEditor.focus();
+        });
+
+        btnTerminal.addEventListener('click', () => {
+            setActiveSidebar(btnTerminal);
+            term.focus();
+            try { fitAddon.fit(); } catch (e) {}
+        });
+
+        btnGit.addEventListener('click', async () => {
+            setActiveSidebar(btnGit);
+            // Run `git status --short && git branch --show-current` via the terminal websocket-free path:
+            // simpler to just type it in the terminal so the user sees it
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({type:'input', data: 'git status --short && echo "---" && git log --oneline -5 2>/dev/null\n'}));
+                term.focus();
+            } else {
+                showModal('GIT', '<p>Terminal not connected.</p>');
+            }
+        });
+
+        btnSettings.addEventListener('click', () => {
+            setActiveSidebar(btnSettings);
+            const modelName = document.getElementById('sb-model-name')?.textContent || 'unknown';
+            showModal('SETTINGS', `
+                <p><b style="color:var(--neon-orange);">Active model:</b> ${escapeHtml(modelName)}</p>
+                <p><b style="color:var(--neon-orange);">Workspace:</b> ${escapeHtml(workspaceRoot || '(not yet announced)')}</p>
+                <p><b style="color:var(--neon-orange);">Terminal:</b> ${ws && ws.readyState === WebSocket.OPEN ? 'connected' : 'disconnected'}</p>
+                <hr style="border:0;border-top:1px solid #222;margin:14px 0;">
+                <p style="color:#888;font-size:0.78rem;">Configurable settings UI is on the roadmap. For now, change ports and models via <code style="color:var(--neon-orange);">.env</code> at the repo root, then restart with <code style="color:var(--neon-orange);">./start.sh</code>.</p>
+            `);
+        });
 
         // ----- File explorer
         async function loadFiles(path = '') {
