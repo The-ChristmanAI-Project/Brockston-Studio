@@ -16,7 +16,7 @@ import fetch from 'node-fetch';
 const app = express();
 const PORT = 5174;
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-const MODEL = process.env.OLLAMA_MODEL || 'qwen3-coder-next';
+const MODEL = process.env.OLLAMA_MODEL || 'llama3.2'; // OR 'qwen' or whatever your main chat model is
 
 app.use(cors());
 app.use(express.json());
