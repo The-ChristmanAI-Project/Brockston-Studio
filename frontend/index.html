@@ -84,12 +84,8 @@
 
         /* GLOWING GUTTER - Handles both vertical and horizontal dragging */
         .gutter {
-<<<<<<< HEAD
             background-color: var(--border-dim);
             box-shadow: var(--neon-glow);
-=======
-            background-color: var(--neon-orange);
->>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
             background-repeat: no-repeat;
             background-position: 50%;
             transition: background-color 0.2s;
@@ -102,7 +98,6 @@
             flex-shrink: 0;
         }
 
-<<<<<<< HEAD
         .gutter.gutter-vertical {
             cursor: row-resize;
         }
@@ -112,9 +107,6 @@
             box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
         }
 
-=======
-        /* SIDEBAR */
->>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
         #sidebar {
             background: linear-gradient(180deg, #0f0f12 0%, #050505 100%);
             display: flex;
@@ -228,7 +220,6 @@
             flex-direction: column;
         }
 
-<<<<<<< HEAD
         #editor-wrapper {
             position: relative;
             display: flex;
@@ -236,9 +227,6 @@
             overflow: hidden;
         }
 
-=======
-        /* WATERMARK */
->>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
         #watermark {
             position: absolute;
             top: 40%;
@@ -401,7 +389,6 @@
     </style>
 </head>
 
-<<<<<<< HEAD
     <audio id="bg-music" loop>
         <source src="/static/focus_music.mp3" type="audio/mpeg">
     </audio>
@@ -410,13 +397,6 @@
     <div id="header">
         <span class="title"><i class="fas fa-bolt" style="margin-right: 8px;"></i>BROCKSTON STUDIO // PROFESSIONAL</span>
         <span class="status">HOST: 127.0.0.1 : 7777</span>
-=======
-<body>
-    <!-- HEADER -->
-    <div id="header">
-        <span class="title">BROCKSTON STUDIO // PROFESSIONAL</span>
-        <span class="status">HOST: 127.0.0.1 : 5055</span>
->>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
     </div>
 
     <div id="app-container">
@@ -433,15 +413,7 @@
                 <i class="fab fa-git-alt"></i>
                 <span class="tooltip">Git</span>
             </div>
-<<<<<<< HEAD
             
-=======
-            <div class="icon-btn" title="Search">
-                <i class="fas fa-search"></i>
-                <span class="tooltip">Search</span>
-            </div>
-
->>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
             <div class="sidebar-bottom">
                 <div class="icon-btn" id="btn-music" title="Background Music">
                     <i class="fas fa-music"></i>
@@ -475,7 +447,6 @@
             </div>
         </div>
 
-<<<<<<< HEAD
         <div id="ai-panel" class="split">
             <div class="explorer-header" style="padding: 15px 20px 0;"><i class="fas fa-brain" style="margin-right: 5px;"></i> ASK BROCKSTON / ULTIMATE_EV</div>
             <div id="chat-history">
@@ -484,19 +455,6 @@
             <div id="chat-input-area">
                 <input type="text" id="chat-input" placeholder="Ask a question..." autocomplete="off">
                 <button id="send-btn">SEND</button>
-=======
-        <!-- AI PANEL: BROCKSTON ONLY -->
-        <div id="ai-panel" class="split">
-            <div class="explorer-header" style="padding: 15px;">ASK BROCKSTON</div>
-            <div id="brockston-panel" style="display: block; height: 100%; display: flex; flex-direction: column;">
-                <div id="chat-history">
-                    <span class="system-tag">[SYSTEM]: Neural Link Active.</span>
-                </div>
-                <div id="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Enter query..." autocomplete="off">
-                    <button id="send-btn">SEND</button>
-                </div>
->>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
             </div>
         </div>
     </div>
@@ -510,7 +468,6 @@
             cursor: 'col-resize'
         });
 
-<<<<<<< HEAD
         // Vertical Split for the Terminal (The missing bottom line)
         Split(['#editor-wrapper', '#terminal-container'], {
             direction: 'vertical',
@@ -522,10 +479,6 @@
 
         const API_BASE = window.location.origin + "/api";
         const WS_BASE = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + "/ws/terminal";
-=======
-        const API_BASE = "http://localhost:5055/api";
-        const WS_BASE = "ws://localhost:5055/ws/terminal";
->>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
 
         const chatInput = document.getElementById('chat-input');
         const chatHistory = document.getElementById('chat-history');
@@ -606,12 +559,9 @@
 
                 const data = await response.json();
                 appendMessage('BROCKSTON', data.response, 'ai');
-<<<<<<< HEAD
                 
                 speakText(data.response.replace(/\[.*?\]/g, '')); 
 
-=======
->>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[ERROR]: ${err.message}`, 'error');
@@ -660,15 +610,9 @@
                     const el = document.createElement('div');
                     el.className = 'file-item';
                     const icon = file.type === 'folder' ? 'fa-folder' : 'fa-file-code';
-<<<<<<< HEAD
                     const color = file.type === 'folder' ? '#FF5F1F' : '#00B4D8';
                     el.innerHTML = `<i class="fas ${icon}" style="color: ${color}"></i> ${file.name}`;
                     
-=======
-                    el.innerHTML = `<i class="fas ${icon}"></i> ${file.name}`;
-                    el.style.cursor = 'pointer';
-
->>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
                     if (file.type === 'file') {
                         el.onclick = () => openFile(currentPath ? currentPath + '/' + file.name : file.name);
                     } else {
@@ -722,15 +666,10 @@
         const maxReconnectAttempts = 5;
         const baseReconnectDelay = 1000;
 
-<<<<<<< HEAD
         ws.onopen = () => {
             term.write('\r\n\x1b[1;38;2;255;95;31m[BROCKSTON TERMINAL LINKED]\x1b[0m\r\n');
             term.write('\x1b[1;32m> Ready for input...\x1b[0m\r\n');
         };
-=======
-        function connectWebSocket() {
-            ws = new WebSocket(WS_BASE);
->>>>>>> 275412b83280fcaeb92a452f02d845317ccd68df
 
             ws.onopen = () => {
                 reconnectAttempts = 0;
