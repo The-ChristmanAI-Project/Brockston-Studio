@@ -205,10 +205,8 @@ echo ""
 info "Tailing all three logs (Ctrl+C to stop everything)..."
 echo ""
 
-# Tail all logs together with labels until shutdown
-tail -F \
-    --pid="${PIDS[-1]}" \
-    "$ULTIMATEEV_LOG" "$BROCKSTON_LOG" "$IDE_LOG" 2>/dev/null &
+# Tail all logs together until shutdown (portable: works on macOS bash 3.2)
+tail -F "$ULTIMATEEV_LOG" "$BROCKSTON_LOG" "$IDE_LOG" 2>/dev/null &
 TAIL_PID=$!
 
 # Wait for any backend to exit unexpectedly
