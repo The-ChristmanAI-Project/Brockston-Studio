@@ -5,8 +5,6 @@ Defines common interface for all synthesis engines:
 - GPT-SoVITS v3
 - F5-TTS
 - StyleTTS2
-
-Sovereign implementation: Zero reliance on bloated external audio libraries (librosa).
 """
 
 from abc import ABC, abstractmethod
