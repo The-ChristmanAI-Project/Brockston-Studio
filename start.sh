@@ -26,9 +26,9 @@ export BROCKSTON_PORT="${BROCKSTON_PORT:-7777}"          # Brockston educator ba
 export IDE_PORT="${IDE_PORT:-5055}"                       # IDE Board frontend (main.py)
 export ULTIMATEEV_PORT="${ULTIMATEEV_PORT:-5174}"         # UltimateEV node server
 export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
-export OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.2}"
-export LLM_MODEL_GENERAL="${LLM_MODEL_GENERAL:-llama3.2:3b}"
-export LLM_MODEL_CODER="${LLM_MODEL_CODER:-qwen2.5-coder:32b}"
+export OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3-coder-next}"
+export LLM_MODEL_GENERAL="${LLM_MODEL_GENERAL:-qwen3-coder-next}"
+export LLM_MODEL_CODER="${LLM_MODEL_CODER:-qwen3-coder-next}"
 export LLM_MODEL="${LLM_MODEL:-$LLM_MODEL_GENERAL}"
 
 PIDS=()
