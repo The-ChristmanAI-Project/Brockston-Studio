@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "IDE Board",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "5055", "--reload"],
+      "port": 5055
+    },
+    {
+      "name": "Brockston C",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["backend/launcher.py"],
+      "port": 7777
+    },
+    {
+      "name": "UltimateEV",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["ultimateev_server.js"],
+      "port": 5174
+    },
+    {
+      "name": "Ollama",
+      "runtimeExecutable": "ollama",
+      "runtimeArgs": ["serve"],
+      "port": 11434
+    }
+  ]
+}

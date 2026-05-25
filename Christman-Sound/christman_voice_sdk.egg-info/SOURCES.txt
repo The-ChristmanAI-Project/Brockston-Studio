@@ -1,4 +1,3 @@
-README.md
 setup.py
 christman_voice_sdk.egg-info/PKG-INFO
 christman_voice_sdk.egg-info/SOURCES.txt

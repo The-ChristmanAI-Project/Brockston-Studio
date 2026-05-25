@@ -52,7 +52,7 @@ echo "Press Ctrl+C to stop"
 echo ""
 
 # Start the server
-python3 -m uvicorn backend.main:app \
+python3 -m uvicorn backend.launcher:app \
     --host "$BROCKSTON_HOST" \
     --port "$BROCKSTON_PORT" \
     --reload
