@@ -119,6 +119,35 @@ async def read_file(filename: str):
         logger.error(f"Read Error: {e}")
         raise fastapi.HTTPException(status_code=404, detail="File not found")
 
+class WriteFileRequest(BaseModel):
+    filename: str
+    content: str
+
+@app.post("/api/write_file")
+async def write_file(request: WriteFileRequest):
+    """Save editor content back to disk. Sandboxed to workspace root."""
+    try:
+        filename = request.filename
+        if ".." in filename or filename.startswith("/"):
+            raise fastapi.HTTPException(status_code=400, detail="Invalid filename")
+        target = Path(filename).resolve()
+        workspace = Path(".").resolve()
+        # Make sure the target stays inside the workspace
+        try:
+            target.relative_to(workspace)
+        except ValueError:
+            raise fastapi.HTTPException(status_code=400, detail="Path outside workspace")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(request.content)
+        logger.info(f"Saved {filename} ({len(request.content)} bytes)")
+        return {"ok": True, "filename": filename, "bytes": len(request.content)}
+    except fastapi.HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Write Error: {e}")
+        raise fastapi.HTTPException(status_code=500, detail=str(e))
+
 @app.websocket("/ws/terminal")
 async def websocket_terminal(websocket: fastapi.WebSocket):
     await websocket.accept()

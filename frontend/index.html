@@ -71,10 +71,40 @@
         #app-container {
             display: flex;
             flex: 1;
-            height: calc(100vh - 50px);
+            height: calc(100vh - 50px - 28px);
             width: 100%;
             overflow: hidden;
         }
+
+        /* Bottom status bar — VSCode-style safe zone so terminal output
+           and active prompt never hide below the browser fold. */
+        #status-bar {
+            height: 28px;
+            background: linear-gradient(90deg, var(--panel-black) 0%, #050505 100%);
+            border-top: 1px solid var(--neon-orange);
+            box-shadow: 0 -2px 10px rgba(255, 95, 31, 0.15);
+            display: flex;
+            align-items: center;
+            padding: 0 14px;
+            gap: 18px;
+            font-family: var(--font-term);
+            font-size: 0.72rem;
+            color: #888;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+        #status-bar .seg {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        #status-bar .seg i { color: var(--neon-orange); }
+        #status-bar .seg.pulse {
+            color: var(--neon-orange);
+            text-shadow: 0 0 6px rgba(255,95,31,0.4);
+        }
+        #status-bar .spacer { flex: 1; }
 
         .split {
             overflow-y: auto;
@@ -263,14 +293,15 @@
 
         #terminal-container {
             background: #020202;
-            padding: 10px;
+            padding: 10px 10px 20px 10px;  /* extra bottom padding = safe zone for prompt */
             display: flex;
             flex-direction: column;
             box-shadow: inset 0 5px 15px rgba(0,0,0,0.5);
             overflow: hidden;
+            min-height: 120px;
         }
 
-        #terminal { flex: 1; }
+        #terminal { flex: 1; min-height: 0; }
 
         #ai-panel {
             background-color: var(--panel-black);
@@ -459,6 +490,16 @@
                 <button id="send-btn">SEND</button>
             </div>
         </div>
+    </div>
+
+    <!-- Status bar: bottom safe-zone like every real IDE -->
+    <div id="status-bar">
+        <span class="seg" id="sb-file"><i class="fas fa-file-code"></i> <span id="sb-file-name">no file open</span></span>
+        <span class="seg" id="sb-lang"><i class="fas fa-code"></i> <span id="sb-lang-name">plaintext</span></span>
+        <span class="seg" id="sb-cursor"><i class="fas fa-crosshairs"></i> <span id="sb-cursor-pos">Ln 1, Col 1</span></span>
+        <span class="spacer"></span>
+        <span class="seg" id="sb-term"><i class="fas fa-terminal"></i> <span id="sb-term-state">terminal connecting...</span></span>
+        <span class="seg pulse" id="sb-model"><i class="fas fa-brain"></i> <span id="sb-model-name">qwen2.5-coder:32b</span></span>
     </div>
 
     <script>
@@ -651,10 +692,16 @@
                 const data = await res.json();
                 currentFile = filepath;
                 if (placeholder) placeholder.style.display = 'none';
+                const lang = languageFromName(filepath);
                 if (monacoEditor) {
                     monacoEditor.setValue(data.content || '');
-                    monaco.editor.setModelLanguage(monacoEditor.getModel(), languageFromName(filepath));
+                    monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
                 }
+                // Update status bar
+                const fname = document.getElementById('sb-file-name');
+                const lname = document.getElementById('sb-lang-name');
+                if (fname) fname.textContent = filepath;
+                if (lname) lname.textContent = lang;
             } catch (err) {
                 alert("Cannot read file: " + err.message);
             }
@@ -690,11 +737,44 @@
                 renderLineHighlight: 'all',
                 cursorBlinking: 'smooth'
             });
-            window.addEventListener('keydown', e => {
+            // Status bar: cursor position
+            monacoEditor.onDidChangeCursorPosition(e => {
+                const el = document.getElementById('sb-cursor-pos');
+                if (el) el.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+            });
+            window.addEventListener('keydown', async e => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                     e.preventDefault();
-                    // Save is a no-op until /api/write_file exists; flag clearly.
-                    appendMessage('SYSTEM', 'Save not yet wired to backend (/api/write_file pending).', 'system');
+                    if (!currentFile) {
+                        appendMessage('SYSTEM', 'No file open to save.', 'system');
+                        return;
+                    }
+                    try {
+                        const content = monacoEditor.getValue();
+                        const res = await fetch(`${API_BASE}/write_file`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({filename: currentFile, content})
+                        });
+                        if (!res.ok) {
+                            const err = await res.json().catch(() => ({detail: res.statusText}));
+                            throw new Error(err.detail || `HTTP ${res.status}`);
+                        }
+                        const data = await res.json();
+                        // Flash status bar instead of cluttering the chat
+                        const el = document.getElementById('sb-file-name');
+                        if (el) {
+                            const orig = el.textContent;
+                            el.textContent = `✓ saved ${data.bytes}b — ${orig}`;
+                            el.style.color = '#4ade80';
+                            setTimeout(() => {
+                                el.textContent = orig;
+                                el.style.color = '';
+                            }, 1800);
+                        }
+                    } catch (err) {
+                        appendMessage('SYSTEM', `[ERROR]: Save failed — ${err.message}`, 'error');
+                    }
                 }
             });
         });
@@ -728,6 +808,10 @@
             ws.onopen = () => {
                 reconnectAttempts = 0;
                 term.write('\r\n\x1b[1;32m[SYSTEM]: UPLINK ESTABLISHED.\x1b[0m\r\n');
+                const el = document.getElementById('sb-term-state');
+                if (el) el.textContent = 'terminal connected';
+                // Refit after layout settles
+                setTimeout(() => { try { fitAddon.fit(); } catch(e) {} }, 100);
             };
 
             ws.onmessage = (event) => {
@@ -750,6 +834,8 @@
 
             ws.onclose = () => {
                 term.write('\r\n\x1b[1;33m[SYSTEM]: CONNECTION LOST.\x1b[0m\r\n');
+                const el = document.getElementById('sb-term-state');
+                if (el) el.textContent = 'terminal disconnected';
                 if (reconnectAttempts < MAX_RECONNECT) {
                     const delay = 1000 * Math.pow(2, reconnectAttempts);
                     reconnectAttempts++;
@@ -772,6 +858,11 @@
         // ----- Boot
         loadFiles();
         window.addEventListener('focus', () => term.focus());
+
+        // Window resize — refit terminal so prompt stays visible
+        window.addEventListener('resize', () => {
+            try { fitAddon.fit(); } catch (e) {}
+        });
     </script>
 
     <!-- Core app script, no Claude hook -->
