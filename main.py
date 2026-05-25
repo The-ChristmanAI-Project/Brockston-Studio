@@ -89,35 +89,97 @@ async def synthesize_speech_route(request: fastapi.Request):
         logger.error(f"Speech Synthesis Error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))
 
+# ----------------------------------------------------------------------------
+# File operations
+#
+# The IDE is allowed to read/list/write anywhere inside the user's HOME
+# directory. "workspace" is the starting point, not a cage — when the user
+# cd's into another project (AlphaVox, AlphaWolf, etc.), the explorer should
+# follow them there. The HOME guard prevents path traversal into system files
+# like /etc/passwd while keeping every real project reachable.
+# ----------------------------------------------------------------------------
+USER_HOME = Path(os.path.expanduser("~")).resolve()
+WORKSPACE_ROOT = Path(".").resolve()
+
+def _resolve_user_path(raw: str, default: Path) -> Path:
+    """Resolve a path argument from the client.
+
+    Rules:
+      - Empty string -> `default` (usually workspace root)
+      - Absolute path -> used as-is
+      - Relative path -> resolved against the workspace root
+      - Resolved path must live inside the user's HOME (security boundary)
+      - '..' segments in the *input* are rejected as a defense-in-depth check
+    """
+    if not raw:
+        return default
+    # Reject literal traversal attempts in the raw input.
+    parts = raw.replace("\\", "/").split("/")
+    if any(p == ".." for p in parts):
+        raise fastapi.HTTPException(status_code=400, detail="Path contains '..'")
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        candidate = WORKSPACE_ROOT / candidate
+    resolved = candidate.resolve()
+    # Stay inside the user's home tree.
+    try:
+        resolved.relative_to(USER_HOME)
+    except ValueError:
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail=f"Path outside user home ({USER_HOME})",
+        )
+    return resolved
+
+
 @app.get("/api/files")
 async def list_files(path: str = ""):
     try:
-        if ".." in path or path.startswith("/"):
-            raise fastapi.HTTPException(status_code=400, detail="Invalid path")
-        root_dir = path if path else "."
+        target = _resolve_user_path(path, WORKSPACE_ROOT)
+        if not target.exists():
+            raise fastapi.HTTPException(status_code=404, detail="Directory not found")
+        if not target.is_dir():
+            raise fastapi.HTTPException(status_code=400, detail="Not a directory")
         files = []
-        for item in os.listdir(root_dir):
-            if not item.startswith(".") and not item.startswith("__"):
-                full_path = os.path.join(root_dir, item)
-                if os.path.isfile(full_path) or os.path.isdir(full_path):
-                    kind = "folder" if os.path.isdir(full_path) else "file"
-                    files.append({"name": item, "type": kind})
-        return {"files": files, "path": path}
+        for item in sorted(os.listdir(target)):
+            if item.startswith(".") or item.startswith("__"):
+                continue
+            full_path = target / item
+            try:
+                if full_path.is_dir():
+                    files.append({"name": item, "type": "folder"})
+                elif full_path.is_file():
+                    files.append({"name": item, "type": "file"})
+            except (PermissionError, OSError):
+                continue
+        # Sort: folders first, then files, both alphabetically
+        files.sort(key=lambda f: (f["type"] != "folder", f["name"].lower()))
+        return {
+            "files": files,
+            "path": str(target),
+            "is_workspace": str(target) == str(WORKSPACE_ROOT),
+            "home": str(USER_HOME),
+        }
+    except fastapi.HTTPException:
+        raise
     except Exception as e:
         logger.error(f"File Listing Error: {e}")
-        return {"files": [], "path": path}
+        return {"files": [], "path": path, "error": str(e)}
 
 @app.get("/api/read_file")
 async def read_file(filename: str):
     try:
-        if ".." in filename or filename.startswith("/"):
-             raise fastapi.HTTPException(status_code=400, detail="Invalid filename")
-        with open(filename, "r", encoding="utf-8") as f:
+        target = _resolve_user_path(filename, WORKSPACE_ROOT)
+        if not target.exists() or not target.is_file():
+            raise fastapi.HTTPException(status_code=404, detail="File not found")
+        with open(target, "r", encoding="utf-8") as f:
             content = f.read()
-        return {"content": content, "filename": filename}
+        return {"content": content, "filename": str(target)}
+    except fastapi.HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Read Error: {e}")
-        raise fastapi.HTTPException(status_code=404, detail="File not found")
+        raise fastapi.HTTPException(status_code=404, detail=f"Cannot read file: {e}")
 
 class WriteFileRequest(BaseModel):
     filename: str
@@ -125,23 +187,14 @@ class WriteFileRequest(BaseModel):
 
 @app.post("/api/write_file")
 async def write_file(request: WriteFileRequest):
-    """Save editor content back to disk. Sandboxed to workspace root."""
+    """Save editor content back to disk. Allowed anywhere inside $HOME."""
     try:
-        filename = request.filename
-        if ".." in filename or filename.startswith("/"):
-            raise fastapi.HTTPException(status_code=400, detail="Invalid filename")
-        target = Path(filename).resolve()
-        workspace = Path(".").resolve()
-        # Make sure the target stays inside the workspace
-        try:
-            target.relative_to(workspace)
-        except ValueError:
-            raise fastapi.HTTPException(status_code=400, detail="Path outside workspace")
+        target = _resolve_user_path(request.filename, WORKSPACE_ROOT)
         target.parent.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
             f.write(request.content)
-        logger.info(f"Saved {filename} ({len(request.content)} bytes)")
-        return {"ok": True, "filename": filename, "bytes": len(request.content)}
+        logger.info(f"Saved {target} ({len(request.content)} bytes)")
+        return {"ok": True, "filename": str(target), "bytes": len(request.content)}
     except fastapi.HTTPException:
         raise
     except Exception as e:
