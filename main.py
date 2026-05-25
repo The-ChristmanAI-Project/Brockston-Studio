@@ -167,25 +167,53 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
     env["BROCKSTON_WORKSPACE"] = workspace_root
 
     # OSC 7 sequence: ESC ] 7 ; file://hostname/path ESC \
-    # We embed it in the prompt setup so it fires after every command.
+    # We install the hook via shell init files so the user never sees the
+    # function definition appear at their prompt. This is how VSCode does it.
+    import tempfile
+    rc_dir = tempfile.mkdtemp(prefix="brockston_rc_")
+    shell_args = [shell]
+
     if "zsh" in shell_name:
-        # zsh: precmd functions are called before each prompt
-        env["ZDOTDIR"] = env.get("ZDOTDIR", os.path.expanduser("~"))
-        # Use a startup command instead of writing files
-        startup_cmd = (
-            'precmd_brockston_cwd() { printf "\\033]7;file://%s%s\\033\\\\" "$HOST" "$PWD"; }; '
-            'precmd_functions+=(precmd_brockston_cwd); '
-            'precmd_brockston_cwd\n'
-        )
+        # zsh: ZDOTDIR points to a dir containing .zshrc which sources the
+        # user's real .zshrc first, then appends our hook.
+        user_zshrc = os.path.expanduser("~/.zshrc")
+        zshrc_lines = []
+        if os.path.isfile(user_zshrc):
+            zshrc_lines.append(f'source "{user_zshrc}"')
+        zshrc_lines += [
+            '_brockston_cwd_hook() {',
+            '  printf "\\033]7;file://%s%s\\033\\\\" "${HOST:-localhost}" "$PWD"',
+            '}',
+            'typeset -ga precmd_functions',
+            'precmd_functions=(${precmd_functions[@]:#_brockston_cwd_hook} _brockston_cwd_hook)',
+        ]
+        with open(os.path.join(rc_dir, ".zshrc"), "w") as f:
+            f.write("\n".join(zshrc_lines) + "\n")
+        env["ZDOTDIR"] = rc_dir
+        # Don't source global zshenv changes that might override ZDOTDIR
     else:
-        # bash and other POSIX-ish: PROMPT_COMMAND fires before each prompt
-        startup_cmd = (
-            'export PROMPT_COMMAND=\'printf "\\033]7;file://%s%s\\033\\\\" "$HOSTNAME" "$PWD"\'$\'\\n\'"${PROMPT_COMMAND:-:}"; '
-            'printf "\\033]7;file://%s%s\\033\\\\" "$HOSTNAME" "$PWD"\n'
-        )
+        # bash: --rcfile points at our wrapper, which sources the user's real
+        # bashrc then defines the hook.
+        user_bashrc = os.path.expanduser("~/.bashrc")
+        rc_path = os.path.join(rc_dir, "bashrc")
+        bashrc_lines = []
+        if os.path.isfile(user_bashrc):
+            bashrc_lines.append(f'source "{user_bashrc}"')
+        bashrc_lines += [
+            '_brockston_cwd_hook() {',
+            '  printf "\\033]7;file://%s%s\\033\\\\" "${HOSTNAME:-localhost}" "$PWD"',
+            '}',
+            'case ":${PROMPT_COMMAND:-}:" in',
+            '  *:_brockston_cwd_hook:*) ;;',
+            '  *) PROMPT_COMMAND="_brockston_cwd_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;',
+            'esac',
+        ]
+        with open(rc_path, "w") as f:
+            f.write("\n".join(bashrc_lines) + "\n")
+        shell_args = [shell, "--rcfile", rc_path, "-i"]
 
     process = subprocess.Popen(
-        [shell],
+        shell_args,
         preexec_fn=os.setsid,
         stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
         universal_newlines=True,
@@ -201,13 +229,8 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
         "workspace": workspace_root,
     }))
 
-    # Push the OSC 7 setup into the shell once it's ready.
-    # Short delay so the shell finishes its own init before we inject.
-    await asyncio.sleep(0.15)
-    try:
-        os.write(master_fd, startup_cmd.encode())
-    except Exception as e:
-        logger.warning(f"OSC 7 hook injection failed: {e}")
+    # Track temp dir for cleanup when the process exits.
+    process._brockston_rc_dir = rc_dir  # type: ignore[attr-defined]
 
     async def read_from_pty():
         try:
@@ -239,6 +262,12 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
         await asyncio.gather(read_from_pty(), write_to_pty(), return_exceptions=True)
     finally:
         process.kill()
+        # Clean up the temporary rc directory we created for OSC 7 hook injection
+        try:
+            import shutil
+            shutil.rmtree(getattr(process, "_brockston_rc_dir", ""), ignore_errors=True)
+        except Exception:
+            pass
 
 backend_dir = Path(__file__).parent
 frontend_dir = backend_dir / "frontend"
