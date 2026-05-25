@@ -22,8 +22,12 @@ try:
 except ImportError:
     SpeechService = None
 
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger("BrockstonStudio")
+# Logger must exist regardless of whether SpeechService imported.
+# (Previously this was nested inside the except block above, so when
+# SpeechService imported cleanly `logger` was never defined and every
+# endpoint that called logger.info crashed with NameError.)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("BrockstonStudio")
 
 app = fastapi.FastAPI()
 

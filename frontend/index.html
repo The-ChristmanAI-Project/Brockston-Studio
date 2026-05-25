@@ -723,6 +723,9 @@
     </script>
 
     <!-- Core app script, no Claude hook -->
-    <script src="app.js"></script>
+    <!-- app.js intentionally not loaded: its loadFiles() conflicted with the inline
+         implementation above and silently failed because of an undefined `elements`
+         reference, leaving the file explorer stuck on "Loading...". Inline JS is
+         the canonical board logic. -->
 </body>
 </html>
