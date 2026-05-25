@@ -54,7 +54,7 @@ async def chat_endpoint(request: ChatRequest):
     import httpx
     try:
         logger.info(f"Trying UltimateEV: {request.message}")
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(
                 "http://localhost:5174/api/translate",
                 json={"message": request.message}

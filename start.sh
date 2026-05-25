@@ -189,6 +189,16 @@ wait_ready "http://127.0.0.1:$BROCKSTON_PORT/health" "Brockston"     || true
 wait_ready "http://127.0.0.1:$IDE_PORT/api/health" "IDE"             || \
 wait_ready "http://127.0.0.1:$IDE_PORT/" "IDE"                       || true
 
+# ----- Prewarm Ollama (load the 32B model into RAM before first user request)
+if curl -fsS "$OLLAMA_BASE_URL/api/tags" >/dev/null 2>&1; then
+    info "Prewarming $OLLAMA_MODEL (one-time model load, can take ~60s)..."
+    curl -fsS -X POST "$OLLAMA_BASE_URL/api/generate" \
+        -H "Content-Type: application/json" \
+        -d "{\"model\":\"$OLLAMA_MODEL\",\"prompt\":\"ok\",\"stream\":false}" \
+        --max-time 180 >/dev/null 2>&1 && ok "Model loaded — first chat will respond fast" \
+        || warn "Prewarm timed out — first chat may be slow but will still work"
+fi
+
 echo ""
 echo "${C_BOLD}=========================================${C_RESET}"
 ok "BROCKSTON Studio is up."
