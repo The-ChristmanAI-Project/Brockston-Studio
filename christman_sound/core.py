@@ -54,6 +54,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import ctypes
 from pathlib import Path
 import numpy as np
+import logging
+logger = logging.getLogger(__name__)
 
 # Proximity: The engine lives shoulder-to-shoulder with the code that thinks with it.
 DSP_LIB_PATH = Path(__file__).parent / "christman_dsp.so"
