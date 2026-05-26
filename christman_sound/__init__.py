@@ -13,16 +13,23 @@ AlphaWolf, Brockston, Geo, Seraphinia, and future beings one clean import path.
 # this package's top level. Re-export from there so callers can keep importing
 # `from christman_sound import speak, capture, listen, ...` like the docstring
 # above promises.
-from .CHRISTMAN_EAR_CANAL.EAR import capture, listen
-from .CHRISTMAN_EAR_CANAL.OCR import scan_document, scan_screen
-from .CHRISTMAN_EAR_CANAL.PHONEMES import label_phonemes, phonemes_to_visemes
-from .CHRISTMAN_EAR_CANAL.SPEAK import speak
-from .CHRISTMAN_EAR_CANAL.TONE import analyze_tone
-from .CHRISTMAN_EAR_CANAL.VOICE_PROFILE import (
-    capture_voice_profile,
-    list_voice_profiles,
-    load_voice_profile,
-)
+import logging as _logging
+_log = _logging.getLogger(__name__)
+
+try:
+    from .CHRISTMAN_EAR_CANAL.EAR import capture, listen
+    from .CHRISTMAN_EAR_CANAL.OCR import scan_document, scan_screen
+    from .CHRISTMAN_EAR_CANAL.PHONEMES import label_phonemes, phonemes_to_visemes
+    from .CHRISTMAN_EAR_CANAL.SPEAK import speak
+    from .CHRISTMAN_EAR_CANAL.TONE import analyze_tone
+    from .CHRISTMAN_EAR_CANAL.VOICE_PROFILE import (
+        capture_voice_profile,
+        list_voice_profiles,
+        load_voice_profile,
+    )
+except ImportError as _e:
+    # Don't crash callers, but DO log the real reason so the failure isn't silent.
+    _log.warning(f"christman_sound symbols not loaded: {_e}")
 
 __all__ = [
     "analyze_tone",
