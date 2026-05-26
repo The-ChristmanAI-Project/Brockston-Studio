@@ -275,12 +275,12 @@
 
         #watermark {
             position: absolute;
-            top: 40%;
+            top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            opacity: 0.3;
-            pointer-events: none;
-            z-index: 0;
+            opacity: 0.10;            /* In-front overlay: low enough to read code through it */
+            pointer-events: none;     /* Never intercept clicks, text selection, or scroll */
+            z-index: 5;               /* Above Monaco (which is z-index 1) */
             background-image: url('/static/family_crest.png');
             background-size: contain;
             background-repeat: no-repeat;
