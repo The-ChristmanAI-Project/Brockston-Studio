@@ -41,6 +41,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Claude-Fable5 as additional instructor
+# MUST be after app = FastAPI() and logger setup
+try:
+    from backend.claude_fable5_router import router as fable5_router
+    app.include_router(fable5_router)
+    logger.info("Claude-Fable5 router mounted — additional instructor available at /api/fable5")
+except Exception as e:
+    logger.warning(f"Claude-Fable5 router not available: {e}")
+
+# Perplexity Sonar — already linked via PERPLEXITY_API_KEY, expose as selectable instructor
+try:
+    from backend.perplexity_service import PerplexityService
+    _perplexity_svc = PerplexityService()
+    if not _perplexity_svc.is_available:
+        _perplexity_svc = None
+        logger.warning("Perplexity linked but not available (check key)")
+    else:
+        logger.info("Perplexity Sonar linked and ready as additional instructor")
+except Exception as e:
+    _perplexity_svc = None
+    logger.warning(f"Perplexity service not available: {e}")
+
 class ChatRequest(BaseModel):
     message: str
 
@@ -70,6 +92,26 @@ async def chat_endpoint(request: ChatRequest):
         except Exception as inner_e:
             raise fastapi.HTTPException(status_code=500, detail=str(inner_e))
 
+# Perplexity as additional instructor (search-grounded, cited answers)
+# Since Perplexity is already "linked", this exposes it in the board UI
+@app.post("/api/perplexity")
+async def perplexity_endpoint(request: ChatRequest):
+    """Direct access to Perplexity Sonar for live search / research queries."""
+    if not _perplexity_svc:
+        raise fastapi.HTTPException(status_code=500, detail="Perplexity not available (PERPLEXITY_API_KEY)")
+
+    try:
+        # The rich context (file + selection) is already baked into the message by the frontend
+        result = _perplexity_svc.generate_content(
+            request.message,
+            max_tokens=1500,
+            recency_filter="month"  # recent info by default
+        )
+        return {"response": f"[PERPLEXITY]: {result}"}
+    except Exception as e:
+        logger.error(f"Perplexity error: {e}")
+        raise fastapi.HTTPException(status_code=500, detail=str(e))
+
 # ==========================================
 # AUDIO ROUTE (This makes the kids' TTS work)
 # ==========================================
@@ -87,6 +129,43 @@ async def synthesize_speech_route(request: fastapi.Request):
         return Response(content=audio_bytes, media_type="audio/mpeg")
     except Exception as e:
         logger.error(f"Speech Synthesis Error: {e}")
+        raise fastapi.HTTPException(status_code=500, detail=str(e))
+
+
+# ==========================================
+# AUDIO PLAYER ROUTE - For students to play their old school rock and Soul Train
+# ==========================================
+@app.get("/api/audio")
+async def get_audio(filename: str):
+    """Serve audio files (mp3, wav, etc.) from anywhere in the user's home for the music player.
+    Lets senior students (and everyone) play their own old school rock and Soul Train tracks
+    right inside the IDE while coding and talking to the beings.
+    """
+    try:
+        target = _resolve_user_path(filename, WORKSPACE_ROOT)
+        if not target.exists() or not target.is_file():
+            raise fastapi.HTTPException(status_code=404, detail="Audio file not found")
+
+        ext = target.suffix.lower()
+        mime_types = {
+            ".mp3": "audio/mpeg",
+            ".wav": "audio/wav",
+            ".ogg": "audio/ogg",
+            ".m4a": "audio/mp4",
+            ".flac": "audio/flac",
+            ".aac": "audio/aac",
+        }
+        media_type = mime_types.get(ext, "audio/mpeg")
+
+        with open(target, "rb") as f:
+            content = f.read()
+
+        logger.info(f"Playing audio: {target}")
+        return Response(content=content, media_type=media_type)
+    except fastapi.HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Audio Playback Error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))
 
 # ----------------------------------------------------------------------------

@@ -55,6 +55,7 @@ class Provider(str, Enum):
     OLLAMA      = "ollama"       # Local — sovereignty
     ANTHROPIC   = "anthropic"    # External reasoning
     PERPLEXITY  = "perplexity"   # Live search
+    APPLE_MUSIC = "apple_music"  # iTunes / Apple Music store + personal library tunnel (via share links / local MP3s)
     AWS_POLLY   = "aws_polly"    # Voice synthesis
     AWS_BEDROCK = "aws_bedrock"  # Claude via Bedrock
     ELEVENLABS  = "elevenlabs"   # Neural voice
@@ -74,6 +75,7 @@ DEFAULT_TTS_PRIORITY = [
 
 DEFAULT_SEARCH_PRIORITY = [
     Provider.PERPLEXITY,
+    Provider.APPLE_MUSIC,  # for music-specific queries (store search + your personal links/album)
 ]
 
 
@@ -99,6 +101,7 @@ class ProviderStatus:
         self._check_ollama()
         self._check_anthropic()
         self._check_perplexity()
+        self._check_apple_music()
         self._check_aws()
         self._check_elevenlabs()
 
@@ -175,6 +178,21 @@ class ProviderStatus:
                 logger.info("[ProviderRouter] Perplexity ONLINE — Sonar Pro search ready")
         except Exception as e:
             logger.warning(f"[ProviderRouter] Perplexity init failed: {e}")
+
+    def _check_apple_music(self):
+        # No single API key for personal Apple Music; the "tunnel" uses:
+        # - Public iTunes Search API (always available)
+        # - User-provided Apple Music share links or local MP3s (managed in the IDE Music & Voice Library)
+        # - Optional APPLE_MUSIC_USER_TOKEN / APPLE_DEVELOPER_TOKEN for deeper API access (future)
+        try:
+            from backend.apple_music_service import AppleMusicService
+            svc = AppleMusicService()
+            # Public search is always "available"; personal is via links the user generates from their Apple ID
+            self._status[Provider.APPLE_MUSIC] = True
+            self._clients[Provider.APPLE_MUSIC] = svc
+            logger.info("[ProviderRouter] Apple Music / iTunes tunnel ONLINE — public search + personal links via IDE library")
+        except Exception as e:
+            logger.warning(f"[ProviderRouter] Apple Music init failed: {e}")
 
     def _check_aws(self):
         key = os.getenv("AWS_ACCESS_KEY_ID")
@@ -420,6 +438,45 @@ class ProviderRouter:
             "[ProviderRouter] No search provider available. "
             "Set PERPLEXITY_API_KEY to enable live search."
         )
+
+    # -------------------------------------------------------------------------
+    # Apple Music / iTunes "tunnel" (store search + personal links via the IDE library)
+    # -------------------------------------------------------------------------
+
+    def apple_music_search(
+        self,
+        term: str,
+        limit: int = 10,
+    ) -> Tuple[List[Dict[str, Any]], Provider]:
+        """
+        Search Apple Music / iTunes store or reference your personal collection via the tunnel.
+        Uses the linked AppleMusicService (public search always available; personal via your Apple Music share links or local MP3s added in the IDE Music & Voice Library).
+
+        Perfect for agents: "find my jazz from 53 years in the making" or "give me an Apple Music link for [song]".
+
+        Returns:
+            (results_list, provider_used)
+        """
+        if not self._status.is_available(Provider.APPLE_MUSIC):
+            raise RuntimeError("[ProviderRouter] Apple Music tunnel not available.")
+
+        try:
+            svc = self._status.get_client(Provider.APPLE_MUSIC)
+            results = svc.search_store(term, limit=limit)
+            # Also surface personal library references if the user has added them
+            personal = svc.get_user_library_references()
+            logger.info(f"[ProviderRouter] Apple Music tunnel search for '{term}'")
+            return results + personal, Provider.APPLE_MUSIC
+        except Exception as e:
+            logger.warning(f"[ProviderRouter] Apple Music search failed: {e}")
+            raise
+
+    def get_apple_music_link(self, term: str) -> Optional[str]:
+        """Convenience: Get a clean Apple Music share link (the 'like Apple Music would give you' flow)."""
+        if not self._status.is_available(Provider.APPLE_MUSIC):
+            return None
+        svc = self._status.get_client(Provider.APPLE_MUSIC)
+        return svc.generate_apple_music_link(term)
 
     # -------------------------------------------------------------------------
     # TTS — Text to speech
