@@ -49,6 +49,19 @@ class SpeechService:
         Raises:
             RuntimeError: If transcription fails
         """
+        # Wire to mcp-media-ingestor live ear bridge first (real-time improved ear with energy/tone).
+        # This is the high-quality student "hear" path for the beings when the sensory bus is running.
+        try:
+            import httpx
+            r = await httpx.AsyncClient(timeout=1.5).get("http://localhost:8765/latest")
+            data = r.json()
+            if data.get("text"):
+                # Rich output from our processor: includes energy + tone now
+                tone_info = f" [e:{data.get('energy')} t:{data.get('tone')}]" if data.get('energy') else ""
+                return f"{data.get('text')}{tone_info}"
+        except Exception:
+            pass
+
         if not self.api_key:
             return self._mock_transcribe(audio_data, filename)
 

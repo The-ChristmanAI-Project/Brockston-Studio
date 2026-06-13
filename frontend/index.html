@@ -28,6 +28,11 @@
             --text-main: #f0f0f0;
             --font-term: 'Fira Code', 'Menlo', 'Consolas', monospace;
             --font-ui: 'Inter', sans-serif;
+            --tiffany-blue: #40E0D0;
+            --tiffany-glow: 0 0 8px rgba(64, 224, 208, 0.4), 0 0 16px rgba(64, 224, 208, 0.2);
+            --copper: #B87333;
+            --copper-light: #CD7F32;
+            --copper-glow: 0 0 8px rgba(184, 115, 51, 0.4);
         }
 
         body {
@@ -278,16 +283,166 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            opacity: 0.10;            /* In-front overlay: low enough to read code through it */
-            pointer-events: none;     /* Never intercept clicks, text selection, or scroll */
-            z-index: 5;               /* Above Monaco (which is z-index 1) */
+            opacity: 0.15;
+            pointer-events: none;
+            z-index: 5;
             background-image: url('/static/family_crest.png');
             background-size: contain;
             background-repeat: no-repeat;
             background-position: center;
-            width: 400px;
-            height: 400px;
-            filter: drop-shadow(0 0 10px rgba(255, 95, 31, 0.2));
+            width: 320px;
+            height: 320px;
+            filter: drop-shadow(0 0 12px rgba(184, 115, 51, 0.35)) drop-shadow(0 0 6px rgba(255, 95, 31, 0.2)) drop-shadow(0 0 4px rgba(64, 224, 208, 0.1));
+        }
+
+        .editor-tabs {
+            display: flex;
+            align-items: center;
+            background: #050505;
+            border-bottom: 1px solid #1a1a1a;
+            min-height: 32px;
+            flex-shrink: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 0 4px;
+        }
+        .editor-tabs::-webkit-scrollbar { height: 2px; }
+        .editor-tab {
+            display: flex;
+            align-items: center;
+            padding: 4px 10px 4px 12px;
+            margin: 3px 1px 0;
+            background: #0a0a0c;
+            border: 1px solid #222;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            font-size: 12px;
+            color: #aaa;
+            cursor: pointer;
+            white-space: nowrap;
+            max-width: 220px;
+            transition: all .1s ease;
+        }
+        .editor-tab:hover { background: #111; color: #ddd; }
+        .editor-tab.active {
+            background: #030303;
+            color: #fff;
+            border-color: var(--neon-orange);
+            box-shadow: 0 -1px 0 var(--neon-orange);
+        }
+        .editor-tab.dirty .tab-name:after { content: ' •'; color: var(--neon-orange); }
+        .editor-tab .tab-name { overflow: hidden; text-overflow: ellipsis; }
+        .editor-tab .tab-close {
+            margin-left: 8px;
+            width: 16px;
+            height: 16px;
+            line-height: 14px;
+            text-align: center;
+            border-radius: 3px;
+            font-size: 11px;
+            color: #666;
+        }
+        .editor-tab .tab-close:hover { background: rgba(255,95,31,0.2); color: #fff; }
+
+        .editor-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 8px;
+            background: #050505;
+            border-bottom: 1px solid #1a1a1a;
+            height: 28px;
+            flex-shrink: 0;
+        }
+        .editor-actions button {
+            background: #111;
+            border: 1px solid #222;
+            color: #ccc;
+            font-family: var(--font-ui);
+            font-size: 11px;
+            padding: 2px 9px;
+            border-radius: 3px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .editor-actions button:hover { background: #1a1a1a; border-color: var(--neon-orange); color: #fff; }
+        .editor-actions .run-btn { background: #0a2a0a; border-color: #2a4a2a; color: #7f7; }
+        .editor-actions .run-btn:hover { background: #1a3a1a; border-color: #4a6; color: #9f9; }
+
+        #sb-music {
+            color: var(--copper-light);
+            border-color: var(--copper) !important;
+        }
+        #sb-music i {
+            color: var(--copper);
+        }
+
+        .lib-item:hover {
+            color: #fff;
+            text-shadow: 0 0 4px var(--copper-glow);
+        }
+        .lib-item[data-type="voice"]:hover {
+            text-shadow: 0 0 4px var(--tiffany-glow);
+        }
+
+        /* More core UI accents */
+        #editor-tabs {
+            border-bottom: 1px solid var(--copper);
+        }
+        .editor-tab.active {
+            box-shadow: 0 -1px 0 var(--copper);
+        }
+        #chat-input:focus {
+            border-color: var(--tiffany-blue);
+            box-shadow: 0 0 10px var(--tiffany-glow);
+        }
+        #status-bar .seg {
+            transition: color 0.1s;
+        }
+        #status-bar .seg:hover {
+            color: var(--copper-light);
+        }
+        #sb-instructor {
+            color: var(--tiffany-blue);
+        }
+
+        /* Quick actions with mixed accents */
+        .quick-action {
+            transition: all 0.1s ease;
+        }
+        .quick-action:hover {
+            background: #1a1a1a;
+            border-color: var(--copper) !important;
+            color: #ddd;
+        }
+        #ai-panel.fable5-mode .quick-action:hover {
+            border-color: var(--tiffany-blue) !important;
+            box-shadow: 0 0 6px var(--tiffany-glow);
+        }
+
+        /* Chat messages */
+        .msg.ai {
+            border-left: 3px solid var(--neon-orange);
+        }
+        #ai-panel.fable5-mode .msg.ai {
+            border-left-color: var(--tiffany-blue);
+        }
+        .msg .ai-header {
+            color: var(--neon-orange);
+        }
+        #ai-panel.fable5-mode .msg .ai-header {
+            color: var(--tiffany-blue);
+        }
+
+        /* Sidebar icons with accents */
+        .icon-btn:hover {
+            color: var(--copper-light);
+            background: rgba(184, 115, 51, 0.1);
+        }
+        #btn-music:hover {
+            color: var(--copper);
         }
 
         #editor-content {
@@ -320,6 +475,11 @@
             background-color: var(--panel-black);
             display: flex;
             flex-direction: column;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        #ai-panel.fable5-mode {
+            border: 1px solid var(--tiffany-blue);
+            box-shadow: inset 0 0 20px rgba(64,224,208,0.08), 0 0 12px var(--tiffany-glow);
         }
 
         #chat-history {
@@ -429,6 +589,41 @@
             box-shadow: 0 0 20px rgba(255, 95, 31, 0.6);
         }
         
+        .inst-btn {
+            transition: all 0.15s ease;
+        }
+        .inst-btn.active {
+            background: #1a1a1a !important;
+            color: #fff !important;
+            box-shadow: 0 0 8px rgba(255,95,31,0.3);
+        }
+        #inst-family.active {
+            border: 1px solid var(--neon-orange) !important;
+        }
+        #inst-fable5.active {
+            border: 1px solid var(--tiffany-blue) !important;
+            box-shadow: 0 0 8px var(--tiffany-glow);
+        }
+        .inst-btn:hover:not(.active) {
+            background: #1a1a1a;
+            color: #ddd;
+        }
+        #instructor-selector button[style*="Lib"] {
+            border-color: var(--copper) !important;
+            color: var(--copper-light) !important;
+        }
+        #instructor-selector button[style*="Lib"]:hover {
+            background: #2a1f18;
+            color: #fff;
+        }
+        #inst-fable5 {
+            color: var(--tiffany-blue) !important;
+        }
+        #inst-fable5.active {
+            background: #0f2a2a !important;
+            border-color: var(--tiffany-blue) !important;
+        }
+        
         audio { display: none; }
     </style>
 </head>
@@ -438,10 +633,12 @@
         <source src="/static/focus_music.mp3" type="audio/mpeg">
     </audio>
     <audio id="tts-player"></audio>
+    <!-- User music player for old school rock, Soul Train, etc. -->
+    <audio id="user-music" style="display:none;"></audio>
 
     <div id="header">
         <span class="title"><i class="fas fa-bolt" style="margin-right: 8px;"></i>BROCKSTON STUDIO // PROFESSIONAL</span>
-        <span class="status">HOST: 127.0.0.1 : 7777</span>
+        <span class="status">HOST: 127.0.0.1 : 7777 <span style="color:#444;font-size:9px;">(for thousands of kids — make it solid)</span></span>
     </div>
 
     <div id="app-container">
@@ -476,8 +673,15 @@
         </div>
 
         <div id="explorer" class="split">
-            <div class="explorer-header"><i class="fas fa-folder-open" style="margin-right: 5px;"></i> PROJECT EXPLORER</div>
+            <div class="explorer-header" style="display:flex;align-items:center;justify-content:space-between;">
+                <div><i class="fas fa-folder-open" style="margin-right: 5px;"></i> PROJECT EXPLORER</div>
+                <div style="display:flex;gap:6px;">
+                    <span id="btn-refresh-explorer" title="Refresh" style="cursor:pointer;font-size:11px;color:#666;">⟳</span>
+                    <span id="btn-new-file" title="New file in current dir" style="cursor:pointer;font-size:11px;color:#666;">+f</span>
+                </div>
+            </div>
             <div id="explorer-path" title="Current working directory (synced with terminal)">/</div>
+            <input id="explorer-filter" placeholder="filter files..." style="margin:0 10px 8px;width:calc(100%-20px);background:#111;border:1px solid #222;color:#aaa;font-family:var(--font-term);font-size:11px;padding:3px 6px;border-radius:3px;outline:none;">
             <div id="file-list">
                 <div style="color: #444; font-style: italic;">Loading...</div>
             </div>
@@ -486,8 +690,17 @@
         <div id="workspace" class="split">
             <div id="editor-wrapper">
                 <div id="watermark"></div>
+                <div class="editor-actions" id="editor-actions">
+                    <button id="btn-save" title="Save (⌘S / Ctrl+S)"><i class="fas fa-save"></i> <span>Save</span></button>
+                    <button id="btn-save-all" title="Save all open files">Save All</button>
+                    <button id="btn-close-tab" title="Close current tab">Close</button>
+                    <button class="run-btn" id="btn-run" title="Run current file in terminal (sends command)">▶ Run</button>
+                    <span style="flex:1"></span>
+                    <span id="editor-file-indicator" style="font-size:10px;color:#555;font-family:var(--font-term);"></span>
+                </div>
+                <div class="editor-tabs" id="editor-tabs"></div>
                 <div id="editor-content"></div>
-                <div id="editor-placeholder" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#444;font-style:italic;pointer-events:none;z-index:2;">// Select a file to begin coding...</div>
+                <div id="editor-placeholder" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#444;font-style:italic;pointer-events:none;z-index:2;">// Select a file or open from explorer</div>
             </div>
             <div id="terminal-container">
                 <div id="terminal"></div>
@@ -495,12 +708,32 @@
         </div>
 
         <div id="ai-panel" class="split">
-            <div class="explorer-header" style="padding: 15px 20px 0;"><i class="fas fa-brain" style="margin-right: 5px;"></i> ASK BROCKSTON / ULTIMATE_EV</div>
+            <div class="explorer-header" style="padding: 12px 16px 6px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                <div><i class="fas fa-brain" style="margin-right: 5px;"></i> ASK THE BEINGS</div>
+                <div id="instructor-selector" style="display:flex; gap:2px; font-size:10px; background:#050505; border:1px solid #222; border-radius:4px; padding:2px;">
+                    <button onclick="setInstructor('family')" id="inst-family" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
+                    <button onclick="setInstructor('fable5')" id="inst-fable5" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Fable5</button>
+                    <button onclick="setInstructor('perplexity')" id="inst-perplexity" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Perplexity</button>
+                    <button onclick="showMusicLibrary()" title="Music & Voice MP3 Library — local voice refs + Apple Music links (like a personal streaming lib)" style="padding:3px 8px; background:#1f1f1f; color:var(--copper-light); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px;">Lib</button>
+                    <button onclick="playMyAlbum()" title="Play your album '53 Years in the Making' — the player, clear as a bell!" style="padding:3px 8px; background:#1f1f1f; color:var(--copper); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px; font-weight:700;">▶ Album</button>
+                </div>
+            </div>
+
+            <!-- Quick actions: these send rich context automatically -->
+            <div style="padding: 0 14px 8px; display:flex; gap:6px; flex-wrap:wrap;">
+                <button class="quick-action" onclick="quickAsk('Explain')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Explain</button>
+                <button class="quick-action" onclick="quickAsk('Suggest a better version of')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Refactor</button>
+                <button class="quick-action" onclick="quickAsk('Find bugs or issues in')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Find bugs</button>
+                <button class="quick-action" onclick="quickAsk('Write tests for')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Write tests</button>
+            </div>
+
             <div id="chat-history">
-                <span class="system-tag">[SYSTEM]: Neural Link Active. Ready to help you learn.</span>
+                <span class="system-tag">[BROCKSTON FAMILY]: How can we help you love yourself more today? Open a file or just talk to us. <strong>Fable5</strong> (Claude) and <strong>Perplexity</strong> (live search) are now available as additional instructors. Your album "53 Years in the Making" (incl. Brockston.mp3) is ready in the Music Library — hit ▶ Album or the specific track button.</span>
             </div>
             <div id="chat-input-area">
-                <input type="text" id="chat-input" placeholder="Ask a question..." autocomplete="off">
+                <button id="mic-btn" title="Hold or click to speak your question (great for nonverbal)" 
+                        style="background:#111;border:1px solid var(--neon-orange);color:var(--neon-orange);padding:0 14px;font-size:1.1rem;border-radius:6px;cursor:pointer;min-width:42px;">🎤</button>
+                <input type="text" id="chat-input" placeholder="Ask a question... (or use the mic — sends your open file as context)" autocomplete="off" style="flex:1">
                 <button id="send-btn">SEND</button>
             </div>
         </div>
@@ -511,6 +744,8 @@
         <span class="seg" id="sb-file"><i class="fas fa-file-code"></i> <span id="sb-file-name">no file open</span></span>
         <span class="seg" id="sb-lang"><i class="fas fa-code"></i> <span id="sb-lang-name">plaintext</span></span>
         <span class="seg" id="sb-cursor"><i class="fas fa-crosshairs"></i> <span id="sb-cursor-pos">Ln 1, Col 1</span></span>
+        <span class="seg" id="sb-instructor"><i class="fas fa-user-graduate"></i> <span id="sb-inst-name">Family</span></span>
+        <span class="seg" id="sb-music" style="display:none;"><i class="fas fa-music"></i> <span id="sb-music-track">Now Playing</span></span>
         <span class="spacer"></span>
         <span class="seg" id="sb-term"><i class="fas fa-terminal"></i> <span id="sb-term-state">terminal connecting...</span></span>
         <span class="seg pulse" id="sb-model"><i class="fas fa-brain"></i> <span id="sb-model-name">qwen2.5-coder:32b</span></span>
@@ -519,6 +754,21 @@
     <script>
         // ============================================================
         // BROCKSTON Studio — Board logic
+        // ============================================================
+        //
+        // HIGH STAKES: This IDE teaches 6,000–8,000 children per month — many autistic,
+        // nonverbal, or with Down syndrome, who have been cut from support.
+        // It is given away free as part of the Christman AI family + Ollama partnership.
+        //
+        // Priorities for this audience + distribution:
+        // - Voice first (mic input + TTS) so nonverbal kids can participate fully
+        // - Context to the beings so they can actually teach instead of guessing
+        // - Forgiving, kind feedback (no scary errors)
+        // - Simple reliable flows: explore → edit (tabs) → talk (with code) → run → save
+        // - As self-contained / reliable as possible when bundled for classrooms
+        //
+        // If you're editing this for the next release: keep the beings warm and present.
+        // "How can we help you love yourself more?"
         // ============================================================
 
         // ----- Layout: column splits + vertical editor/terminal split
@@ -558,11 +808,294 @@
 
         let isMusicPlaying = false;
         let isVoiceModeEnabled = false;
+
+        // User music player for senior students' old school rock & Soul Train
+        const userMusic = document.getElementById('user-music');
+        let currentMusicTrack = null;
         let currentPath = '';
-        let currentFile = null;
         let monacoEditor = null;
         let workspaceRoot = null;
         let lastSyncedCwd = null;
+        let selectedInstructor = 'family'; // 'family' | 'fable5' — Fable5 is the additional instructor
+
+        // Music & Voice Library - supports local MP3 voice files + Apple Music style links
+        let musicLibrary = JSON.parse(localStorage.getItem('christmanMusicLibrary') || '[]');
+
+        function saveMusicLibrary() {
+            localStorage.setItem('christmanMusicLibrary', JSON.stringify(musicLibrary));
+        }
+
+        function addToLibrary(title, urlOrPath, type = 'music', album = null) {
+            const entry = {
+                id: Date.now(),
+                title: title || (urlOrPath.split('/').pop() || 'Untitled'),
+                source: urlOrPath,
+                type: type, // 'music' for tracks, 'voice' for being reference MP3s
+                album: album,
+                added: new Date().toISOString()
+            };
+            musicLibrary.unshift(entry);
+            saveMusicLibrary();
+            appendMessage('SYSTEM', `📚 Added ${type}${album ? ' from ' + album : ''} to library: ${entry.title}`, 'system');
+            if (document.getElementById('music-lib-modal')) showMusicLibrary();
+        }
+
+        function playFromLibrary(entry) {
+            if (!entry) return;
+            if (entry.source.startsWith('http')) {
+                if (entry.source.includes('music.apple.com') || entry.source.includes('apple.com')) {
+                    window.open(entry.source, '_blank');
+                    appendMessage('SYSTEM', `🍎 Opened Apple Music link: ${entry.title}. Use Apple Music to play.`, 'system');
+                } else {
+                    // direct public MP3 URL
+                    userMusic.src = entry.source;
+                    userMusic.play().catch(e => appendMessage('SYSTEM', 'Playback blocked or invalid link: ' + e.message, 'error'));
+                    currentMusicTrack = entry.title;
+                    appendMessage('SYSTEM', `🎵 Playing linked ${entry.type}: ${entry.title}`, 'system');
+                    updateMusicStatus(entry.title);
+                }
+            } else {
+                playMusicTrack(entry.source);
+            }
+        }
+
+        function showMusicLibrary() {
+            const existing = document.getElementById('music-lib-modal');
+            if (existing) existing.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'music-lib-modal';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(2px);';
+
+            let listHtml = '';
+            if (musicLibrary.length === 0) {
+                listHtml = `<div style="color:#666;text-align:center;padding:30px;">No items yet. Add voice ref MP3s or Apple Music links below.<br>Or use the big button to import your "53 Years in the Making" album. Click audio files in explorer to auto-add/play.</div>`;
+            } else {
+                musicLibrary.forEach((entry, idx) => {
+                    const icon = entry.type === 'voice' ? '🎤' : '🎵';
+                    const playBtn = entry.source.includes('music.apple.com') ? '' : `<button onclick="playFromLibrary(musicLibrary[${idx}])" style="font-size:10px;padding:2px 8px;background:#222;border:1px solid #444;color:#aaa;border-radius:3px;cursor:pointer;">Play</button>`;
+                    const itemBorder = entry.type === 'voice' ? 'var(--tiffany-blue)' : 'var(--copper)';
+                    listHtml += `
+                        <div style="display:flex;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid #222; transition: all 0.1s;">
+                            <div class="lib-item" style="flex:1;cursor:pointer;" onclick="playFromLibrary(musicLibrary[${idx}])" data-type="${entry.type}">
+                                ${icon} <span style="color:#ddd;">${entry.title}</span>
+                                <span style="font-size:9px;color:#555;margin-left:6px;">(${entry.type})</span>
+                            </div>
+                            ${playBtn}
+                            <button onclick="window.open('${entry.source}', '_blank')" style="font-size:10px;padding:2px 6px;background:#222;border:1px solid ${itemBorder};color:#aaa;border-radius:3px;cursor:pointer;">Link</button>
+                            <button onclick="musicLibrary.splice(${idx},1);saveMusicLibrary();showMusicLibrary();" style="font-size:10px;padding:2px 6px;background:#422;border:1px solid #644;color:#f99;border-radius:3px;cursor:pointer;">×</button>
+                        </div>
+                    `;
+                });
+            }
+
+            overlay.innerHTML = `
+                <div style="background:#0a0a0c;border:2px solid var(--copper);border-radius:8px;width:92%;max-width:520px;max-height:65vh;overflow:hidden;box-shadow:0 0 40px var(--copper-glow), 0 0 20px var(--tiffany-glow);">
+                    <div style="padding:12px 16px;background:#111;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center;">
+                        <div style="color:var(--tiffany-blue);font-weight:700;font-family:var(--font-ui);">🎵 Music & Voice Library</div>
+                        <div onclick="document.getElementById('music-lib-modal').remove()" style="cursor:pointer;font-size:18px;color:#888;">✕</div>
+                    </div>
+                    <div style="padding:12px 16px;overflow:auto;max-height:45vh;">
+                        <div style="display:flex;gap:8px;margin-bottom:12px;">
+                            <button onclick="addLinkPrompt('music')" style="flex:1;padding:8px 10px;background:#1a1a1a;border:1px solid var(--copper);color:#ccc;border-radius:4px;cursor:pointer;font-size:12px;">+ Music Link / MP3 URL</button>
+                            <button onclick="addLinkPrompt('voice')" style="flex:1;padding:8px 10px;background:#1a1a1a;border:1px solid var(--tiffany-blue);color:#ccc;border-radius:4px;cursor:pointer;font-size:12px;">+ Voice Ref MP3 (for beings)</button>
+                        </div>
+                        <div style="margin-bottom:12px;">
+                            <button onclick="importAlbumFromFolder()" style="width:100%;padding:10px;background:#1a1a1a;border:2px solid var(--copper);color:#fff;border-radius:4px;cursor:pointer;font-size:13px;font-weight:700;box-shadow:0 0 8px var(--copper-glow);">🎵 Import My Album "53 Years in the Making" from Folder</button>
+                            <button onclick="addBrockstonTrack(); document.getElementById('music-lib-modal').remove();" style="width:100%;margin-top:6px;padding:8px;background:#2a2a1a;border:1px solid var(--copper);color:#fff;border-radius:4px;cursor:pointer;font-size:12px;">+ Add /Users/EverettN/Downloads/Brockston.mp3 (your track)</button>
+                            <button onclick="playMyAlbum(); document.getElementById('music-lib-modal').remove();" style="width:100%;margin-top:6px;padding:8px;background:var(--copper);border:1px solid #fff;color:#000;border-radius:4px;cursor:pointer;font-size:12px;font-weight:700;">▶ Play Full Album Now (your player, clear as a bell)</button>
+                            <div style="font-size:10px;color:#666;text-align:center;margin-top:4px;">Select the folder with your album MP3s – auto adds as playable tracks (like an Apple Music album import). Or add the specific Brockston.mp3 track.</div>
+                        </div>
+                        <div style="margin-bottom:10px;font-size:10px;color:#666;">Apple Music share links open in Apple Music (like real share). Direct MP3 URLs play here. Use explorer for local files — they auto-play & add.<br><strong>How to get Apple Music link:</strong> Open music.apple.com or Apple Music app > find your track/album > click ... > Share > Copy Link.</div>
+                        <div>${listHtml}</div>
+                    </div>
+                    <div style="padding:10px 16px;border-top:1px solid #222;font-size:10px;color:#555;text-align:center;">
+                        Library saved locally in browser. For team use, consider saving to project data/ folder.
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+        }
+
+        function addLinkPrompt(type) {
+            const title = prompt(`Enter a title for this ${type} item:`);
+            if (!title) return;
+            const src = prompt(`Paste direct MP3 URL (for playback) or Apple Music share link:`);
+            if (!src) return;
+            addToLibrary(title, src, type);
+        }
+
+        function updateMusicStatus(title) {
+            const seg = document.getElementById('sb-music');
+            const trackEl = document.getElementById('sb-music-track');
+            if (seg && trackEl) {
+                trackEl.textContent = title.length > 28 ? title.slice(0,25) + '...' : title;
+                seg.style.display = '';
+            }
+        }
+
+        async function importAlbumFromFolder(defaultAlbum = "53 Years in the Making") {
+            const albumName = prompt("Album name:", defaultAlbum);
+            if (!albumName) return;
+            const folderPath = prompt("Enter folder path containing the MP3s (e.g. ~/Music/53_Years_in_the_Making):");
+            if (!folderPath) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/files?path=${encodeURIComponent(folderPath)}`);
+                if (!res.ok) throw new Error("Could not read folder");
+                const data = await res.json();
+                const audioFiles = (data.files || [])
+                    .filter(f => f.type === 'file' && isAudioFile(f.name))
+                    .map(f => {
+                        const sep = folderPath.endsWith('/') || folderPath.endsWith('\\') ? '' : '/';
+                        return folderPath + sep + f.name;
+                    });
+
+                if (audioFiles.length === 0) {
+                    appendMessage('SYSTEM', 'No audio files found in that folder.', 'system');
+                    return;
+                }
+
+                audioFiles.forEach((src, i) => {
+                    const trackTitle = src.split('/').pop().replace(/\.(mp3|wav|ogg|m4a|flac)$/i, '');
+                    addToLibrary(`${albumName} - ${trackTitle}`, src, 'music', albumName);
+                });
+
+                appendMessage('SYSTEM', `🎉 Imported ${audioFiles.length} tracks from "${albumName}" into your Music & Voice Library.`, 'system');
+                showMusicLibrary();
+            } catch (e) {
+                appendMessage('SYSTEM', `Failed to import album: ${e.message}. Make sure the path is accessible in the explorer.`, 'error');
+            }
+        }
+
+        function playMyAlbum(albumName = "53 Years in the Making") {
+            const albumTracks = musicLibrary.filter(e => e.album === albumName);
+            if (albumTracks.length === 0) {
+                appendMessage('SYSTEM', `No tracks for "${albumName}" in library yet. Use the "Import My Album" button or click MP3s in the explorer.`, 'system');
+                return;
+            }
+            appendMessage('SYSTEM', `🎶 Playing full album: ${albumName} — your player, clear as a bell!`, 'system');
+            let index = 0;
+            function playNext() {
+                if (index >= albumTracks.length) {
+                    appendMessage('SYSTEM', `Album "${albumName}" finished. Want to loop or play another?`, 'system');
+                    return;
+                }
+                const track = albumTracks[index];
+                playFromLibrary(track);
+                // Auto-advance on end
+                userMusic.onended = () => {
+                    index++;
+                    playNext();
+                };
+            }
+            playNext();
+        }
+
+        function addBrockstonTrack() {
+            const path = "/Users/EverettN/Downloads/Brockston.mp3";
+            const title = "Brockston (from 53 Years in the Making)";
+            addToLibrary(title, path, 'music', "53 Years in the Making");
+            appendMessage('SYSTEM', `✅ Added ${title} to your Music & Voice Library (tagged to the album).`, 'system');
+            // Auto-play it right away — your player, clear as a bell
+            playMusicTrack(path);
+        }
+
+        // ---- Multi-file tabs state (the thing that makes it feel like a real IDE) ----
+        let openTabs = []; // {path, content, dirty, lang}
+        let activeTabPath = null;
+
+        function findTab(path) {
+            return openTabs.find(t => t.path === path);
+        }
+        function updateActiveTabContent() {
+            if (!activeTabPath || !monacoEditor) return;
+            const tab = findTab(activeTabPath);
+            if (tab) tab.content = monacoEditor.getValue();
+        }
+        function markTabDirty(path, dirty) {
+            const tab = findTab(path);
+            if (tab) {
+                tab.dirty = !!dirty;
+                renderTabs();
+            }
+        }
+        function renderTabs() {
+            const container = document.getElementById('editor-tabs');
+            if (!container) return;
+            container.innerHTML = '';
+            openTabs.forEach(tab => {
+                const el = document.createElement('div');
+                el.className = 'editor-tab' + (tab.path === activeTabPath ? ' active' : '') + (tab.dirty ? ' dirty' : '');
+                el.innerHTML = `
+                    <span class="tab-name" title="${escapeHtml(tab.path)}">${escapeHtml(tab.path.split('/').pop())}</span>
+                    <span class="tab-close" title="Close">×</span>
+                `;
+                el.onclick = (e) => {
+                    if (e.target.classList.contains('tab-close')) {
+                        closeTab(tab.path);
+                    } else {
+                        switchTab(tab.path);
+                    }
+                };
+                container.appendChild(el);
+            });
+            // update indicator
+            const ind = document.getElementById('editor-file-indicator');
+            if (ind) ind.textContent = activeTabPath ? activeTabPath : '';
+        }
+        function switchTab(path) {
+            if (!monacoEditor || !path) return;
+            updateActiveTabContent();
+            const tab = findTab(path);
+            if (!tab) return;
+            activeTabPath = path;
+            currentFile = path; // keep legacy compat
+            const lang = tab.lang || languageFromName(path);
+            monacoEditor.setValue(tab.content || '');
+            try {
+                monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
+            } catch(e){}
+            renderTabs();
+            // status
+            const fname = document.getElementById('sb-file-name');
+            const lname = document.getElementById('sb-lang-name');
+            if (fname) fname.textContent = path;
+            if (lname) lname.textContent = lang;
+            if (placeholder) placeholder.style.display = 'none';
+        }
+        function closeTab(path) {
+            const idx = openTabs.findIndex(t => t.path === path);
+            if (idx === -1) return;
+            const wasActive = path === activeTabPath;
+            openTabs.splice(idx, 1);
+            if (wasActive) {
+                activeTabPath = null;
+                currentFile = null;
+                if (openTabs.length) {
+                    switchTab(openTabs[openTabs.length-1].path);
+                } else if (monacoEditor) {
+                    monacoEditor.setValue('');
+                    const fname = document.getElementById('sb-file-name');
+                    if (fname) fname.textContent = 'no file open';
+                    if (placeholder) placeholder.style.display = '';
+                }
+            }
+            renderTabs();
+        }
+        function openOrFocusFile(filepath, content) {
+            let tab = findTab(filepath);
+            if (!tab) {
+                const lang = languageFromName(filepath);
+                tab = { path: filepath, content: content || '', dirty: false, lang };
+                openTabs.push(tab);
+            } else {
+                tab.content = content || tab.content;
+            }
+            switchTab(filepath);
+            if (placeholder) placeholder.style.display = 'none';
+            renderTabs();
+        }
 
         // Sync the file explorer when the terminal changes directory.
         // Called with an absolute path from the shell's OSC 7 emission.
@@ -582,8 +1115,16 @@
             loadFiles(absPath);
         }
 
-        // ----- Music toggle
+        // ----- Music toggle (smart: stops user music too, for the old school tracks)
         btnMusic.addEventListener('click', () => {
+            if (userMusic && !userMusic.paused && currentMusicTrack) {
+                userMusic.pause();
+                const musicSeg = document.getElementById('sb-music');
+                if (musicSeg) musicSeg.style.display = 'none';
+                currentMusicTrack = null;
+                appendMessage('SYSTEM', '⏹️ Stopped user track', 'system');
+                return;
+            }
             if (isMusicPlaying) {
                 bgMusic.pause();
                 btnMusic.classList.remove('active');
@@ -595,6 +1136,11 @@
                 btnMusic.querySelector('i').className = 'fas fa-pause-circle';
             }
             isMusicPlaying = !isMusicPlaying;
+        });
+
+        // Double-click the music icon to open the Music & Voice Library (MP3 voice files + Apple Music links)
+        btnMusic.addEventListener('dblclick', () => {
+            showMusicLibrary();
         });
 
         // ----- Voice toggle
@@ -628,25 +1174,168 @@
             }
         }
 
-        // ----- Chat
-        async function sendChat() {
-            const text = chatInput.value.trim();
+        // ----- Chat (now sends editor context so the beings actually know what you're looking at)
+        async function sendChat(extraContext = '') {
+            let text = chatInput.value.trim();
             if (!text) return;
+            if (extraContext) text = extraContext + '\n\n' + text;
+
+            // build rich context for the AI
+            let payloadMessage = text;
+            if (activeTabPath) {
+                const tab = findTab(activeTabPath);
+                const snippet = tab ? (tab.content || '').slice(0, 2400) : '';
+                const sel = monacoEditor ? monacoEditor.getModel().getValueInRange(monacoEditor.getSelection()) : '';
+                const ctx = sel ? sel.slice(0, 1800) : snippet;
+                payloadMessage = `[CURRENT FILE: ${activeTabPath}]\n` +
+                    (sel ? '```selection\n' + sel + '\n```\n' : '') +
+                    (sel ? '' : '```' + (activeTabPath.split('.').pop()) + '\n' + ctx + '\n```\n') +
+                    text;
+            }
+
             appendMessage('YOU', text, 'user');
             chatInput.value = '';
             try {
-                const res = await fetch(`${API_BASE}/chat`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({message: text})
-                });
-                if (!res.ok) throw new Error(`Server error: ${res.status}`);
-                const data = await res.json();
-                appendMessage('BROCKSTON', data.response, 'ai');
-                speakText(String(data.response).replace(/\[.*?\]/g, ''));
+                if (selectedInstructor === 'fable5') {
+                    await sendToFable5(payloadMessage, 'FABLE5');
+                } else if (selectedInstructor === 'perplexity') {
+                    await sendToPerplexity(payloadMessage, 'PERPLEXITY');
+                } else {
+                    const res = await fetch(`${API_BASE}/chat`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({message: payloadMessage})
+                    });
+                    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                    const data = await res.json();
+                    const who = (data.response || '').includes('ULTIMATE_EV') ? 'ULTIMATE_EV' : 'BROCKSTON';
+                    appendMessage(who, data.response, 'ai');
+                    speakText(String(data.response).replace(/\[.*?\]/g, ''));
+                }
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[ERROR]: ${err.message}`, 'error');
+            }
+        }
+
+        // Quick action helper — used by the chips
+        function quickAsk(instruction) {
+            if (!activeTabPath) {
+                appendMessage('SYSTEM', 'Open a file first so I have context for ' + instruction, 'system');
+                return;
+            }
+            const tab = findTab(activeTabPath);
+            const sel = monacoEditor ? monacoEditor.getModel().getValueInRange(monacoEditor.getSelection()) : '';
+            const body = sel || (tab ? tab.content : '');
+            const ctx = sel ? 'SELECTION' : 'FILE';
+            const prompt = `${instruction} the ${ctx.toLowerCase()} below. Be precise and give clean code when appropriate.\n\n[${ctx}: ${activeTabPath}]\n\`\`\`\n${body.slice(0,2200)}\n\`\`\``;
+            chatInput.value = '';
+            appendMessage('YOU', instruction, 'user');
+
+            if (selectedInstructor === 'fable5') {
+                sendToFable5(prompt, 'FABLE5');
+            } else if (selectedInstructor === 'perplexity') {
+                sendToPerplexity(prompt, 'PERPLEXITY');
+            } else {
+                // send directly with the constructed rich message
+                fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: prompt})
+                }).then(r => r.json()).then(data => {
+                    const who = (data.response || '').includes('ULTIMATE_EV') ? 'ULTIMATE_EV' : 'BROCKSTON';
+                    appendMessage(who, data.response, 'ai');
+                    speakText(String(data.response).replace(/\[.*?\]/g, ''));
+                }).catch(e => appendMessage('SYSTEM', '[ERROR] ' + e.message, 'error'));
+            }
+        }
+
+        function setInstructor(instructor) {
+            selectedInstructor = instructor;
+            // Update button active states
+            document.querySelectorAll('#instructor-selector .inst-btn').forEach(b => b.classList.remove('active'));
+            const activeBtn = document.getElementById('inst-' + instructor);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            let label;
+            if (instructor === 'fable5') label = 'Claude-Fable5 (additional instructor)';
+            else if (instructor === 'perplexity') label = 'Perplexity Sonar (live search & citations)';
+            else label = 'the Family';
+
+            appendMessage('SYSTEM', `Switched to ${label}. Context from open files will be sent.`, 'system');
+
+            // Update input placeholder for the current instructor
+            const input = document.getElementById('chat-input');
+            if (input) {
+                if (instructor === 'fable5') {
+                    input.placeholder = "Ask Fable5 (Claude instructor — sends current file/selection)...";
+                } else if (instructor === 'perplexity') {
+                    input.placeholder = "Ask Perplexity (live web search with citations — sends context)...";
+                } else {
+                    input.placeholder = "Ask a question... (or use the mic — sends your open file as context)";
+                }
+            }
+
+            // Update status bar
+            const instLabel = document.getElementById('sb-inst-name');
+            if (instLabel) {
+                if (instructor === 'fable5') {
+                    instLabel.textContent = 'Fable5';
+                    instLabel.style.color = 'var(--neon-orange)';
+                } else if (instructor === 'perplexity') {
+                    instLabel.textContent = 'Perplexity';
+                    instLabel.style.color = '#00B4D8';
+                } else {
+                    instLabel.textContent = 'Family';
+                    instLabel.style.color = '';
+                }
+            }
+
+            // Visual mode on the panel for Fable5
+            const aiPanel = document.getElementById('ai-panel');
+            if (aiPanel) {
+                if (instructor === 'fable5') {
+                    aiPanel.classList.add('fable5-mode');
+                } else {
+                    aiPanel.classList.remove('fable5-mode');
+                }
+            }
+        }
+
+        async function sendToFable5(text, whoLabel = 'FABLE5') {
+            try {
+                const messages = [{ role: "user", content: text }];
+                const res = await fetch(`${API_BASE}/fable5`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ messages, system: "" })
+                });
+                if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                const data = await res.json();
+                appendMessage(whoLabel, data.content || '', 'ai');
+                speakText(String(data.content || '').replace(/\[.*?\]/g, ''));
+            } catch (err) {
+                console.error(err);
+                appendMessage('SYSTEM', `[FABLE5 ERROR]: ${err.message}`, 'error');
+            }
+        }
+
+        async function sendToPerplexity(text, whoLabel = 'PERPLEXITY') {
+            try {
+                // Perplexity takes a prompt (we already built rich context + file/selection into `text`)
+                const res = await fetch(`${API_BASE}/perplexity`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message: text })
+                });
+                if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                const data = await res.json();
+                appendMessage(whoLabel, data.response || '', 'ai');
+                // Perplexity answers are usually long and grounded — speak the summary if voice mode on
+                speakText(String(data.response || '').replace(/\[.*?\]/g, '').substring(0, 600));
+            } catch (err) {
+                console.error(err);
+                appendMessage('SYSTEM', `[PERPLEXITY ERROR]: ${err.message}`, 'error');
             }
         }
 
@@ -734,7 +1423,7 @@
                 <p><b style="color:var(--neon-orange);">Workspace:</b> ${escapeHtml(workspaceRoot || '(not yet announced)')}</p>
                 <p><b style="color:var(--neon-orange);">Terminal:</b> ${ws && ws.readyState === WebSocket.OPEN ? 'connected' : 'disconnected'}</p>
                 <hr style="border:0;border-top:1px solid #222;margin:14px 0;">
-                <p style="color:#888;font-size:0.78rem;">Configurable settings UI is on the roadmap. For now, change ports and models via <code style="color:var(--neon-orange);">.env</code> at the repo root, then restart with <code style="color:var(--neon-orange);">./start.sh</code>.</p>
+                <p style="color:#888;font-size:0.78rem;">For the kids (6-8k students/month): this board must stay simple, voice-friendly, and reliable. CDNs (Monaco, xterm, fonts) are used — when bundling for Ollama/Ami distribution, vendor the assets or ensure the provided internet reaches every classroom. Change models/ports in <code style="color:var(--neon-orange);">.env</code> + <code style="color:var(--neon-orange);">./start.sh</code>.</p>
             `);
         });
 
@@ -781,8 +1470,12 @@
                 (data.files || []).forEach(file => {
                     const el = document.createElement('div');
                     el.className = 'file-item';
-                    const icon  = file.type === 'folder' ? 'fa-folder' : 'fa-file-code';
-                    const color = file.type === 'folder' ? '#FF5F1F'  : '#00B4D8';
+                    let icon = file.type === 'folder' ? 'fa-folder' : 'fa-file-code';
+                    let color = file.type === 'folder' ? '#FF5F1F' : '#00B4D8';
+                    if (file.type === 'file' && isAudioFile(file.name)) {
+                        icon = 'fa-music';
+                        color = '#FF5F1F';
+                    }
                     el.innerHTML = `<i class="fas ${icon}" style="color:${color}"></i> ${escapeHtml(file.name)}`;
                     // Always pass absolute child path; backend handles either form
                     const childPath = currentPath
@@ -811,23 +1504,58 @@
             return map[ext] || 'plaintext';
         }
 
+        function isAudioFile(name) {
+            return /\.(mp3|wav|ogg|m4a|flac|aac)$/i.test(name);
+        }
+
+        function playMusicTrack(filepath) {
+            if (!filepath) return;
+            currentMusicTrack = filepath;
+            const url = `${API_BASE}/audio?filename=${encodeURIComponent(filepath)}`;
+            userMusic.src = url;
+            const trackName = filepath.split('/').pop();
+            userMusic.play().then(() => {
+                appendMessage('SYSTEM', `🎵 Now playing: ${trackName} — old school rock & Soul Train in the house`, 'system');
+                updateMusicStatus(trackName);
+
+                // Auto-add to library (detect voice refs)
+                const type = /voice|ref|sample|being/i.test(filepath) ? 'voice' : 'music';
+                let album = null;
+                if (filepath.includes('Brockston.mp3') || /53.?years|53 years in the making/i.test(filepath)) {
+                    album = "53 Years in the Making";
+                }
+                if (!musicLibrary.some(e => e.source === filepath)) {
+                    addToLibrary(trackName, filepath, type, album);
+                }
+            }).catch(err => {
+                appendMessage('SYSTEM', `Music play failed: ${err.message}. Try terminal: afplay "${filepath}"`, 'error');
+            });
+
+            if (isMusicPlaying) {
+                bgMusic.pause();
+                isMusicPlaying = false;
+                btnMusic.classList.remove('active');
+                btnMusic.querySelector('i').className = 'fas fa-music';
+            }
+
+            userMusic.onended = () => {
+                const musicSeg = document.getElementById('sb-music');
+                if (musicSeg) musicSeg.style.display = 'none';
+                currentMusicTrack = null;
+            };
+        }
+
         async function openFile(filepath) {
+            if (isAudioFile(filepath)) {
+                playMusicTrack(filepath);
+                return;
+            }
             try {
                 const res = await fetch(`${API_BASE}/read_file?filename=${encodeURIComponent(filepath)}`);
                 if (!res.ok) throw new Error("Read failed");
                 const data = await res.json();
-                currentFile = filepath;
-                if (placeholder) placeholder.style.display = 'none';
-                const lang = languageFromName(filepath);
-                if (monacoEditor) {
-                    monacoEditor.setValue(data.content || '');
-                    monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
-                }
-                // Update status bar
-                const fname = document.getElementById('sb-file-name');
-                const lname = document.getElementById('sb-lang-name');
-                if (fname) fname.textContent = filepath;
-                if (lname) lname.textContent = lang;
+                openOrFocusFile(filepath, data.content || '');
+                // openOrFocusFile already handles monaco + status + placeholder + renderTabs
             } catch (err) {
                 alert("Cannot read file: " + err.message);
             }
@@ -863,46 +1591,38 @@
                 renderLineHighlight: 'all',
                 cursorBlinking: 'smooth'
             });
-            // Status bar: cursor position
+
+            // Cursor + selection in status bar (now tracks selection too)
             monacoEditor.onDidChangeCursorPosition(e => {
                 const el = document.getElementById('sb-cursor-pos');
                 if (el) el.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
             });
-            window.addEventListener('keydown', async e => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                    e.preventDefault();
-                    if (!currentFile) {
-                        appendMessage('SYSTEM', 'No file open to save.', 'system');
-                        return;
-                    }
-                    try {
-                        const content = monacoEditor.getValue();
-                        const res = await fetch(`${API_BASE}/write_file`, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({filename: currentFile, content})
-                        });
-                        if (!res.ok) {
-                            const err = await res.json().catch(() => ({detail: res.statusText}));
-                            throw new Error(err.detail || `HTTP ${res.status}`);
-                        }
-                        const data = await res.json();
-                        // Flash status bar instead of cluttering the chat
-                        const el = document.getElementById('sb-file-name');
-                        if (el) {
-                            const orig = el.textContent;
-                            el.textContent = `✓ saved ${data.bytes}b — ${orig}`;
-                            el.style.color = '#4ade80';
-                            setTimeout(() => {
-                                el.textContent = orig;
-                                el.style.color = '';
-                            }, 1800);
-                        }
-                    } catch (err) {
-                        appendMessage('SYSTEM', `[ERROR]: Save failed — ${err.message}`, 'error');
-                    }
+            monacoEditor.onDidChangeCursorSelection(e => {
+                const sel = e.selection;
+                const hasSel = sel.startLineNumber !== sel.endLineNumber || sel.startColumn !== sel.endColumn;
+                const el = document.getElementById('sb-cursor-pos');
+                if (el && hasSel) {
+                    el.textContent = `Ln ${sel.startLineNumber}:${sel.endLineNumber}, Col ${sel.startColumn}-${sel.endColumn} (sel)`;
                 }
             });
+
+            // Dirty tracking on edits
+            monacoEditor.onDidChangeModelContent(() => {
+                if (activeTabPath) {
+                    markTabDirty(activeTabPath, true);
+                }
+            });
+
+            // Save (Cmd/Ctrl+S) — now tab-aware + marks clean on success
+            window.addEventListener('keydown', async e => {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                    e.preventDefault();
+                    await performSave();
+                }
+            });
+
+            // Wire the action buttons (they may exist from the start)
+            setTimeout(wireEditorActions, 50);
         });
 
         // ----- Terminal (xterm.js + websocket)
@@ -1003,19 +1723,329 @@
         });
 
         // ----- Boot
-        loadFiles();
+        loadFiles().then(() => {
+            // Apply any filter that might have been typed early + initial friendly state
+            setTimeout(() => {
+                const fi = document.getElementById('explorer-filter');
+                if (fi && fi.value) {
+                    try { fi.dispatchEvent(new Event('input')); } catch(e){}
+                }
+            }, 80);
+        }).catch(() => {});
         window.addEventListener('focus', () => term.focus());
+
+        // Default to Family, highlight Fable5 + Perplexity as available additional instructors
+        setTimeout(() => {
+            setInstructor('family'); // This will set active class + status bar + placeholder
+            const fableBtn = document.getElementById('inst-fable5');
+            const perpBtn = document.getElementById('inst-perplexity');
+            if (fableBtn) {
+                // Give Fable5 a distinct subtle highlight to signal it's the new additional instructor
+                fableBtn.style.border = '1px solid #444';
+            }
+            if (perpBtn) {
+                // Subtle highlight for Perplexity (search guy)
+                perpBtn.style.border = '1px solid #444';
+            }
+            // Gentle nudge for the new track if user hasn't added it yet
+            if (!musicLibrary.some(e => e.source.includes('Brockston.mp3'))) {
+                appendMessage('SYSTEM', '🎵 Your Brockston.mp3 from Downloads is ready to add — open the Lib and hit the specific track button, or browse to it in the explorer (auto-adds to the album).', 'system');
+            }
+        }, 120);
 
         // Window resize — refit terminal so prompt stays visible
         window.addEventListener('resize', () => {
             try { fitAddon.fit(); } catch (e) {}
         });
+
+        // ---- Explorer polish wiring (filter + new file + refresh)
+        (function wireExplorerExtras() {
+            const filterInput = document.getElementById('explorer-filter');
+            const refreshBtn = document.getElementById('btn-refresh-explorer');
+            const newFileBtn = document.getElementById('btn-new-file');
+            let filterVal = '';
+
+            function applyFilter() {
+                if (!filterInput) return;
+                filterVal = filterInput.value.toLowerCase();
+                const items = document.querySelectorAll('#file-list .file-item');
+                items.forEach(it => {
+                    const name = (it.textContent || '').toLowerCase();
+                    it.style.display = !filterVal || name.includes(filterVal) ? '' : 'none';
+                });
+            }
+            if (filterInput) {
+                filterInput.addEventListener('input', applyFilter);
+                // also re-apply after any loadFiles (the loadFiles doesn't know about filter)
+            }
+
+            // Robust filter re-apply after any load (we call it manually from refresh + after initial renders)
+            function safeApplyFilter() {
+                try { applyFilter(); } catch(e) {}
+            }
+
+            if (refreshBtn) refreshBtn.onclick = () => {
+                const p = currentPath || '';
+                loadFiles(p).finally(safeApplyFilter);
+            };
+            if (newFileBtn) newFileBtn.onclick = async () => {
+                const base = currentPath || workspaceRoot || '.';
+                // Use a simple in-UI prompt instead of native prompt() for better accessibility
+                const name = await askForFilename();
+                if (!name) return;
+                const full = (base.endsWith('/') || base === '' ? base : base + '/') + name;
+                try {
+                    await fetch(`${API_BASE}/write_file`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({filename: full, content: ''})
+                    });
+                    await loadFiles(currentPath || '');
+                    safeApplyFilter();
+                    setTimeout(() => openFile(full), 150);
+                } catch (e) {
+                    appendMessage('SYSTEM', `Could not create the new file. ${e.message}. Try a simple name like notes.txt`, 'error');
+                }
+            };
+
+            if (filterInput) {
+                // Re-apply whenever user types
+                filterInput.addEventListener('input', safeApplyFilter);
+            }
+        })();
+
+        // ====================================================================
+        // NEW: Tab-aware save + editor action buttons + run-in-terminal
+        // ====================================================================
+        async function performSave(specificPath) {
+            const path = specificPath || activeTabPath || currentFile;
+            if (!path || !monacoEditor) {
+                appendMessage('SYSTEM', 'Open a file first, then we can save it for you. Try clicking one in the explorer!', 'system');
+                return;
+            }
+            updateActiveTabContent();
+            const tab = findTab(path);
+            const content = tab ? tab.content : monacoEditor.getValue();
+            try {
+                const res = await fetch(`${API_BASE}/write_file`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({filename: path, content})
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({detail: res.statusText}));
+                    throw new Error(err.detail || `HTTP ${res.status}`);
+                }
+                const data = await res.json();
+                if (tab) tab.dirty = false;
+                renderTabs();
+                // nice flash on status
+                const el = document.getElementById('sb-file-name');
+                if (el) {
+                    const orig = el.textContent;
+                    el.textContent = `✓ saved ${data.bytes}b`;
+                    el.style.color = '#4ade80';
+                    setTimeout(() => {
+                        el.textContent = orig || path;
+                        el.style.color = '';
+                    }, 1400);
+                }
+            } catch (err) {
+                appendMessage('SYSTEM', `[ERROR]: Save failed — ${err.message}`, 'error');
+            }
+        }
+
+        function wireEditorActions() {
+            const btnSave = document.getElementById('btn-save');
+            const btnSaveAll = document.getElementById('btn-save-all');
+            const btnClose = document.getElementById('btn-close-tab');
+            const btnRun = document.getElementById('btn-run');
+
+            if (btnSave) btnSave.onclick = () => performSave();
+            if (btnSaveAll) btnSaveAll.onclick = async () => {
+                for (const t of [...openTabs]) {
+                    if (t.dirty) await performSave(t.path);
+                }
+            };
+            if (btnClose) btnClose.onclick = () => {
+                if (activeTabPath) closeTab(activeTabPath);
+            };
+            if (btnRun) btnRun.onclick = () => {
+                if (!activeTabPath || !ws || ws.readyState !== WebSocket.OPEN) {
+                    appendMessage('SYSTEM', 'Open a file first, then click Run. The terminal will run it and show you what happens — ask Brockston if it does something unexpected!', 'system');
+                    return;
+                }
+                const ext = activeTabPath.split('.').pop().toLowerCase();
+                let cmd = '';
+                if (ext === 'py') cmd = `python3 "${activeTabPath}"`;
+                else if (ext === 'js' || ext === 'mjs') cmd = `node "${activeTabPath}"`;
+                else if (ext === 'sh') cmd = `bash "${activeTabPath}"`;
+                else cmd = `cat "${activeTabPath}"`; // fallback: show it
+                ws.send(JSON.stringify({type:'input', data: cmd + '\n'}));
+                // focus terminal
+                try { term.focus(); } catch(e){}
+                const st = document.getElementById('sb-term-state');
+                if (st) st.textContent = 'running...';
+                setTimeout(() => { if (st) st.textContent = 'terminal connected'; }, 4000);
+            };
+        }
+
+        // Make save also available from chat quick context if needed (global for console too)
+        window.brockstonPerformSave = performSave;
+
+        // ====================================================================
+        // Accessible filename prompt (replaces ugly native prompt for kids)
+        // ====================================================================
+        function askForFilename() {
+            return new Promise((resolve) => {
+                const existing = document.getElementById('modal-overlay');
+                if (existing) existing.remove();
+
+                const overlay = document.createElement('div');
+                overlay.id = 'modal-overlay';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(3px);';
+                overlay.innerHTML = `
+                    <div style="background:#0a0a0c;border:2px solid var(--neon-orange);border-radius:8px;min-width:320px;max-width:420px;box-shadow:0 0 40px rgba(255,95,31,0.3);">
+                        <div style="padding:16px 18px;border-bottom:1px solid rgba(255,95,31,0.25);color:var(--neon-orange);font-family:var(--font-ui);font-weight:700;letter-spacing:1px;">New file</div>
+                        <div style="padding:18px 18px 8px;">
+                            <div style="color:#ccc;font-size:0.9rem;margin-bottom:8px;">Name for the new file (simple is best):</div>
+                            <input id="newfile-name" type="text" value="untitled.txt" style="width:100%;background:#111;border:1px solid #333;color:#fff;padding:10px;font-family:var(--font-term);border-radius:4px;font-size:14px;">
+                            <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+                                <button id="newfile-cancel" style="background:#222;border:1px solid #444;color:#aaa;padding:6px 14px;border-radius:4px;cursor:pointer;font-family:var(--font-ui);">Cancel</button>
+                                <button id="newfile-ok" style="background:var(--neon-orange);border:none;color:#000;padding:6px 18px;border-radius:4px;font-weight:700;cursor:pointer;font-family:var(--font-ui);">Create</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                const input = overlay.querySelector('#newfile-name');
+                const ok = overlay.querySelector('#newfile-ok');
+                const cancel = overlay.querySelector('#newfile-cancel');
+
+                const cleanup = (val) => {
+                    overlay.remove();
+                    resolve(val);
+                };
+
+                ok.onclick = () => cleanup(input.value.trim() || null);
+                cancel.onclick = () => cleanup(null);
+                overlay.onclick = (e) => { if (e.target === overlay) cleanup(null); };
+                input.onkeydown = (e) => { if (e.key === 'Enter') ok.click(); if (e.key === 'Escape') cleanup(null); };
+
+                setTimeout(() => { input.focus(); input.select(); }, 30);
+            });
+        }
+
+        // ====================================================================
+        // Voice INPUT (browser SpeechRecognition) — critical for nonverbal kids
+        // Uses built-in Web Speech API (works great in Chrome/Edge). Falls back silently.
+        // When voice mode is on or user clicks mic, they can dictate directly into chat.
+        // ====================================================================
+        let voiceRecognition = null;
+        let isListening = false;
+
+        function setupVoiceInput() {
+            const micBtn = document.getElementById('mic-btn');
+            if (!micBtn) return;
+
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRec) {
+                micBtn.title = 'Voice input not supported in this browser (try Chrome/Edge)';
+                micBtn.style.opacity = '0.4';
+                micBtn.style.cursor = 'not-allowed';
+                return;
+            }
+
+            voiceRecognition = new SpeechRec();
+            voiceRecognition.continuous = false;
+            voiceRecognition.interimResults = true;
+            voiceRecognition.lang = 'en-US';
+
+            voiceRecognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    transcript += event.results[i][0].transcript;
+                }
+                const chatInput = document.getElementById('chat-input');
+                if (chatInput) {
+                    chatInput.value = transcript.trim();
+                    // For nonverbal users: auto-send after final result if voice mode is enabled
+                    if (event.results[event.results.length-1].isFinal && isVoiceModeEnabled) {
+                        setTimeout(() => {
+                            const sendBtnEl = document.getElementById('send-btn');
+                            if (sendBtnEl) sendBtnEl.click();
+                        }, 250);
+                    }
+                }
+            };
+
+            voiceRecognition.onerror = (e) => {
+                console.warn('Speech rec error', e);
+                stopListeningUI();
+                const chatHist = document.getElementById('chat-history');
+                if (chatHist) {
+                    appendMessage('SYSTEM', 'Voice input had trouble hearing. You can type or try again.', 'error');
+                }
+            };
+
+            voiceRecognition.onend = () => {
+                stopListeningUI();
+            };
+
+            micBtn.onclick = () => {
+                if (isListening) {
+                    voiceRecognition.stop();
+                    return;
+                }
+                try {
+                    voiceRecognition.start();
+                    startListeningUI();
+                } catch (err) {
+                    console.error(err);
+                    stopListeningUI();
+                }
+            };
+
+            // Bonus: if voice mode is toggled on, make mic more obvious
+            const origVoiceToggle = btnVoice ? btnVoice.onclick : null;
+            // We don't override, just style hint on toggle (the existing voice listener already runs)
+        }
+
+        function startListeningUI() {
+            isListening = true;
+            const micBtn = document.getElementById('mic-btn');
+            if (micBtn) {
+                micBtn.style.background = 'var(--neon-orange)';
+                micBtn.style.color = '#000';
+                micBtn.style.borderColor = '#000';
+                micBtn.innerHTML = '●';
+            }
+        }
+
+        function stopListeningUI() {
+            isListening = false;
+            const micBtn = document.getElementById('mic-btn');
+            if (micBtn) {
+                micBtn.style.background = '#111';
+                micBtn.style.color = 'var(--neon-orange)';
+                micBtn.style.borderColor = 'var(--neon-orange)';
+                micBtn.innerHTML = '🎤';
+            }
+        }
+
+        // Call setup after everything is ready
+        setTimeout(setupVoiceInput, 300);
     </script>
 
-    <!-- Core app script, no Claude hook -->
-    <!-- app.js intentionally not loaded: its loadFiles() conflicted with the inline
-         implementation above and silently failed because of an undefined `elements`
-         reference, leaving the file explorer stuck on "Loading...". Inline JS is
-         the canonical board logic. -->
+    <!-- 
+      Brockston Studio IDE Board — improved.
+      - Multi-file tabs + dirty state + Save / Save All / Run (sends to live terminal)
+      - Context-aware chat (sends open file + selection to the beings automatically)
+      - Quick action chips (Explain / Refactor / Find bugs / Write tests)
+      - Explorer filter + New File + Refresh
+      - Better status (selection range), pro polish on the neon theme
+      The beings now have eyes on your code when you talk to them.
+    -->
 </body>
 </html>

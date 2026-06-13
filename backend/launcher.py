@@ -58,8 +58,40 @@ async def root():
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
+    # Sensory wiring: enrich with live student ear (tone/energy from mcp improved processor) + vision
+    # so the beings actually hear/see the student in real time instead of text-only.
+    # Requires mcp bridge up + feeders (continuous_mic for ear, vision_capture for screen).
     try:
-        reply = await agent.chat(messages=request.messages, context=request.context)
+        import httpx
+        sensory_msgs = []
+        async with httpx.AsyncClient(timeout=1.5) as c:
+            lr = await c.get("http://localhost:8765/latest")
+            live = lr.json() or {}
+            if live.get("text"):
+                sensory_msgs.append({
+                    "role": "system",
+                    "content": f"[LIVE STUDENT EAR from mcp bridge - energy={live.get('energy')} tone={live.get('tone')}] {live.get('text')}"
+                })
+            # recent for flow
+            try:
+                rr = await c.get("http://localhost:8765/recent?count=3")
+                rec = rr.json()
+                if isinstance(rec, str) and rec and "No recent" not in rec:
+                    sensory_msgs.append({"role": "system", "content": f"[RECENT HEARD]\n{rec}"})
+            except:
+                pass
+            # vision
+            vr = await c.get("http://localhost:8765/vision/latest")
+            v = vr.json() or {}
+            if v.get("b64"):
+                sensory_msgs.append({"role": "system", "content": "[STUDENT CURRENT VIEW available - use mcp get_current_view or describe for beings]"})
+    except Exception:
+        sensory_msgs = []
+
+    enriched_messages = (sensory_msgs + request.messages) if sensory_msgs else request.messages
+
+    try:
+        reply = await agent.chat(messages=enriched_messages, context=request.context)
         return {"reply": reply}
     except Exception as e:
         logger.error(f"Chat error: {e}")
@@ -146,17 +178,36 @@ async def execute_code(request: ExecuteRequest):
 
 @app.post("/api/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
-    """Transcribe audio to text (currently mock)"""
+    """Transcribe audio to text. Prefers live student ear from mcp-media-ingestor bridge (real-time with energy/tone from improved silence-tail processor) when active. Falls back to mock/upload."""
     try:
+        # Wire to mcp-media-ingestor live ear (8765). Run the bridge + continuous_mic.py (your Maonocaster E2) or mic_capture for student voice.
+        # This gives beings (Brockston, AlphaVox) the rich live hearing (energy + tone + recent context) instead of mock.
+        import httpx
+        try:
+            r = await httpx.AsyncClient(timeout=1.5).get("http://localhost:8765/latest")
+            data = r.json()
+            if data.get("text"):
+                # Now includes our improvements: energy, tone, timing
+                return {
+                    "text": data.get("text"),
+                    "energy": data.get("energy"),
+                    "tone": data.get("tone"),
+                    "timestamp": data.get("timestamp"),
+                    "source": "mcp-media-ingestor-live-ear",
+                    "note": "Live from sensory bridge (ear). Start continuous_mic.py in mcp dir + the bridge for real student voice."
+                }
+        except Exception:
+            pass  # bridge not up or no audio yet - fall through
+
         audio_data = await file.read()
         
-        # For now, return mock transcription
-        # In future: integrate with speech_service.transcribe_audio()
+        # Fallback mock (original behavior)
         return {
-            "text": "[Speech input - students can speak into browser microphone]",
+            "text": "[Speech input - students can speak into browser microphone. For live: run mcp bridge + continuous_mic.py]",
             "confidence": 0.75,
             "filename": file.filename,
-            "size": len(audio_data)
+            "size": len(audio_data),
+            "source": "mock"
         }
     except Exception as e:
         logger.error(f"Transcription error: {e}")
