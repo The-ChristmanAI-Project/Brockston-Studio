@@ -417,7 +417,7 @@
             border-color: var(--copper) !important;
             color: #ddd;
         }
-        #ai-panel.fable5-mode .quick-action:hover {
+        #ai-panel.claude-mode .quick-action:hover {
             border-color: var(--tiffany-blue) !important;
             box-shadow: 0 0 6px var(--tiffany-glow);
         }
@@ -426,13 +426,13 @@
         .msg.ai {
             border-left: 3px solid var(--neon-orange);
         }
-        #ai-panel.fable5-mode .msg.ai {
+        #ai-panel.claude-mode .msg.ai {
             border-left-color: var(--tiffany-blue);
         }
         .msg .ai-header {
             color: var(--neon-orange);
         }
-        #ai-panel.fable5-mode .msg .ai-header {
+        #ai-panel.claude-mode .msg .ai-header {
             color: var(--tiffany-blue);
         }
 
@@ -477,7 +477,7 @@
             flex-direction: column;
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
-        #ai-panel.fable5-mode {
+        #ai-panel.claude-mode {
             border: 1px solid var(--tiffany-blue);
             box-shadow: inset 0 0 20px rgba(64,224,208,0.08), 0 0 12px var(--tiffany-glow);
         }
@@ -600,7 +600,7 @@
         #inst-family.active {
             border: 1px solid var(--neon-orange) !important;
         }
-        #inst-fable5.active {
+        #inst-claude.active {
             border: 1px solid var(--tiffany-blue) !important;
             box-shadow: 0 0 8px var(--tiffany-glow);
         }
@@ -616,10 +616,10 @@
             background: #2a1f18;
             color: #fff;
         }
-        #inst-fable5 {
+        #inst-claude {
             color: var(--tiffany-blue) !important;
         }
-        #inst-fable5.active {
+        #inst-claude.active {
             background: #0f2a2a !important;
             border-color: var(--tiffany-blue) !important;
         }
@@ -712,7 +712,7 @@
                 <div><i class="fas fa-brain" style="margin-right: 5px;"></i> ASK THE BEINGS</div>
                 <div id="instructor-selector" style="display:flex; gap:2px; font-size:10px; background:#050505; border:1px solid #222; border-radius:4px; padding:2px;">
                     <button onclick="setInstructor('family')" id="inst-family" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
-                    <button onclick="setInstructor('fable5')" id="inst-fable5" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Fable5</button>
+                    <button onclick="setInstructor('claude')" id="inst-claude" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
                     <button onclick="setInstructor('perplexity')" id="inst-perplexity" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Perplexity</button>
                     <button onclick="showMusicLibrary()" title="Music & Voice MP3 Library — local voice refs + Apple Music links (like a personal streaming lib)" style="padding:3px 8px; background:#1f1f1f; color:var(--copper-light); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px;">Lib</button>
                     <button onclick="playMyAlbum()" title="Play your album '53 Years in the Making' — the player, clear as a bell!" style="padding:3px 8px; background:#1f1f1f; color:var(--copper); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px; font-weight:700;">▶ Album</button>
@@ -728,7 +728,7 @@
             </div>
 
             <div id="chat-history">
-                <span class="system-tag">[BROCKSTON FAMILY]: How can we help you love yourself more today? Open a file or just talk to us. <strong>Fable5</strong> (Claude) and <strong>Perplexity</strong> (live search) are now available as additional instructors. Your album "53 Years in the Making" (incl. Brockston.mp3) is ready in the Music Library — hit ▶ Album or the specific track button.</span>
+                <span class="system-tag">[BROCKSTON FAMILY]: How can we help you love yourself more today? Open a file or just talk to us. <strong>Claude</strong> and <strong>Perplexity</strong> (live search) are now available as additional instructors. Your album "53 Years in the Making" (incl. Brockston.mp3) is ready in the Music Library — hit ▶ Album or the specific track button.</span>
             </div>
             <div id="chat-input-area">
                 <button id="mic-btn" title="Hold or click to speak your question (great for nonverbal)" 
@@ -816,7 +816,7 @@
         let monacoEditor = null;
         let workspaceRoot = null;
         let lastSyncedCwd = null;
-        let selectedInstructor = 'family'; // 'family' | 'fable5' — Fable5 is the additional instructor
+        let selectedInstructor = 'family'; // 'family' | 'claude' | 'perplexity' — additional instructors
 
         // Music & Voice Library - supports local MP3 voice files + Apple Music style links
         let musicLibrary = JSON.parse(localStorage.getItem('christmanMusicLibrary') || '[]');
@@ -1196,8 +1196,8 @@
             appendMessage('YOU', text, 'user');
             chatInput.value = '';
             try {
-                if (selectedInstructor === 'fable5') {
-                    await sendToFable5(payloadMessage, 'FABLE5');
+                if (selectedInstructor === 'claude') {
+                    await sendToClaude(payloadMessage, 'CLAUDE');
                 } else if (selectedInstructor === 'perplexity') {
                     await sendToPerplexity(payloadMessage, 'PERPLEXITY');
                 } else {
@@ -1232,8 +1232,8 @@
             chatInput.value = '';
             appendMessage('YOU', instruction, 'user');
 
-            if (selectedInstructor === 'fable5') {
-                sendToFable5(prompt, 'FABLE5');
+            if (selectedInstructor === 'claude') {
+                sendToClaude(prompt, 'CLAUDE');
             } else if (selectedInstructor === 'perplexity') {
                 sendToPerplexity(prompt, 'PERPLEXITY');
             } else {
@@ -1257,18 +1257,17 @@
             const activeBtn = document.getElementById('inst-' + instructor);
             if (activeBtn) activeBtn.classList.add('active');
 
-            let label;
-            if (instructor === 'fable5') label = 'Claude-Fable5 (additional instructor)';
-            else if (instructor === 'perplexity') label = 'Perplexity Sonar (live search & citations)';
-            else label = 'the Family';
+            let label = 'the Family';
+            if (instructor === 'claude') label = 'Claude';
+            else if (instructor === 'perplexity') label = 'Perplexity (live search & citations)';
 
             appendMessage('SYSTEM', `Switched to ${label}. Context from open files will be sent.`, 'system');
 
             // Update input placeholder for the current instructor
             const input = document.getElementById('chat-input');
             if (input) {
-                if (instructor === 'fable5') {
-                    input.placeholder = "Ask Fable5 (Claude instructor — sends current file/selection)...";
+                if (instructor === 'claude') {
+                    input.placeholder = "Ask Claude (instructor — sends current file/selection)...";
                 } else if (instructor === 'perplexity') {
                     input.placeholder = "Ask Perplexity (live web search with citations — sends context)...";
                 } else {
@@ -1279,8 +1278,8 @@
             // Update status bar
             const instLabel = document.getElementById('sb-inst-name');
             if (instLabel) {
-                if (instructor === 'fable5') {
-                    instLabel.textContent = 'Fable5';
+                if (instructor === 'claude') {
+                    instLabel.textContent = 'Claude';
                     instLabel.style.color = 'var(--neon-orange)';
                 } else if (instructor === 'perplexity') {
                     instLabel.textContent = 'Perplexity';
@@ -1291,21 +1290,21 @@
                 }
             }
 
-            // Visual mode on the panel for Fable5
+            // Visual mode on the panel for Claude
             const aiPanel = document.getElementById('ai-panel');
             if (aiPanel) {
-                if (instructor === 'fable5') {
-                    aiPanel.classList.add('fable5-mode');
+                if (instructor === 'claude') {
+                    aiPanel.classList.add('claude-mode');
                 } else {
-                    aiPanel.classList.remove('fable5-mode');
+                    aiPanel.classList.remove('claude-mode');
                 }
             }
         }
 
-        async function sendToFable5(text, whoLabel = 'FABLE5') {
+        async function sendToClaude(text, whoLabel = 'CLAUDE') {
             try {
                 const messages = [{ role: "user", content: text }];
-                const res = await fetch(`${API_BASE}/fable5`, {
+                const res = await fetch(`${API_BASE}/claude`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ messages, system: "" })
@@ -1316,7 +1315,7 @@
                 speakText(String(data.content || '').replace(/\[.*?\]/g, ''));
             } catch (err) {
                 console.error(err);
-                appendMessage('SYSTEM', `[FABLE5 ERROR]: ${err.message}`, 'error');
+                appendMessage('SYSTEM', `[CLAUDE ERROR]: ${err.message}`, 'error');
             }
         }
 
@@ -1734,14 +1733,14 @@
         }).catch(() => {});
         window.addEventListener('focus', () => term.focus());
 
-        // Default to Family, highlight Fable5 + Perplexity as available additional instructors
+        // Default to Family, highlight Claude + Perplexity as available additional instructors
         setTimeout(() => {
             setInstructor('family'); // This will set active class + status bar + placeholder
-            const fableBtn = document.getElementById('inst-fable5');
+            const claudeBtn = document.getElementById('inst-claude');
             const perpBtn = document.getElementById('inst-perplexity');
-            if (fableBtn) {
-                // Give Fable5 a distinct subtle highlight to signal it's the new additional instructor
-                fableBtn.style.border = '1px solid #444';
+            if (claudeBtn) {
+                // Give Claude a distinct subtle highlight to signal it's the new additional instructor
+                claudeBtn.style.border = '1px solid #444';
             }
             if (perpBtn) {
                 // Subtle highlight for Perplexity (search guy)

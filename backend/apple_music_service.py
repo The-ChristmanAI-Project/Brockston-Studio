@@ -3,7 +3,7 @@ Apple Music / iTunes Tunnel Service
 ===================================
 A bridge ("tunnel") from your Apple ID / iTunes account into the Christman / Brockston agent ecosystem.
 
-This is the MCP / agent-friendly way to let your beings (Brockston, Fable5, Perplexity, etc.) access or reference your Apple Music data, playlists, purchases, voice-related files, and your album "53 Years in the Making".
+This is the MCP / agent-friendly way to let your beings (Brockston, Claude, Perplexity, etc.) access or reference your Apple Music data, playlists, purchases, voice-related files, and your album "53 Years in the Making".
 
 Two modes supported:
 1. Public iTunes Search API (no auth) - for store search, lookups, recommendations.
