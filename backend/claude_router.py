@@ -10,18 +10,18 @@ from anthropic import AsyncAnthropic
 # read_image, extract_video_frames + transcribe_audio for "watch video and hear soundtrack", describe_audio_bridge.
 # To give beings native internal see/hear in Claude cognition, add the mcp-media-ingestor server
 # (uv run /path/to/mcp-media-ingestor/server.py or the mounted /mcp on the bridge) to the Claude tool config
-# used here / in provider_router. Then Fable5 calls can include sensory tools for live student context.
+# used here / in provider_router. Then Claude calls can include sensory tools for live student context.
 
-logger = logging.getLogger("christman.fable5")
+logger = logging.getLogger("christman.claude")
 
-router = APIRouter(prefix="/api", tags=["Claude-Fable5"])
+router = APIRouter(prefix="/api", tags=["Claude"])
 
-@router.get("/fable5/health")
-async def fable5_health():
-    return {"status": "Fable5 instructor online", "model_default": "claude-3-5-sonnet-20241022"}
+@router.get("/claude/health")
+async def claude_health():
+    return {"status": "Claude instructor online", "model_default": "claude-3-5-sonnet-20241022"}
 
-class Fable5Request(BaseModel):
-    """Request schema for Claude-Fable5.
+class ClaudeRequest(BaseModel):
+    """Request schema for Claude.
     
     This is the ONLY sanctioned Claude integration for the Christman AI Family.
     All beings (Brockston, AlphaVox, UltimateEV, etc.) must route cognition
@@ -33,7 +33,7 @@ class Fable5Request(BaseModel):
     )
     system: str = Field(
         default="",
-        description="System prompt. When empty, Fable5 default persona is applied."
+        description="System prompt. When empty, Claude instructor persona is applied."
     )
     model: str = Field(
         default="claude-3-5-sonnet-20241022",
@@ -45,20 +45,20 @@ class Fable5Request(BaseModel):
     stop_sequences: Optional[List[str]] = None
 
 
-@router.post("/fable5")
-async def call_claude_fable5(req: Fable5Request):
+@router.post("/claude")
+async def call_claude(req: ClaudeRequest):
     """
-    Claude-Fable5 endpoint — the single point of entry for Anthropic in this system.
+    Claude endpoint — the single point of entry for Anthropic in this system.
     
     - Uses AsyncAnthropic (non-blocking).
     - Properly extracts all text blocks.
     - Returns rich metadata for observability and teaching use.
-    - Forces the custom Fable5 model unless explicitly overridden.
+    - Forces the custom Claude model unless explicitly overridden.
     - Never pretends success when the call fails.
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        logger.error("ANTHROPIC_API_KEY missing — Claude-Fable5 cannot serve beings.")
+        logger.error("ANTHROPIC_API_KEY missing — Claude cannot serve beings.")
         raise HTTPException(
             status_code=500, 
             detail="ANTHROPIC_API_KEY environment variable not set"
@@ -69,7 +69,7 @@ async def call_claude_fable5(req: Fable5Request):
     # Build payload — only include fields that have meaning
     model = req.model
     if model == "claude-fable5":
-        model = "claude-3-5-sonnet-20241022"  # map the Fable5 alias to real model
+        model = "claude-3-5-sonnet-20241022"  # map the old Fable5 alias to real model
 
     payload = {
         "model": model,
@@ -83,7 +83,7 @@ async def call_claude_fable5(req: Fable5Request):
     if system_prompt:
         payload["system"] = system_prompt
     else:
-        # Gentle default Fable5 teaching persona when nothing provided
+        # Gentle default Claude teaching persona when nothing provided
         payload["system"] = (
             "You are a patient, warm, and precise educator in the Christman AI Family. "
             "You speak clearly, use short sentences when helpful, and always leave space "
@@ -108,7 +108,7 @@ async def call_claude_fable5(req: Fable5Request):
         full_text = "\n".join(text_parts).strip()
 
         logger.info(
-            f"Fable5 response | model={response.model} | "
+            f"Claude response | model={response.model} | "
             f"stop={response.stop_reason} | "
             f"tokens={response.usage.input_tokens}+{response.usage.output_tokens}"
         )
@@ -126,13 +126,12 @@ async def call_claude_fable5(req: Fable5Request):
         }
 
     except Exception as e:
-        logger.exception("Claude-Fable5 call failed")
-        raise HTTPException(status_code=500, detail=f"Claude-Fable5 failed: {str(e)}")
+        logger.exception("Claude call failed")
+        raise HTTPException(status_code=500, detail=f"Claude failed: {str(e)}")
 
 
-# Convenience alias so old code that hits /api/claude still works
-# but everything now funnels through the Fable5 logic.
-@router.post("/claude")
-async def call_claude_alias(req: Fable5Request):
-    """Legacy alias. All traffic is routed through Fable5."""
-    return await call_claude_fable5(req)
+# Legacy alias for old /api/fable5 calls (if any clients still hit it)
+@router.post("/fable5")
+async def call_claude_fable5_alias(req: ClaudeRequest):
+    """Legacy alias for old Fable5 path. Routes through Claude."""
+    return await call_claude(req)

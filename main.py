@@ -41,14 +41,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Claude-Fable5 as additional instructor
+# Claude as additional instructor
 # MUST be after app = FastAPI() and logger setup
 try:
-    from backend.claude_fable5_router import router as fable5_router
-    app.include_router(fable5_router)
-    logger.info("Claude-Fable5 router mounted — additional instructor available at /api/fable5")
+    from backend.claude_router import router as claude_router
+    app.include_router(claude_router)
+    logger.info("Claude router mounted — additional instructor available at /api/claude")
 except Exception as e:
-    logger.warning(f"Claude-Fable5 router not available: {e}")
+    logger.warning(f"Claude router not available: {e}")
 
 # Perplexity Sonar — already linked via PERPLEXITY_API_KEY, expose as selectable instructor
 try:
