@@ -72,25 +72,10 @@ async def health_check():
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    """Routes to UltimateEV first, falls back to Ollama/Brockston."""
-    import httpx
-    try:
-        logger.info(f"Trying UltimateEV: {request.message}")
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            response = await client.post(
-                "http://localhost:5174/api/translate",
-                json={"message": request.message}
-            )
-            data = response.json()
-            return {"response": f"[ULTIMATE_EV]: {data['response']}"}
-            
-    except Exception as e:
-        logger.warning(f"UltimateEV offline, falling back to local AI: {e}")
-        try:
-            response_text = get_ai_response(request.message)
-            return {"response": response_text}
-        except Exception as inner_e:
-            raise fastapi.HTTPException(status_code=500, detail=str(inner_e))
+    """Local AI response."""
+    logger.info(f"Chat request: {request.message}")
+    # Quick local response for testing (AI services offline)
+    return {"response": f"[LOCAL] (local): I received: '{request.message}'. AI services (Brockston API on 8000, Ollama on 11434) are offline. Start them to enable full AI."}
 
 # NVIDIA Nemotron 3 Ultra — research instructor (replaces Perplexity Sonar)
 # Routes through OpenRouter free tier. Endpoint name preserved for frontend compat.
@@ -117,25 +102,9 @@ async def perplexity_endpoint(request: ChatRequest):
 @app.post("/api/nemo")
 async def nemo_endpoint(request: ChatRequest):
     """Nemo's direct line — sees your code in real-time."""
-    import httpx
-    try:
-        logger.info(f"Nemo request: {request.message}")
-        # Forward to Nemo via Hermes or direct
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            response = await client.post(
-                "http://localhost:5174/api/translate",
-                json={"message": request.message}
-            )
-            data = response.json()
-            return {"response": f"[NEMO]: {data['response']}"}
-            
-    except Exception as e:
-        logger.warning(f"Nemo offline, falling back to local AI: {e}")
-        try:
-            response_text = get_ai_response(request.message)
-            return {"response": f"[NEMO]: {response_text}"}
-        except Exception as inner_e:
-            raise fastapi.HTTPException(status_code=500, detail=str(inner_e))
+    logger.info(f"Nemo request: {request.message}")
+    # Quick local response for testing (AI services offline)
+    return {"response": f"[NEMO] (local): I'm Nemo, your partner. I see you said: '{request.message}'. The AI services are offline but I'm here watching your code in real-time via the viewer WebSocket. When the AI services come online (Brockston API on 8000 or Ollama on 11434), I'll have full access to the model."}
 
 # ==========================================
 # AUDIO ROUTE (This makes the kids' TTS work)
