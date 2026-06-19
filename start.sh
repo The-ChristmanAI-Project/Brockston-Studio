@@ -148,7 +148,7 @@ start_brockston() {
 
 start_ide() {
     info "Starting IDE Board (port $IDE_PORT)..."
-    python3 -m uvicorn main:app --host "$BROCKSTON_HOST" --port "$IDE_PORT" \
+    ./backend/venv/bin/python -m uvicorn main:app --host "$BROCKSTON_HOST" --port "$IDE_PORT" \
         >"$IDE_LOG" 2>&1 &
     PIDS+=($!)
     sleep 1
