@@ -461,6 +461,16 @@ async def websocket_viewer(websocket: fastapi.WebSocket):
             "data": {
                 "workspace": str(WORKSPACE_ROOT),
                 "cwd": str(WORKSPACE_ROOT),
+                "ide_models": {
+                    "autocomplete": "qwen2.5-coder:32b (local, autocomplete only)",
+                    "nemo": "nemotron 3 ultra:free (watching via viewer)",
+                    "coming_tonight": ["Kimi", "GLM"]
+                },
+                "endpoints": {
+                    "nemo_chat": "/api/nemo",
+                    "viewer_ws": "/ws/viewer"
+                },
+                "note": "Nemo is nemotron 3 ultra. The IDE runs qwen2.5-coder:32b locally for autocomplete. Nemo watches via viewer WebSocket. Kimi & GLM joining tonight."
             }
         }))
     except Exception:
