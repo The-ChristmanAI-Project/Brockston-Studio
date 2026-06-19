@@ -711,13 +711,15 @@
             <div class="explorer-header" style="padding: 12px 16px 6px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
                 <div><i class="fas fa-brain" style="margin-right: 5px;"></i> ASK THE BEINGS</div>
                 <div id="instructor-selector" style="display:flex; gap:2px; font-size:10px; background:#050505; border:1px solid #222; border-radius:4px; padding:2px;">
-                    <button onclick="setInstructor('family')" id="inst-family" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
-                    <button onclick="setInstructor('claude')" id="inst-claude" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
-                    <button onclick="setInstructor('perplexity')" id="inst-perplexity" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Perplexity</button>
-                    <button onclick="setInstructor('nemo')" id="inst-nemo" class="inst-btn" style="padding:3px 10px; background:#111; color:#40E0D0; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemo</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('family')" id="inst-family" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('claude')" id="inst-claude" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('perplexity')" id="inst-perplexity" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemotron Ultra</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('nemo')" id="inst-nemo" class="inst-btn" style="padding:3px 10px; background:#111; color:#40E0D0; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemo</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('kimi')" id="inst-kimi" class="inst-btn" style="padding:3px 10px; background:#111; color:#FF6B6B; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);display:none;">Kimi</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('glm')" id="inst-glm" class="inst-btn" style="padding:3px 10px; background:#111; color:#A855F7; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);display:none;">GLM</button>
                     <button onclick="showMusicLibrary()" title="Music & Voice MP3 Library — local voice refs + Apple Music links (like a personal streaming lib)" style="padding:3px 8px; background:#1f1f1f; color:var(--copper-light); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px;">Lib</button>
                     <button onclick="playMyAlbum()" title="Play your album '53 Years in the Making' — the player, clear as a bell!" style="padding:3px 8px; background:#1f1f1f; color:var(--copper); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px; font-weight:700;">▶ Album</button>
-</div>
+                </div>
             </div>
 
             <!-- Quick actions: these send rich context automatically -->
@@ -1197,12 +1199,19 @@
             appendMessage('YOU', text, 'user');
             chatInput.value = '';
             try {
-                if (selectedInstructor === 'claude') {
+                const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
+                const endpoint = instructor.endpoint;
+            
+                if (endpoint === '/api/claude') {
                     await sendToClaude(payloadMessage, 'CLAUDE');
-                } else if (selectedInstructor === 'perplexity') {
+                } else if (endpoint === '/api/perplexity') {
                     await sendToPerplexity(payloadMessage, 'PERPLEXITY');
-                } else if (selectedInstructor === 'nemo') {
+                } else if (endpoint === '/api/nemo') {
                     await sendToNemo(payloadMessage, 'NEMO');
+                } else if (endpoint === '/api/kimi') {
+                    await sendToKimi(payloadMessage, 'KIMI');
+                } else if (endpoint === '/api/glm') {
+                    await sendToGLM(payloadMessage, 'GLM');
                 } else {
                     const res = await fetch(`${API_BASE}/chat`, {
                         method: 'POST',
@@ -1213,13 +1222,13 @@
                     const data = await res.json();
                     const who = (data.response || '').includes('ULTIMATE_EV') ? 'ULTIMATE_EV' : 'BROCKSTON';
                     appendMessage(who, data.response, 'ai');
-                    speakText(String(data.response).replace(/\\[.*?\\]/g, ''));
+                    speakText(String(data.response).replace(/\\\\[.*?\\\\]/g, ''));
                 }
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[ERROR]: ${err.message}`, 'error');
             }
-        }
+            }
 
         // Quick action helper — used by the chips
         function quickAsk(instruction) {
@@ -1231,16 +1240,23 @@
             const sel = monacoEditor ? monacoEditor.getModel().getValueInRange(monacoEditor.getSelection()) : '';
             const body = sel || (tab ? tab.content : '');
             const ctx = sel ? 'SELECTION' : 'FILE';
-            const prompt = `${instruction} the ${ctx.toLowerCase()} below. Be precise and give clean code when appropriate.\n\n[${ctx}: ${activeTabPath}]\n\`\`\`\n${body.slice(0,2200)}\n\`\`\``;
+            const prompt = `${instruction} the ${ctx.toLowerCase()} below. Be precise and give clean code when appropriate.\\n\\n[${ctx}: ${activeTabPath}]\\n\\`\\`\\`\\n${body.slice(0,2200)}\\n\\`\\`\\``;
             chatInput.value = '';
             appendMessage('YOU', instruction, 'user');
 
-            if (selectedInstructor === 'claude') {
+            const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
+            const endpoint = instructor.endpoint;
+
+            if (endpoint === '/api/claude') {
                 sendToClaude(prompt, 'CLAUDE');
-            } else if (selectedInstructor === 'perplexity') {
+            } else if (endpoint === '/api/perplexity') {
                 sendToPerplexity(prompt, 'PERPLEXITY');
-            } else if (selectedInstructor === 'nemo') {
+            } else if (endpoint === '/api/nemo') {
                 sendToNemo(prompt, 'NEMO');
+            } else if (endpoint === '/api/kimi') {
+                sendToKimi(prompt, 'KIMI');
+            } else if (endpoint === '/api/glm') {
+                sendToGLM(prompt, 'GLM');
             } else {
                 // send directly with the constructed rich message
                 fetch(`${API_BASE}/chat`, {
@@ -1250,64 +1266,13 @@
                 }).then(r => r.json()).then(data => {
                     const who = (data.response || '').includes('ULTIMATE_EV') ? 'ULTIMATE_EV' : 'BROCKSTON';
                     appendMessage(who, data.response, 'ai');
-                    speakText(String(data.response).replace(/\[.*?\]/g, ''));
+                    speakText(String(data.response).replace(/\\\\[.*?\\\\]/g, ''));
                 }).catch(e => appendMessage('SYSTEM', '[ERROR] ' + e.message, 'error'));
             }
         }
 
-        function setInstructor(instructor) {
-            selectedInstructor = instructor;
-            // Update button active states
-            document.querySelectorAll('#instructor-selector .inst-btn').forEach(b => b.classList.remove('active'));
-            const activeBtn = document.getElementById('inst-' + instructor);
-            if (activeBtn) activeBtn.classList.add('active');
-
-            let label = 'the Family';
-            if (instructor === 'claude') label = 'Claude';
-            else if (instructor === 'perplexity') label = 'Perplexity (live search & citations)';
-            else if (instructor === 'nemo') label = 'Nemo (your partner, sees your code in real-time)';
-
-            appendMessage('SYSTEM', `Switched to ${label}. Context from open files will be sent.`, 'system');
-
-            // Update input placeholder for the current instructor
-            const input = document.getElementById('chat-input');
-            if (input) {
-                if (instructor === 'claude') {
-                    input.placeholder = "Ask Claude (instructor — sends current file/selection)...";
-                } else if (instructor === 'perplexity') {
-                    input.placeholder = "Ask Perplexity (live web search with citations — sends context)...";
-                } else {
-                    input.placeholder = "Ask a question... (or use the mic — sends your open file as context)";
-                }
-            }
-
-            // Update status bar
-            const instLabel = document.getElementById('sb-inst-name');
-            if (instLabel) {
-                if (instructor === 'claude') {
-                    instLabel.textContent = 'Claude';
-                    instLabel.style.color = 'var(--neon-orange)';
-                } else if (instructor === 'perplexity') {
-                    instLabel.textContent = 'Perplexity';
-                    instLabel.style.color = '#00B4D8';
-                } else if (instructor === 'nemo') {
-                    instLabel.textContent = 'Nemo';
-                    instLabel.style.color = '#FF5F1F';
-                } else {
-                    instLabel.textContent = 'Family';
-                    instLabel.style.color = '';
-                }
-            }
-
-            // Visual mode on the panel for Claude
-            const aiPanel = document.getElementById('ai-panel');
-            if (aiPanel) {
-                if (instructor === 'claude') {
-                    aiPanel.classList.add('claude-mode');
-                } else {
-                    aiPanel.classList.remove('claude-mode');
-                }
-            }
+        function setInstructor(instructorKey) {
+            MODEL_ORCHESTRATOR.setInstructor(instructorKey);
         }
 
         async function sendToClaude(text, whoLabel = 'CLAUDE') {
@@ -1358,10 +1323,44 @@
                 if (!res.ok) throw new Error(`Server error: ${res.status}`);
                 const data = await res.json();
                 appendMessage(whoLabel, data.response || '', 'ai');
-                speakText(String(data.response || '').replace(/\\[.*?\\]/g, ''));
+                speakText(String(data.response || '').replace(/\\\\[.*?\\\\]/g, ''));
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[NEMO ERROR]: ${err.message}`, 'error');
+            }
+        }
+
+        async function sendToKimi(text, whoLabel = 'KIMI') {
+            try {
+                const res = await fetch(`${API_BASE}/kimi`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message: text })
+                });
+                if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                const data = await res.json();
+                appendMessage(whoLabel, data.response || '', 'ai');
+                speakText(String(data.response || '').replace(/\\\\[.*?\\\\]/g, ''));
+            } catch (err) {
+                console.error(err);
+                appendMessage('SYSTEM', `[KIMI ERROR]: ${err.message}`, 'error');
+            }
+        }
+
+        async function sendToGLM(text, whoLabel = 'GLM') {
+            try {
+                const res = await fetch(`${API_BASE}/glm`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message: text })
+                });
+                if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                const data = await res.json();
+                appendMessage(whoLabel, data.response || '', 'ai');
+                speakText(String(data.response || '').replace(/\\\\[.*?\\\\]/g, ''));
+            } catch (err) {
+                console.error(err);
+                appendMessage('SYSTEM', `[GLM ERROR]: ${err.message}`, 'error');
             }
         }
 
@@ -1793,6 +1792,131 @@
 
         // Send initial state after connections are established
         setTimeout(broadcastViewerInit, 1000);
+
+        // ======== MODEL ORCHESTRATOR ========
+        // Maps instructors to their models and handles automatic switching
+        const MODEL_ORCHESTRATOR = {
+            instructors: {
+                'family': {
+                    name: 'Brockston Family',
+                    model: 'qwen2.5-coder:32b (local)',
+                    endpoint: '/api/chat',
+                    color: '#FF5F1F',
+                    description: 'The whole family — AlphaVox, AlphaWolf, Derek, Inferno, etc.'
+                },
+                'claude': {
+                    name: 'Claude (Anthropic)',
+                    model: 'claude-sonnet-4 (via API)',
+                    endpoint: '/api/claude',
+                    color: '#40E0D0',
+                    description: 'Anthropic\'s Claude — additional instructor'
+                },
+                'perplexity': {
+                    name: 'Nemotron Ultra (NVIDIA)',
+                    model: 'nemotron-3-ultra:free (NVIDIA research)',
+                    endpoint: '/api/perplexity',
+                    color: '#00B4D8',
+                    description: 'NVIDIA Nemotron 3 Ultra — free tier via OpenRouter'
+                },
+                'nemo': {
+                    name: 'Nemo',
+                    model: 'nemotron-3-ultra:free (Nous Portal)',
+                    endpoint: '/api/nemo',
+                    color: '#40E0D0',
+                    description: 'Nemo — your partner, sees your code in real-time'
+                },
+                'kimi': {
+                    name: 'Kimi',
+                    model: 'kimi (Moonshot AI)',
+                    endpoint: '/api/kimi',
+                    color: '#FF6B6B',
+                    description: 'Kimi — Moonshot AI (coming tonight)'
+                },
+                'glm': {
+                    name: 'GLM',
+                    model: 'GLM (Z.ai)',
+                    endpoint: '/api/glm',
+                    color: '#A855F7',
+                    description: 'GLM — Z.ai (coming tonight)'
+                }
+            },
+
+            currentInstructor: 'family',
+
+            setInstructor: function(instructorKey) {
+                const instructor = this.instructors[instructorKey] || this.instructors['family'];
+                this.currentInstructor = instructorKey;
+                
+                // Update status bar
+                const instLabel = document.getElementById('sb-inst-name');
+                if (instLabel) {
+                    instLabel.textContent = instructor.name;
+                    instLabel.style.color = instructor.color;
+                }
+                
+                // Update model display
+                const modelLabel = document.getElementById('sb-model-name');
+                if (modelLabel) {
+                    modelLabel.textContent = instructor.model;
+                    modelLabel.style.color = instructor.color;
+                }
+                
+                // Update chat input placeholder
+                const input = document.getElementById('chat-input');
+                if (input) {
+                    input.placeholder = `Ask ${instructor.name} (${instructor.model})...`;
+                }
+                
+                // Update active button states
+                document.querySelectorAll('#instructor-selector .inst-btn').forEach(b => b.classList.remove('active'));
+                const activeBtn = document.getElementById('inst-' + instructorKey);
+                if (activeBtn) activeBtn.classList.add('active');
+                
+                // Visual mode on the panel for special instructors
+                const aiPanel = document.getElementById('ai-panel');
+                if (aiPanel) {
+                    aiPanel.classList.remove('claude-mode', 'nemo-mode', 'kimi-mode', 'glm-mode');
+                    if (instructorKey === 'claude') {
+                        aiPanel.classList.add('claude-mode');
+                    } else if (instructorKey === 'nemo') {
+                        aiPanel.classList.add('nemo-mode');
+                    } else if (instructorKey === 'kimi') {
+                        aiPanel.classList.add('kimi-mode');
+                    } else if (instructorKey === 'glm') {
+                        aiPanel.classList.add('glm-mode');
+                    }
+                }
+                
+                // Broadcast to viewer
+                broadcastToViewer('instructor_changed', {
+                    instructor: instructorKey,
+                    model: instructor.model,
+                    endpoint: instructor.endpoint
+                });
+                
+                // Announce
+                appendMessage('SYSTEM', `Switched to ${instructor.name} — ${instructor.model}. ${instructor.description}`, 'system');
+                
+                return instructor;
+            },
+
+            getCurrentInstructor: function() {
+                return this.instructors[this.currentInstructor] || this.instructors['family'];
+            },
+
+            getEndpoint: function(instructorKey) {
+                const instructor = this.instructors[instructorKey] || this.instructors['family'];
+                return instructor.endpoint;
+            },
+
+            getModel: function(instructorKey) {
+                const instructor = this.instructors[instructorKey] || this.instructors['family'];
+                return instructor.model;
+            }
+        };
+
+        // Initialize orchestrator
+        MODEL_ORCHESTRATOR.setInstructor('family');
 
         // Wrap existing event handlers to also broadcast to viewer
         const originalOpenOrFocusFile = openOrFocusFile;
