@@ -225,7 +225,7 @@
             letter-spacing: 1.5px;
             margin-bottom: 15px;
             text-transform: uppercase;
-            border-bottom: 1px solid var(--border-dim);
+            border-bottom: 1px solid var(--neon-orange) !important;
             padding-bottom: 8px;
             font-weight: 700;
             font-family: var(--font-ui);
@@ -267,6 +267,11 @@
             background-color: var(--void-black);
             display: flex;
             flex-direction: column;
+            flex-grow: 1 !important;
+            flex-shrink: 1 !important;
+            flex-basis: auto !important;
+            border-left: 1px solid var(--neon-orange) !important;
+            border-right: 1px solid var(--neon-orange) !important;
         }
 
         #editor-wrapper {
@@ -467,6 +472,7 @@
             box-shadow: inset 0 5px 15px rgba(0,0,0,0.5);
             overflow: hidden;
             min-height: 120px;
+            border-top: 1px solid var(--neon-orange) !important;
         }
 
         #terminal { flex: 1; min-height: 0; }
@@ -475,6 +481,9 @@
             background-color: var(--panel-black);
             display: flex;
             flex-direction: column;
+            width: 300px !important;
+            flex-grow: 0 !important;
+            flex-shrink: 0 !important;
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
         #ai-panel.claude-mode {
@@ -713,7 +722,7 @@
                 <div id="instructor-selector" style="display:flex; gap:2px; font-size:10px; background:#050505; border:1px solid #222; border-radius:4px; padding:2px;">
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('family')" id="inst-family" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('claude')" id="inst-claude" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('perplexity')" id="inst-perplexity" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemotron Ultra</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('perplexity')" id="inst-perplexity" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Perplexity</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('nemo')" id="inst-nemo" class="inst-btn" style="padding:3px 10px; background:#111; color:#40E0D0; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemo</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('kimi')" id="inst-kimi" class="inst-btn" style="padding:3px 10px; background:#111; color:#FF6B6B; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);display:none;">Kimi</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('glm')" id="inst-glm" class="inst-btn" style="padding:3px 10px; background:#111; color:#A855F7; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);display:none;">GLM</button>
