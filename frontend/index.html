@@ -1228,7 +1228,6 @@
                 console.error(err);
                 appendMessage('SYSTEM', `[ERROR]: ${err.message}`, 'error');
             }
-            }
 
         // Quick action helper — used by the chips
         function quickAsk(instruction) {
@@ -1674,15 +1673,36 @@
         const MAX_RECONNECT = 5;
 
         function connectWebSocket() {
+            console.log('[TERMINAL] Connecting to', WS_URL);
             ws = new WebSocket(WS_URL);
 
             ws.onopen = () => {
+                console.log('[TERMINAL] WebSocket OPEN');
                 reconnectAttempts = 0;
                 term.write('\r\n\x1b[1;32m[SYSTEM]: UPLINK ESTABLISHED.\x1b[0m\r\n');
                 const el = document.getElementById('sb-term-state');
                 if (el) el.textContent = 'terminal connected';
                 // Refit after layout settles
                 setTimeout(() => { try { fitAddon.fit(); } catch(e) {} }, 100);
+            };
+
+            ws.onerror = (error) => {
+                console.error('[TERMINAL] WebSocket ERROR:', error);
+            };
+
+            ws.onclose = (event) => {
+                console.log('[TERMINAL] WebSocket CLOSE:', event.code, event.reason);
+                term.write('\r\n\x1b[1;33m[SYSTEM]: CONNECTION LOST.\x1b[0m\r\n');
+                const el = document.getElementById('sb-term-state');
+                if (el) el.textContent = 'terminal disconnected';
+                if (reconnectAttempts < MAX_RECONNECT) {
+                    const delay = 1000 * Math.pow(2, reconnectAttempts);
+                    reconnectAttempts++;
+                    term.write(`\x1b[1;33m[SYSTEM]: Reconnecting in ${delay/1000}s (${reconnectAttempts}/${MAX_RECONNECT})...\x1b[0m\r\n`);
+                    setTimeout(connectWebSocket, delay);
+                } else {
+                    term.write('\x1b[1;31m[ERROR]: Max reconnects reached. Refresh the page.\x1b[0m\r\n');
+                }
             };
 
             ws.onmessage = (event) => {
@@ -1716,25 +1736,7 @@
                         handleTerminalCwd(msg.path);
                     }
                 } catch (err) {
-                    console.error('Parse error:', err);
-                }
-            };
-
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-            };
-
-            ws.onclose = () => {
-                term.write('\r\n\x1b[1;33m[SYSTEM]: CONNECTION LOST.\x1b[0m\r\n');
-                const el = document.getElementById('sb-term-state');
-                if (el) el.textContent = 'terminal disconnected';
-                if (reconnectAttempts < MAX_RECONNECT) {
-                    const delay = 1000 * Math.pow(2, reconnectAttempts);
-                    reconnectAttempts++;
-                    term.write(`\x1b[1;33m[SYSTEM]: Reconnecting in ${delay/1000}s (${reconnectAttempts}/${MAX_RECONNECT})...\x1b[0m\r\n`);
-                    setTimeout(connectWebSocket, delay);
-                } else {
-                    term.write('\x1b[1;31m[ERROR]: Max reconnects reached. Refresh the page.\x1b[0m\r\n');
+                    console.error('[TERMINAL] Parse error:', err);
                 }
             };
         }
