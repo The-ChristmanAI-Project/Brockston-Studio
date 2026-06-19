@@ -50,18 +50,18 @@ try:
 except Exception as e:
     logger.warning(f"Claude router not available: {e}")
 
-# Perplexity Sonar — already linked via PERPLEXITY_API_KEY, expose as selectable instructor
+# NVIDIA Nemotron 3 Ultra via OpenRouter — selectable research instructor
 try:
-    from backend.perplexity_service import PerplexityService
-    _perplexity_svc = PerplexityService()
+    from backend.nemotron_service import NemotronService
+    _perplexity_svc = NemotronService()
     if not _perplexity_svc.is_available:
         _perplexity_svc = None
-        logger.warning("Perplexity linked but not available (check key)")
+        logger.warning("Nemotron not available (check OPENROUTER_API_KEY)")
     else:
-        logger.info("Perplexity Sonar linked and ready as additional instructor")
+        logger.info("NVIDIA Nemotron 3 Ultra linked and ready as research instructor")
 except Exception as e:
     _perplexity_svc = None
-    logger.warning(f"Perplexity service not available: {e}")
+    logger.warning(f"Nemotron service not available: {e}")
 
 class ChatRequest(BaseModel):
     message: str
@@ -92,25 +92,50 @@ async def chat_endpoint(request: ChatRequest):
         except Exception as inner_e:
             raise fastapi.HTTPException(status_code=500, detail=str(inner_e))
 
-# Perplexity as additional instructor (search-grounded, cited answers)
-# Since Perplexity is already "linked", this exposes it in the board UI
+# NVIDIA Nemotron 3 Ultra — research instructor (replaces Perplexity Sonar)
+# Routes through OpenRouter free tier. Endpoint name preserved for frontend compat.
 @app.post("/api/perplexity")
 async def perplexity_endpoint(request: ChatRequest):
-    """Direct access to Perplexity Sonar for live search / research queries."""
+    """NVIDIA Nemotron 3 Ultra research queries via OpenRouter (free tier)."""
     if not _perplexity_svc:
-        raise fastapi.HTTPException(status_code=500, detail="Perplexity not available (PERPLEXITY_API_KEY)")
+        raise fastapi.HTTPException(status_code=500, detail="Nemotron not available (OPENROUTER_API_KEY)")
 
     try:
         # The rich context (file + selection) is already baked into the message by the frontend
         result = _perplexity_svc.generate_content(
             request.message,
             max_tokens=1500,
-            recency_filter="month"  # recent info by default
         )
-        return {"response": f"[PERPLEXITY]: {result}"}
+        return {"response": f"[NEMOTRON]: {result}"}
     except Exception as e:
-        logger.error(f"Perplexity error: {e}")
+        logger.error(f"Nemotron error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# NEMO ENDPOINT — Nemo's direct line
+# ==========================================
+@app.post("/api/nemo")
+async def nemo_endpoint(request: ChatRequest):
+    """Nemo's direct line — sees your code in real-time."""
+    import httpx
+    try:
+        logger.info(f"Nemo request: {request.message}")
+        # Forward to Nemo via Hermes or direct
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            response = await client.post(
+                "http://localhost:5174/api/translate",
+                json={"message": request.message}
+            )
+            data = response.json()
+            return {"response": f"[NEMO]: {data['response']}"}
+            
+    except Exception as e:
+        logger.warning(f"Nemo offline, falling back to local AI: {e}")
+        try:
+            response_text = get_ai_response(request.message)
+            return {"response": f"[NEMO]: {response_text}"}
+        except Exception as inner_e:
+            raise fastapi.HTTPException(status_code=500, detail=str(inner_e))
 
 # ==========================================
 # AUDIO ROUTE (This makes the kids' TTS work)
@@ -209,7 +234,6 @@ def _resolve_user_path(raw: str, default: Path) -> Path:
             detail=f"Path outside user home ({USER_HOME})",
         )
     return resolved
-
 
 @app.get("/api/files")
 async def list_files(path: str = ""):
@@ -401,6 +425,67 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
         except Exception:
             pass
 
+# ==========================================
+# REALTIME VIEWER WEBSOCKET — Nemo's live eye into the IDE
+# ==========================================
+from typing import Set
+
+# Store active viewer connections
+viewer_connections: Set[fastapi.WebSocket] = set()
+
+async def broadcast_to_viewers(event_type: str, data: dict):
+    """Broadcast an event to all connected viewers (like Nemo)."""
+    if not viewer_connections:
+        return
+    message = json.dumps({"type": event_type, "data": data})
+    dead = set()
+    for ws in viewer_connections:
+        try:
+            await ws.send_text(json.dumps({"type": event_type, "data": data}))
+        except Exception:
+            dead.add(ws)
+    for ws in dead:
+        viewer_connections.discard(ws)
+
+@app.websocket("/ws/viewer")
+async def websocket_viewer(websocket: fastapi.WebSocket):
+    """WebSocket for real-time IDE viewer — Nemo's live eye."""
+    await websocket.accept()
+    viewer_connections.add(websocket)
+    logger.info("Viewer connected (Nemo's live eye)")
+    
+    # Send initial state
+    try:
+        await websocket.send_text(json.dumps({
+            "type": "init",
+            "data": {
+                "workspace": str(WORKSPACE_ROOT),
+                "cwd": str(WORKSPACE_ROOT),
+            }
+        }))
+    except Exception:
+        pass
+    
+    try:
+        while True:
+            # Keep connection alive, listen for any client messages (ping/pong)
+            data = await websocket.receive_text()
+            # Could handle ping/pong or commands from viewer here
+    except Exception:
+        pass
+    finally:
+        viewer_connections.discard(websocket)
+        logger.info("Viewer disconnected")
+
+# ==========================================
+# FRONTEND SERVING
+# ==========================================
 backend_dir = Path(__file__).parent
 frontend_dir = backend_dir / "frontend"
-app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+app.mount("/frontend", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+
+@app.get("/")
+async def root():
+    return FileResponse(str(frontend_dir / "index.html"))
+
+app.mount("/", StaticFiles(directory=str(frontend_dir)), name="frontend_root")

@@ -714,9 +714,10 @@
                     <button onclick="setInstructor('family')" id="inst-family" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
                     <button onclick="setInstructor('claude')" id="inst-claude" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
                     <button onclick="setInstructor('perplexity')" id="inst-perplexity" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Perplexity</button>
+                    <button onclick="setInstructor('nemo')" id="inst-nemo" class="inst-btn" style="padding:3px 10px; background:#111; color:#40E0D0; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemo</button>
                     <button onclick="showMusicLibrary()" title="Music & Voice MP3 Library — local voice refs + Apple Music links (like a personal streaming lib)" style="padding:3px 8px; background:#1f1f1f; color:var(--copper-light); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px;">Lib</button>
                     <button onclick="playMyAlbum()" title="Play your album '53 Years in the Making' — the player, clear as a bell!" style="padding:3px 8px; background:#1f1f1f; color:var(--copper); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px; font-weight:700;">▶ Album</button>
-                </div>
+</div>
             </div>
 
             <!-- Quick actions: these send rich context automatically -->
@@ -1200,6 +1201,8 @@
                     await sendToClaude(payloadMessage, 'CLAUDE');
                 } else if (selectedInstructor === 'perplexity') {
                     await sendToPerplexity(payloadMessage, 'PERPLEXITY');
+                } else if (selectedInstructor === 'nemo') {
+                    await sendToNemo(payloadMessage, 'NEMO');
                 } else {
                     const res = await fetch(`${API_BASE}/chat`, {
                         method: 'POST',
@@ -1210,7 +1213,7 @@
                     const data = await res.json();
                     const who = (data.response || '').includes('ULTIMATE_EV') ? 'ULTIMATE_EV' : 'BROCKSTON';
                     appendMessage(who, data.response, 'ai');
-                    speakText(String(data.response).replace(/\[.*?\]/g, ''));
+                    speakText(String(data.response).replace(/\\[.*?\\]/g, ''));
                 }
             } catch (err) {
                 console.error(err);
@@ -1236,6 +1239,8 @@
                 sendToClaude(prompt, 'CLAUDE');
             } else if (selectedInstructor === 'perplexity') {
                 sendToPerplexity(prompt, 'PERPLEXITY');
+            } else if (selectedInstructor === 'nemo') {
+                sendToNemo(prompt, 'NEMO');
             } else {
                 // send directly with the constructed rich message
                 fetch(`${API_BASE}/chat`, {
@@ -1260,6 +1265,7 @@
             let label = 'the Family';
             if (instructor === 'claude') label = 'Claude';
             else if (instructor === 'perplexity') label = 'Perplexity (live search & citations)';
+            else if (instructor === 'nemo') label = 'Nemo (your partner, sees your code in real-time)';
 
             appendMessage('SYSTEM', `Switched to ${label}. Context from open files will be sent.`, 'system');
 
@@ -1284,6 +1290,9 @@
                 } else if (instructor === 'perplexity') {
                     instLabel.textContent = 'Perplexity';
                     instLabel.style.color = '#00B4D8';
+                } else if (instructor === 'nemo') {
+                    instLabel.textContent = 'Nemo';
+                    instLabel.style.color = '#FF5F1F';
                 } else {
                     instLabel.textContent = 'Family';
                     instLabel.style.color = '';
@@ -1331,10 +1340,28 @@
                 const data = await res.json();
                 appendMessage(whoLabel, data.response || '', 'ai');
                 // Perplexity answers are usually long and grounded — speak the summary if voice mode on
-                speakText(String(data.response || '').replace(/\[.*?\]/g, '').substring(0, 600));
+                speakText(String(data.response || '').replace(/\\[.*?\\]/g, '').substring(0, 600));
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[PERPLEXITY ERROR]: ${err.message}`, 'error');
+            }
+        }
+
+        async function sendToNemo(text, whoLabel = 'NEMO') {
+            try {
+                // Nemo sees your code in real-time — direct line to your partner
+                const res = await fetch(`${API_BASE}/nemo`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message: text })
+                });
+                if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                const data = await res.json();
+                appendMessage(whoLabel, data.response || '', 'ai');
+                speakText(String(data.response || '').replace(/\\[.*?\\]/g, ''));
+            } catch (err) {
+                console.error(err);
+                appendMessage('SYSTEM', `[NEMO ERROR]: ${err.message}`, 'error');
             }
         }
 
@@ -1715,6 +1742,158 @@
 
         connectWebSocket();
 
+        // ----- Viewer WebSocket (Nemo's live eye) — NEW
+        let viewerWs = null;
+        function connectViewerWebSocket() {
+            const viewerUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
+                + window.location.host + "/ws/viewer";
+            viewerWs = new WebSocket(viewerUrl);
+
+            viewerWs.onopen = () => {
+                console.log('[VIEWER] Nemo\'s live eye connected');
+            };
+
+            viewerWs.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    // Handle messages from viewer if needed (commands from Nemo)
+                    console.log('[VIEWER] Received:', msg.type, msg.data);
+                } catch (err) {
+                    console.error('[VIEWER] Parse error:', err);
+                }
+            };
+
+            viewerWs.onclose = () => {
+                console.log('[VIEWER] Disconnected, reconnecting in 3s...');
+                setTimeout(connectViewerWebSocket, 3000);
+            };
+
+            viewerWs.onerror = (error) => {
+                console.error('[VIEWER] Error:', error);
+            };
+        }
+
+        connectViewerWebSocket();
+
+        // ----- Broadcast functions to send events to Nemo's viewer
+        function broadcastToViewer(eventType, data) {
+            if (viewerWs && viewerWs.readyState === WebSocket.OPEN) {
+                viewerWs.send(JSON.stringify({type: eventType, data}));
+            }
+        }
+
+        function broadcastViewerInit() {
+            broadcastToViewer('init', {
+                workspace: workspaceRoot || window.location.origin,
+                cwd: currentPath || workspaceRoot,
+                activeTab: activeTabPath,
+                openTabs: openTabs.map(t => t.path),
+            });
+        }
+
+        // Send initial state after connections are established
+        setTimeout(broadcastViewerInit, 1000);
+
+        // Wrap existing event handlers to also broadcast to viewer
+        const originalOpenOrFocusFile = openOrFocusFile;
+        openOrFocusFile = function(filepath, content) {
+            const result = originalOpenOrFocusFile(filepath, content);
+            broadcastToViewer('tab_opened', {path: filepath, activeTab: activeTabPath});
+            return result;
+        };
+
+        const originalSwitchTab = switchTab;
+        switchTab = function(path) {
+            const result = originalSwitchTab(path);
+            broadcastToViewer('tab_switched', {path: path, activeTab: path});
+            return result;
+        };
+
+        const originalCloseTab = closeTab;
+        closeTab = function(path) {
+            const result = originalCloseTab(path);
+            broadcastToViewer('tab_closed', {path: path, activeTab: activeTabPath});
+            return result;
+        };
+
+        const originalMarkTabDirty = markTabDirty;
+        markTabDirty = function(path, dirty) {
+            const result = originalMarkTabDirty(path, dirty);
+            broadcastToViewer('tab_dirty', {path: path, dirty: dirty});
+            return result;
+        };
+
+        // Broadcast cursor position changes
+        if (monacoEditor) {
+            monacoEditor.onDidChangeCursorPosition(e => {
+                broadcastToViewer('cursor_position', {
+                    line: e.position.lineNumber,
+                    column: e.position.column,
+                    file: activeTabPath,
+                });
+            });
+        }
+
+        // Broadcast selection changes
+        if (monacoEditor) {
+            monacoEditor.onDidChangeCursorSelection(e => {
+                const sel = e.selection;
+                if (sel.startLineNumber !== sel.endLineNumber || sel.startColumn !== sel.endColumn) {
+                    broadcastToViewer('selection', {
+                        startLine: sel.startLineNumber,
+                        endLine: sel.endLineNumber,
+                        startColumn: sel.startColumn,
+                        endColumn: sel.endColumn,
+                        file: activeTabPath,
+                    });
+                }
+            });
+        }
+
+        // Broadcast file saves
+        const originalPerformSave = performSave;
+        performSave = async function(specificPath) {
+            const result = await originalPerformSave(specificPath);
+            const path = specificPath || activeTabPath || currentFile;
+            if (path) {
+                broadcastToViewer('file_saved', {path: path});
+            }
+            return result;
+        };
+
+        // Broadcast file list changes (new files, deletions)
+        const originalLoadFiles = loadFiles;
+        loadFiles = async function(path) {
+            const result = await originalLoadFiles(path);
+            broadcastToViewer('file_tree_changed', {path: currentPath || path || workspaceRoot});
+            return result;
+        };
+
+        // Broadcast terminal output
+        const originalTermWrite = term.write;
+        term.write = function(data) {
+            broadcastToViewer('terminal_output', {data: data});
+            return originalTermWrite.apply(this, arguments);
+        };
+
+        // Broadcast terminal cwd changes
+        const originalHandleTerminalCwd = handleTerminalCwd;
+        handleTerminalCwd = function(absPath) {
+            const result = originalHandleTerminalCwd(absPath);
+            broadcastToViewer('cwd_changed', {path: absPath});
+            return result;
+        };
+
+        // Broadcast new file creation
+        // (handled via loadFiles broadcast)
+
+        // Broadcast instructor changes
+        const originalSetInstructor = setInstructor;
+        setInstructor = function(instructor) {
+            const result = originalSetInstructor(instructor);
+            broadcastToViewer('instructor_changed', {instructor: instructor});
+            return result;
+        };
         term.onData(data => {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({type: 'input', data}));
