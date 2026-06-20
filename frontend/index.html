@@ -736,10 +736,7 @@
                 <div id="instructor-selector" style="display:flex; gap:2px; font-size:10px; background:#050505; border:1px solid #222; border-radius:4px; padding:2px;">
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('family')" id="inst-family" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('claude')" id="inst-claude" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('perplexity')" id="inst-perplexity" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemotron</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('nemo')" id="inst-nemo" class="inst-btn" style="padding:3px 10px; background:#111; color:#40E0D0; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemo</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('kimi')" id="inst-kimi" class="inst-btn" title="Kimi K2.6 — NVIDIA learning tutor for kids, retention, and code" style="padding:3px 10px; background:#111; color:#76B900; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Kimi</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('glm')" id="inst-glm" class="inst-btn" style="padding:3px 10px; background:#111; color:#A855F7; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);display:none;">GLM</button>
                     <button onclick="showMusicLibrary()" title="Music & Voice MP3 Library — local voice refs + Apple Music links (like a personal streaming lib)" style="padding:3px 8px; background:#1f1f1f; color:var(--copper-light); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px;">Lib</button>
                     <button onclick="playMyAlbum()" title="Play your album '53 Years in the Making' — the player, clear as a bell!" style="padding:3px 8px; background:#1f1f1f; color:var(--copper); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px; font-weight:700;">▶ Album</button>
                 </div>
@@ -754,7 +751,7 @@
             </div>
 
             <div id="chat-history">
-                <span class="system-tag">[BROCKSTON FAMILY]: How can we help you love yourself more today? Open a file or just talk to us. <strong>Claude</strong>, <strong>Perplexity</strong> (live search), and <strong>Kimi</strong> (NVIDIA learning tutor — kids, retention, code) are in the beings row above. Your album "53 Years in the Making" (incl. Brockston.mp3) is ready in the Music Library — hit ▶ Album or the specific track button.</span>
+                <span class="system-tag">[BROCKSTON FAMILY]: How can we help you love yourself more today? Open a file or just talk to us. <strong>Family</strong> (Brockston + Christman beings), <strong>Claude</strong>, and <strong>Kimi</strong> (NVIDIA learning tutor for your kids) are in the row above. Your album "53 Years in the Making" (incl. Brockston.mp3) is in the Music Library — hit ▶ Album.</span>
             </div>
             <div id="chat-input-area">
                 <button id="mic-btn" title="Hold or click to speak your question (great for nonverbal)" 
@@ -1227,14 +1224,8 @@
             
                 if (endpoint === '/api/claude') {
                     await sendToClaude(payloadMessage, 'CLAUDE');
-                } else if (endpoint === '/api/perplexity') {
-                    await sendToPerplexity(payloadMessage, 'NEMOTRON');
-                } else if (endpoint === '/api/nemo') {
-                    await sendToNemo(payloadMessage, 'NEMO');
                 } else if (endpoint === '/api/kimi') {
                     await sendToKimi(payloadMessage, 'KIMI');
-                } else if (endpoint === '/api/glm') {
-                    await sendToGLM(payloadMessage, 'GLM');
                 } else {
                     const res = await fetch(`${API_BASE}/chat`, {
                         method: 'POST',
@@ -1272,14 +1263,8 @@
 
             if (endpoint === '/api/claude') {
                 sendToClaude(prompt, 'CLAUDE');
-            } else if (endpoint === '/api/perplexity') {
-                sendToPerplexity(prompt, 'NEMOTRON');
-            } else if (endpoint === '/api/nemo') {
-                sendToNemo(prompt, 'NEMO');
             } else if (endpoint === '/api/kimi') {
                 sendToKimi(prompt, 'KIMI');
-            } else if (endpoint === '/api/glm') {
-                sendToGLM(prompt, 'GLM');
             } else {
                 // send directly with the constructed rich message
                 fetch(`${API_BASE}/chat`, {
@@ -1783,40 +1768,10 @@
 
         connectWebSocket();
 
-        // ----- Viewer WebSocket (Nemo's live eye) — NEW
+        // Viewer WebSocket off in classroom IDE (optional — enable when viewer app is running)
         let viewerWs = null;
-        function connectViewerWebSocket() {
-            const viewerUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
-                + window.location.host + "/ws/viewer";
-            viewerWs = new WebSocket(viewerUrl);
 
-            viewerWs.onopen = () => {
-                console.log('[VIEWER] Nemo\'s live eye connected');
-            };
-
-            viewerWs.onmessage = (event) => {
-                try {
-                    const msg = JSON.parse(event.data);
-                    // Handle messages from viewer if needed (commands from Nemo)
-                    console.log('[VIEWER] Received:', msg.type, msg.data);
-                } catch (err) {
-                    console.error('[VIEWER] Parse error:', err);
-                }
-            };
-
-            viewerWs.onclose = () => {
-                console.log('[VIEWER] Disconnected, reconnecting in 3s...');
-                setTimeout(connectViewerWebSocket, 3000);
-            };
-
-            viewerWs.onerror = (error) => {
-                console.error('[VIEWER] Error:', error);
-            };
-        }
-
-        connectViewerWebSocket();
-
-        // ----- Broadcast functions to send events to Nemo's viewer
+        // ----- Broadcast functions (no-op when viewer is disconnected)
         function broadcastToViewer(eventType, data) {
             if (viewerWs && viewerWs.readyState === WebSocket.OPEN) {
                 viewerWs.send(JSON.stringify({type: eventType, data}));
@@ -1853,33 +1808,12 @@
                     color: '#40E0D0',
                     description: 'Anthropic\'s Claude — additional instructor'
                 },
-                'perplexity': {
-                    name: 'Nemotron Ultra (NVIDIA)',
-                    model: 'nemotron-3-ultra:free (NVIDIA research)',
-                    endpoint: '/api/perplexity',
-                    color: '#00B4D8',
-                    description: 'NVIDIA Nemotron 3 Ultra — free tier via OpenRouter'
-                },
-                'nemo': {
-                    name: 'Nemo',
-                    model: 'nemotron-3-ultra:free (Nous Portal)',
-                    endpoint: '/api/nemo',
-                    color: '#40E0D0',
-                    description: 'Nemo — your partner, sees your code in real-time'
-                },
                 'kimi': {
                     name: 'Kimi K2.6',
                     model: 'moonshotai/kimi-k2.6 (NVIDIA NIM)',
                     endpoint: '/api/kimi',
                     color: '#76B900',
                     description: 'NVIDIA learning tutor — kids, retention, open-code mentor'
-                },
-                'glm': {
-                    name: 'GLM',
-                    model: 'GLM (Z.ai)',
-                    endpoint: '/api/glm',
-                    color: '#A855F7',
-                    description: 'GLM — Z.ai (coming tonight)'
                 }
             },
 
@@ -1917,15 +1851,11 @@
                 // Visual mode on the panel for special instructors
                 const aiPanel = document.getElementById('ai-panel');
                 if (aiPanel) {
-                    aiPanel.classList.remove('claude-mode', 'nemo-mode', 'kimi-mode', 'glm-mode');
+                    aiPanel.classList.remove('claude-mode', 'kimi-mode');
                     if (instructorKey === 'claude') {
                         aiPanel.classList.add('claude-mode');
-                    } else if (instructorKey === 'nemo') {
-                        aiPanel.classList.add('nemo-mode');
                     } else if (instructorKey === 'kimi') {
                         aiPanel.classList.add('kimi-mode');
-                    } else if (instructorKey === 'glm') {
-                        aiPanel.classList.add('glm-mode');
                     }
                 }
                 
@@ -2080,7 +2010,7 @@
 
         // Highlight additional beings/instructors (orchestrator already set Family above)
         setTimeout(() => {
-            ['inst-claude', 'inst-perplexity', 'inst-kimi'].forEach(id => {
+            ['inst-claude', 'inst-kimi'].forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) btn.style.border = '1px solid #444';
             });
