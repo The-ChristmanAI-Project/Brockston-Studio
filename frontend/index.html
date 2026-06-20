@@ -1245,7 +1245,7 @@
                     const data = await res.json();
                     const who = (data.response || '').includes('ULTIMATE_EV') ? 'ULTIMATE_EV' : 'BROCKSTON';
                     appendMessage(who, data.response, 'ai');
-                    speakText(String(data.response).replace(/\\\\[.*?\\\\]/g, ''));
+                    speakText(String(data.response).replace(/\[.*?\]/g, ''));
                 }
             } catch (err) {
                 console.error(err);
@@ -1263,7 +1263,7 @@
             const sel = monacoEditor ? monacoEditor.getModel().getValueInRange(monacoEditor.getSelection()) : '';
             const body = sel || (tab ? tab.content : '');
             const ctx = sel ? 'SELECTION' : 'FILE';
-            const prompt = `${instruction} the ${ctx.toLowerCase()} below. Be precise and give clean code when appropriate.\\n\\n[${ctx}: ${activeTabPath}]\\n\\`\\`\\`\\n${body.slice(0,2200)}\\n\\`\\`\\``;
+            const prompt = `${instruction} the ${ctx.toLowerCase()} below. Be precise and give clean code when appropriate.\n\n[${ctx}: ${activeTabPath}]\n\`\`\`\n${body.slice(0,2200)}\n\`\`\``;
             chatInput.value = '';
             appendMessage('YOU', instruction, 'user');
 
@@ -1289,7 +1289,7 @@
                 }).then(r => r.json()).then(data => {
                     const who = (data.response || '').includes('ULTIMATE_EV') ? 'ULTIMATE_EV' : 'BROCKSTON';
                     appendMessage(who, data.response, 'ai');
-                    speakText(String(data.response).replace(/\\\\[.*?\\\\]/g, ''));
+                    speakText(String(data.response).replace(/\[.*?\]/g, ''));
                 }).catch(e => appendMessage('SYSTEM', '[ERROR] ' + e.message, 'error'));
             }
         }
@@ -1336,7 +1336,7 @@
                 const data = await res.json();
                 appendMessage(whoLabel, data.response || '', 'ai');
                 // Perplexity answers are usually long and grounded — speak the summary if voice mode on
-                speakText(String(data.response || '').replace(/\\[.*?\\]/g, '').substring(0, 600));
+                speakText(String(data.response || '').replace(/\[.*?\]/g, '').substring(0, 600));
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[PERPLEXITY ERROR]: ${err.message}`, 'error');
@@ -1354,7 +1354,7 @@
                 if (!res.ok) throw new Error(`Server error: ${res.status}`);
                 const data = await res.json();
                 appendMessage(whoLabel, data.response || '', 'ai');
-                speakText(String(data.response || '').replace(/\\\\[.*?\\\\]/g, ''));
+                speakText(String(data.response || '').replace(/\[.*?\]/g, ''));
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[NEMO ERROR]: ${err.message}`, 'error');
@@ -1396,7 +1396,7 @@
                 if (!res.ok) throw new Error(`Server error: ${res.status}`);
                 const data = await res.json();
                 appendMessage(whoLabel, data.response || '', 'ai');
-                speakText(String(data.response || '').replace(/\\\\[.*?\\\\]/g, ''));
+                speakText(String(data.response || '').replace(/\[.*?\]/g, ''));
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[GLM ERROR]: ${err.message}`, 'error');
@@ -2078,16 +2078,14 @@
         }).catch(() => {});
         window.addEventListener('focus', () => term.focus());
 
-        // Default to Family, highlight additional beings/instructors
+        // Highlight additional beings/instructors (orchestrator already set Family above)
         setTimeout(() => {
-            setInstructor('family'); // This will set active class + status bar + placeholder
             ['inst-claude', 'inst-perplexity', 'inst-kimi'].forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) btn.style.border = '1px solid #444';
             });
             const kimiBtn = document.getElementById('inst-kimi');
             if (kimiBtn) kimiBtn.style.color = '#9acd32';
-            // Gentle nudge for the new track if user hasn't added it yet
             if (!musicLibrary.some(e => e.source.includes('Brockston.mp3'))) {
                 appendMessage('SYSTEM', '🎵 Your Brockston.mp3 from Downloads is ready to add — open the Lib and hit the specific track button, or browse to it in the explorer (auto-adds to the album).', 'system');
             }
