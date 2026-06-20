@@ -63,8 +63,27 @@ except Exception as e:
     _perplexity_svc = None
     logger.warning(f"Nemotron service not available: {e}")
 
+# Kimi K2.6 — NVIDIA learning tutor (kids, retention, code context)
+try:
+    from backend.kimi_service import get_kimi_service
+    _kimi_svc = get_kimi_service()
+    if not _kimi_svc.is_available:
+        _kimi_svc = None
+        logger.warning("Kimi linked but not available (NVIDIA_API_KEY or BROCKSTON :9001)")
+    else:
+        logger.info("Kimi K2.6 linked — learning tutor available at /api/kimi")
+except Exception as e:
+    _kimi_svc = None
+    logger.warning(f"Kimi service not available: {e}")
+
 class ChatRequest(BaseModel):
     message: str
+
+class KimiRequest(BaseModel):
+    message: str
+    mode: str = "tutor"
+    context: str | None = None
+    domain: str | None = None
 
 @app.get("/api/health")
 async def health_check():
@@ -77,8 +96,30 @@ async def chat_endpoint(request: ChatRequest):
     # Quick local response for testing (AI services offline)
     return {"response": f"[LOCAL] (local): I received: '{request.message}'. AI services (Brockston API on 8000, Ollama on 11434) are offline. Start them to enable full AI."}
 
+@app.post("/api/kimi")
+async def kimi_endpoint(request: KimiRequest):
+    """Kimi K2.6 — learning tutor & code mentor for the beings panel."""
+    if not _kimi_svc:
+        raise fastapi.HTTPException(
+            status_code=503,
+            detail="Kimi not available — set NVIDIA_API_KEY or start BROCKSTON on :9001",
+        )
+    try:
+        mode = request.mode if request.mode in ("tutor", "codelab", "learning", "coach") else "tutor"
+        result = _kimi_svc.interact(
+            message=request.message,
+            mode=mode,
+            context=request.context,
+            domain=request.domain,
+        )
+        text = result.get("text", "")
+        return {"response": f"[KIMI]: {text}", "ok": True, "model": result.get("model")}
+    except Exception as e:
+        logger.error(f"Kimi error: {e}")
+        raise fastapi.HTTPException(status_code=500, detail=str(e))
+
+
 # NVIDIA Nemotron 3 Ultra — research instructor (replaces Perplexity Sonar)
-# Routes through OpenRouter free tier. Endpoint name preserved for frontend compat.
 @app.post("/api/perplexity")
 async def perplexity_endpoint(request: ChatRequest):
     """NVIDIA Nemotron 3 Ultra research queries via OpenRouter (free tier)."""

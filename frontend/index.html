@@ -613,6 +613,20 @@
             border: 1px solid var(--tiffany-blue) !important;
             box-shadow: 0 0 8px var(--tiffany-glow);
         }
+        #inst-kimi.active {
+            border: 1px solid #76B900 !important;
+            box-shadow: 0 0 8px rgba(118, 185, 0, 0.45);
+        }
+        #ai-panel.kimi-mode {
+            border: 1px solid #76B900;
+            box-shadow: inset 0 0 20px rgba(118, 185, 0, 0.08), 0 0 12px rgba(118, 185, 0, 0.2);
+        }
+        #ai-panel.kimi-mode .msg.ai {
+            border-left: 3px solid #76B900;
+        }
+        #ai-panel.kimi-mode .msg .ai-header {
+            color: #76B900;
+        }
         .inst-btn:hover:not(.active) {
             background: #1a1a1a;
             color: #ddd;
@@ -722,9 +736,9 @@
                 <div id="instructor-selector" style="display:flex; gap:2px; font-size:10px; background:#050505; border:1px solid #222; border-radius:4px; padding:2px;">
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('family')" id="inst-family" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('claude')" id="inst-claude" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('perplexity')" id="inst-perplexity" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Perplexity</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('perplexity')" id="inst-perplexity" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemotron</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('nemo')" id="inst-nemo" class="inst-btn" style="padding:3px 10px; background:#111; color:#40E0D0; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemo</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('kimi')" id="inst-kimi" class="inst-btn" style="padding:3px 10px; background:#111; color:#FF6B6B; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);display:none;">Kimi</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('kimi')" id="inst-kimi" class="inst-btn" title="Kimi K2.6 — NVIDIA learning tutor for kids, retention, and code" style="padding:3px 10px; background:#111; color:#76B900; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Kimi</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('glm')" id="inst-glm" class="inst-btn" style="padding:3px 10px; background:#111; color:#A855F7; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);display:none;">GLM</button>
                     <button onclick="showMusicLibrary()" title="Music & Voice MP3 Library — local voice refs + Apple Music links (like a personal streaming lib)" style="padding:3px 8px; background:#1f1f1f; color:var(--copper-light); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px;">Lib</button>
                     <button onclick="playMyAlbum()" title="Play your album '53 Years in the Making' — the player, clear as a bell!" style="padding:3px 8px; background:#1f1f1f; color:var(--copper); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px; font-weight:700;">▶ Album</button>
@@ -740,7 +754,7 @@
             </div>
 
             <div id="chat-history">
-                <span class="system-tag">[BROCKSTON FAMILY]: How can we help you love yourself more today? Open a file or just talk to us. <strong>Claude</strong> and <strong>Perplexity</strong> (live search) are now available as additional instructors. Your album "53 Years in the Making" (incl. Brockston.mp3) is ready in the Music Library — hit ▶ Album or the specific track button.</span>
+                <span class="system-tag">[BROCKSTON FAMILY]: How can we help you love yourself more today? Open a file or just talk to us. <strong>Claude</strong>, <strong>Perplexity</strong> (live search), and <strong>Kimi</strong> (NVIDIA learning tutor — kids, retention, code) are in the beings row above. Your album "53 Years in the Making" (incl. Brockston.mp3) is ready in the Music Library — hit ▶ Album or the specific track button.</span>
             </div>
             <div id="chat-input-area">
                 <button id="mic-btn" title="Hold or click to speak your question (great for nonverbal)" 
@@ -828,7 +842,7 @@
         let monacoEditor = null;
         let workspaceRoot = null;
         let lastSyncedCwd = null;
-        let selectedInstructor = 'family'; // 'family' | 'claude' | 'perplexity' — additional instructors
+        let selectedInstructor = 'family'; // 'family' | 'claude' | 'perplexity' | 'kimi'
 
         // Music & Voice Library - supports local MP3 voice files + Apple Music style links
         let musicLibrary = JSON.parse(localStorage.getItem('christmanMusicLibrary') || '[]');
@@ -1214,7 +1228,7 @@
                 if (endpoint === '/api/claude') {
                     await sendToClaude(payloadMessage, 'CLAUDE');
                 } else if (endpoint === '/api/perplexity') {
-                    await sendToPerplexity(payloadMessage, 'PERPLEXITY');
+                    await sendToPerplexity(payloadMessage, 'NEMOTRON');
                 } else if (endpoint === '/api/nemo') {
                     await sendToNemo(payloadMessage, 'NEMO');
                 } else if (endpoint === '/api/kimi') {
@@ -1237,6 +1251,7 @@
                 console.error(err);
                 appendMessage('SYSTEM', `[ERROR]: ${err.message}`, 'error');
             }
+        }
 
         // Quick action helper — used by the chips
         function quickAsk(instruction) {
@@ -1258,7 +1273,7 @@
             if (endpoint === '/api/claude') {
                 sendToClaude(prompt, 'CLAUDE');
             } else if (endpoint === '/api/perplexity') {
-                sendToPerplexity(prompt, 'PERPLEXITY');
+                sendToPerplexity(prompt, 'NEMOTRON');
             } else if (endpoint === '/api/nemo') {
                 sendToNemo(prompt, 'NEMO');
             } else if (endpoint === '/api/kimi') {
@@ -1281,6 +1296,14 @@
 
         function setInstructor(instructorKey) {
             MODEL_ORCHESTRATOR.setInstructor(instructorKey);
+        }
+
+        function detectKimiMode(text) {
+            const lower = String(text || '').toLowerCase();
+            if (/\b(code|fix|bug|implement|refactor|python|typescript|module|import|function|class)\b/.test(lower)) {
+                return 'codelab';
+            }
+            return 'tutor';
         }
 
         async function sendToClaude(text, whoLabel = 'CLAUDE') {
@@ -1343,12 +1366,20 @@
                 const res = await fetch(`${API_BASE}/kimi`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ message: text })
+                    body: JSON.stringify({
+                        message: text,
+                        mode: detectKimiMode(text),
+                        domain: 'neurodivergency',
+                    })
                 });
-                if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                if (!res.ok) {
+                    const errBody = await res.text();
+                    throw new Error(errBody || `Server error: ${res.status}`);
+                }
                 const data = await res.json();
-                appendMessage(whoLabel, data.response || '', 'ai');
-                speakText(String(data.response || '').replace(/\\\\[.*?\\\\]/g, ''));
+                const reply = data.response || '';
+                appendMessage(whoLabel, reply, 'ai');
+                speakText(String(reply).replace(/\[KIMI\]:?\s*/i, '').replace(/\[.*?\]/g, '').substring(0, 800));
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[KIMI ERROR]: ${err.message}`, 'error');
@@ -1837,11 +1868,11 @@
                     description: 'Nemo — your partner, sees your code in real-time'
                 },
                 'kimi': {
-                    name: 'Kimi',
-                    model: 'kimi (Moonshot AI)',
+                    name: 'Kimi K2.6',
+                    model: 'moonshotai/kimi-k2.6 (NVIDIA NIM)',
                     endpoint: '/api/kimi',
-                    color: '#FF6B6B',
-                    description: 'Kimi — Moonshot AI (coming tonight)'
+                    color: '#76B900',
+                    description: 'NVIDIA learning tutor — kids, retention, open-code mentor'
                 },
                 'glm': {
                     name: 'GLM',
@@ -2047,19 +2078,15 @@
         }).catch(() => {});
         window.addEventListener('focus', () => term.focus());
 
-        // Default to Family, highlight Claude + Perplexity as available additional instructors
+        // Default to Family, highlight additional beings/instructors
         setTimeout(() => {
             setInstructor('family'); // This will set active class + status bar + placeholder
-            const claudeBtn = document.getElementById('inst-claude');
-            const perpBtn = document.getElementById('inst-perplexity');
-            if (claudeBtn) {
-                // Give Claude a distinct subtle highlight to signal it's the new additional instructor
-                claudeBtn.style.border = '1px solid #444';
-            }
-            if (perpBtn) {
-                // Subtle highlight for Perplexity (search guy)
-                perpBtn.style.border = '1px solid #444';
-            }
+            ['inst-claude', 'inst-perplexity', 'inst-kimi'].forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.style.border = '1px solid #444';
+            });
+            const kimiBtn = document.getElementById('inst-kimi');
+            if (kimiBtn) kimiBtn.style.color = '#9acd32';
             // Gentle nudge for the new track if user hasn't added it yet
             if (!musicLibrary.some(e => e.source.includes('Brockston.mp3'))) {
                 appendMessage('SYSTEM', '🎵 Your Brockston.mp3 from Downloads is ready to add — open the Lib and hit the specific track button, or browse to it in the explorer (auto-adds to the album).', 'system');
