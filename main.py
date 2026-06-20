@@ -91,10 +91,16 @@ async def health_check():
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    """Local AI response."""
-    logger.info(f"Chat request: {request.message}")
-    # Quick local response for testing (AI services offline)
-    return {"response": f"[LOCAL] (local): I received: '{request.message}'. AI services (Brockston API on 8000, Ollama on 11434) are offline. Start them to enable full AI."}
+    """Christman Family — Brockston via local pipeline, Ollama fallback."""
+    logger.info(f"Chat request: {request.message[:120]}")
+    if not get_ai_response:
+        raise fastapi.HTTPException(status_code=503, detail="AI client not available")
+    try:
+        response_text = get_ai_response(request.message)
+        return {"response": response_text}
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise fastapi.HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/kimi")
 async def kimi_endpoint(request: KimiRequest):
@@ -502,10 +508,11 @@ async def websocket_viewer(websocket: fastapi.WebSocket):
 # ==========================================
 backend_dir = Path(__file__).parent
 frontend_dir = backend_dir / "frontend"
-app.mount("/frontend", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+static_dir = frontend_dir / "static"
+
+if static_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 @app.get("/")
 async def root():
     return FileResponse(str(frontend_dir / "index.html"))
-
-app.mount("/", StaticFiles(directory=str(frontend_dir)), name="frontend_root")
