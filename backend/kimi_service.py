@@ -43,7 +43,7 @@ class KimiService:
     def _brockston_reachable(self) -> bool:
         try:
             base = BROCKSTON_KIMI_URL.rsplit("/kimi/", 1)[0]
-            r = httpx.get(f"{base}/health", timeout=2.0)
+            r = httpx.get(f"{base}/api/health", timeout=2.0)
             return r.status_code == 200 and r.json().get("nvidia_kimi")
         except Exception:
             return False

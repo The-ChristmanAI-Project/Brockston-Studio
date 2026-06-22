@@ -1,0 +1,13 @@
+{
+  "packs": [
+    {
+      "pack_id": "alphavox",
+      "being_name": "AlphaVox",
+      "language": "en-US",
+      "voicepack_path": "/Users/EverettN/Brockston-Studio/Voice_Creation_Center/packs/alphavox/alphavox.voicepack",
+      "version": "2026.06.21.2106",
+      "rolled_out_at": "2026-06-21T21:06:25.533811+00:00",
+      "source": "rollout_voicepack_to_center.py"
+    }
+  ]
+}

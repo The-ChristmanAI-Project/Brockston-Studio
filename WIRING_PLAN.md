@@ -199,7 +199,7 @@ async def synthesize_speech(request: SpeakRequest):
 Sandboxed Python execution with timeout/limits
 
 ### Step 4: Test Everything
-`curl -X POST http://localhost:8000/api/execute -d '{"code": "print(\"hello\")"}'`
+`curl -X POST http://localhost:9001/api/execute -d '{"code": "print(\"hello\")"}'`
 
 ---
 
