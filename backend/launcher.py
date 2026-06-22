@@ -8,7 +8,14 @@ import asyncio
 import tempfile
 from typing import List, Optional
 from pathlib import Path
-from pathlib import Path
+import sys
+
+# Ensure backend/ is on sys.path so relative imports work when launcher is run
+# via `python3 -m uvicorn backend.launcher:app` from the project root.
+_BACKEND_DIR = str(Path(__file__).resolve().parent)
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File, Request # pyright: ignore[reportMissingImports]
 from fastapi.responses import Response # pyright: ignore[reportMissingImports]
 from fastapi.staticfiles import StaticFiles # pyright: ignore[reportMissingImports]
@@ -55,6 +62,10 @@ class SpeakRequest(BaseModel):
 @app.get("/")
 async def root():
     return {"status": "online", "model": LLM_MODEL_CODER}
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "port": PORT, "mode": BROCKSTON_MODE}
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):

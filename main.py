@@ -50,18 +50,14 @@ try:
 except Exception as e:
     logger.warning(f"Claude router not available: {e}")
 
-# NVIDIA Nemotron 3 Ultra via OpenRouter — selectable research instructor
+# Nemo — sovereign partner and live IDE companion. Routes through the Christman local pipeline.
 try:
-    from backend.nemotron_service import NemotronService
-    _perplexity_svc = NemotronService()
-    if not _perplexity_svc.is_available:
-        _perplexity_svc = None
-        logger.warning("Nemotron not available (check OPENROUTER_API_KEY)")
-    else:
-        logger.info("NVIDIA Nemotron 3 Ultra linked and ready as research instructor")
+    from backend.nemo_service import get_nemo_service
+    _nemo_svc = get_nemo_service()
+    logger.info("Nemo linked — partner line available at /api/nemo")
 except Exception as e:
-    _perplexity_svc = None
-    logger.warning(f"Nemotron service not available: {e}")
+    _nemo_svc = None
+    logger.warning(f"Nemo service not available: {e}")
 
 # Kimi K2.6 — NVIDIA learning tutor (kids, retention, code context)
 try:
@@ -84,6 +80,10 @@ class KimiRequest(BaseModel):
     mode: str = "tutor"
     context: str | None = None
     domain: str | None = None
+
+class NemoRequest(BaseModel):
+    message: str
+    mode: str = "partner"
 
 @app.get("/api/health")
 async def health_check():
@@ -124,34 +124,20 @@ async def kimi_endpoint(request: KimiRequest):
         logger.error(f"Kimi error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))
 
-
-# NVIDIA Nemotron 3 Ultra — research instructor (replaces Perplexity Sonar)
-@app.post("/api/perplexity")
-async def perplexity_endpoint(request: ChatRequest):
-    """NVIDIA Nemotron 3 Ultra research queries via OpenRouter (free tier)."""
-    if not _perplexity_svc:
-        raise fastapi.HTTPException(status_code=500, detail="Nemotron not available (OPENROUTER_API_KEY)")
-
-    try:
-        # The rich context (file + selection) is already baked into the message by the frontend
-        result = _perplexity_svc.generate_content(
-            request.message,
-            max_tokens=1500,
-        )
-        return {"response": f"[NEMOTRON]: {result}"}
-    except Exception as e:
-        logger.error(f"Nemotron error: {e}")
-        raise fastapi.HTTPException(status_code=500, detail=str(e))
-
-# ==========================================
 # NEMO ENDPOINT — Nemo's direct line
-# ==========================================
 @app.post("/api/nemo")
-async def nemo_endpoint(request: ChatRequest):
-    """Nemo's direct line — sees your code in real-time."""
-    logger.info(f"Nemo request: {request.message}")
-    # Quick local response for testing (AI services offline)
-    return {"response": f"[NEMO] (local): I'm Nemo, your partner. I see you said: '{request.message}'. The AI services are offline but I'm here watching your code in real-time via the viewer WebSocket. When the AI services come online (Brockston API on 8000 or Ollama on 11434), I'll have full access to the model."}
+async def nemo_endpoint(request: NemoRequest):
+    """Nemo's direct line — sovereign partner watching your code in real-time."""
+    logger.info(f"Nemo request: {request.message[:120]}")
+    if not _nemo_svc:
+        raise fastapi.HTTPException(status_code=503, detail="Nemo service not available")
+    try:
+        mode = request.mode if request.mode in ("partner", "code") else "partner"
+        reply = _nemo_svc.generate_content(request.message, mode=mode)
+        return {"response": f"[NEMO]: {reply}", "source": "nemo", "mode": mode}
+    except Exception as e:
+        logger.error(f"Nemo error: {e}")
+        raise fastapi.HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
 # AUDIO ROUTE (This makes the kids' TTS work)
@@ -469,7 +455,7 @@ async def websocket_viewer(websocket: fastapi.WebSocket):
     await websocket.accept()
     viewer_connections.add(websocket)
     logger.info("Viewer connected (Nemo's live eye)")
-    
+
     # Send initial state
     try:
         await websocket.send_text(json.dumps({
@@ -479,19 +465,20 @@ async def websocket_viewer(websocket: fastapi.WebSocket):
                 "cwd": str(WORKSPACE_ROOT),
                 "ide_models": {
                     "autocomplete": "qwen2.5-coder:32b (local, autocomplete only)",
-                    "nemo": "nemotron 3 ultra:free (watching via viewer)",
+                    "nemo": "sovereign partner — watching via viewer WebSocket",
                     "coming_tonight": ["Kimi", "GLM"]
                 },
                 "endpoints": {
                     "nemo_chat": "/api/nemo",
-                    "viewer_ws": "/ws/viewer"
+                    "viewer_ws": "/ws/viewer",
+                    "ide_control_ws": "/ws/ide-control"
                 },
-                "note": "Nemo is nemotron 3 ultra. The IDE runs qwen2.5-coder:32b locally for autocomplete. Nemo watches via viewer WebSocket. Kimi & GLM joining tonight."
+                "note": "Nemo is a sovereign partner. No OpenAI / OpenRouter / Nemotron. The IDE runs qwen2.5-coder:32b locally for autocomplete. Kimi & GLM joining tonight."
             }
         }))
     except Exception:
         pass
-    
+
     try:
         while True:
             # Keep connection alive, listen for any client messages (ping/pong)
@@ -502,6 +489,120 @@ async def websocket_viewer(websocket: fastapi.WebSocket):
     finally:
         viewer_connections.discard(websocket)
         logger.info("Viewer disconnected")
+
+# ==========================================
+# IDE CONTROL — Spotlight instructor operates the IDE
+# ==========================================
+ide_control_connections: Set[fastapi.WebSocket] = set()
+
+async def broadcast_ide_control(action: str, params: dict):
+    """Push a command to all connected IDE frontends."""
+    if not ide_control_connections:
+        return
+    dead = set()
+    message = json.dumps({"type": "command", "action": action, "params": params})
+    for ws in ide_control_connections:
+        try:
+            await ws.send_text(message)
+        except Exception:
+            dead.add(ws)
+    for ws in dead:
+        ide_control_connections.discard(ws)
+
+@app.websocket("/ws/ide-control")
+async def websocket_ide_control(websocket: fastapi.WebSocket):
+    """
+    Server → browser command channel.
+    The spotlight instructor/being sends commands via /api/ide/command;
+    this socket pushes them to the IDE frontend for execution.
+    """
+    await websocket.accept()
+    ide_control_connections.add(websocket)
+    logger.info("IDE control client connected")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            msg = json.loads(data)
+            msg_type = msg.get("type")
+            if msg_type == "pong":
+                continue
+            if msg_type == "state_response":
+                # Forward IDE state to all viewers so instructors see it
+                await broadcast_to_viewers("ide_state", msg.get("data", {}))
+    except Exception:
+        pass
+    finally:
+        ide_control_connections.discard(websocket)
+        logger.info("IDE control client disconnected")
+
+class IdeCommandRequest(BaseModel):
+    action: str
+    params: dict = {}
+
+@app.post("/api/ide/command")
+async def ide_command_endpoint(request: IdeCommandRequest):
+    """
+    Execute an IDE control command from the spotlight instructor.
+    Commands that need browser-side execution are pushed over /ws/ide-control.
+    Server-side commands (file read/list, instructor state) execute here.
+    """
+    action = request.action.lower().strip()
+    params = request.params
+    logger.info(f"IDE command: {action} {params}")
+
+    if action == "set_instructor":
+        instructor = params.get("instructor", "family")
+        await broadcast_ide_control("set_instructor", {"instructor": instructor})
+        return {"ok": True, "action": action, "note": f"Pushed set_instructor {instructor}"}
+
+    if action == "open_file":
+        path = params.get("path", "")
+        if not path:
+            raise fastapi.HTTPException(status_code=400, detail="path required")
+        abs_path = _resolve_user_path(path, WORKSPACE_ROOT)
+        content = ""
+        if abs_path.is_file():
+            try:
+                content = abs_path.read_text(encoding="utf-8")
+            except Exception as e:
+                logger.warning(f"Could not read {abs_path}: {e}")
+        await broadcast_ide_control("open_file", {"path": str(abs_path), "content": content})
+        return {"ok": True, "action": action, "path": str(abs_path)}
+
+    if action == "switch_tab":
+        path = params.get("path", "")
+        if not path:
+            raise fastapi.HTTPException(status_code=400, detail="path required")
+        await broadcast_ide_control("switch_tab", {"path": str(_resolve_user_path(path, WORKSPACE_ROOT))})
+        return {"ok": True, "action": action}
+
+    if action == "close_tab":
+        path = params.get("path", "")
+        await broadcast_ide_control("close_tab", {"path": str(_resolve_user_path(path, WORKSPACE_ROOT)) if path else ""})
+        return {"ok": True, "action": action}
+
+    if action == "save_file":
+        await broadcast_ide_control("save_file", {"path": params.get("path", "")})
+        return {"ok": True, "action": action}
+
+    if action == "send_terminal":
+        command = params.get("command", "")
+        if not command:
+            raise fastapi.HTTPException(status_code=400, detail="command required")
+        await broadcast_ide_control("send_terminal", {"command": command})
+        return {"ok": True, "action": action}
+
+    if action == "refresh_files":
+        await broadcast_ide_control("refresh_files", {})
+        return {"ok": True, "action": action}
+
+    if action == "get_state":
+        # Push get_state request to the IDE; browser replies over /ws/ide-control
+        await broadcast_ide_control("get_state", {})
+        return {"ok": True, "action": action, "note": "state requested from browser"}
+
+    # Unknown action — fail loud (Rule 6)
+    raise fastapi.HTTPException(status_code=400, detail=f"Unknown IDE command: {action}")
 
 # ==========================================
 # FRONTEND SERVING

@@ -14,7 +14,7 @@ import cors from 'cors';
 import fetch from 'node-fetch';
 
 const app = express();
-const PORT = 5174;
+const PORT = process.env.PORT || 5174;
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const MODEL = process.env.OLLAMA_MODEL || 'qwen2.5-coder:32b';
 

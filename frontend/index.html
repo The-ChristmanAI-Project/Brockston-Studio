@@ -675,7 +675,7 @@
 
     <div id="header">
         <span class="title"><i class="fas fa-bolt" style="margin-right: 8px;"></i>BROCKSTON STUDIO // PROFESSIONAL</span>
-        <span class="status">HOST: 127.0.0.1 : 7777 <span style="color:#444;font-size:9px;">(for thousands of kids — make it solid)</span></span>
+        <span class="status">HOST: 127.0.0.1 : 5055 <span style="color:#444;font-size:9px;">(for thousands of kids — make it solid)</span></span>
     </div>
 
     <div id="app-container">
@@ -748,11 +748,21 @@
             <div class="explorer-header" style="padding: 12px 16px 6px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
                 <div><i class="fas fa-brain" style="margin-right: 5px;"></i> ASK THE BEINGS</div>
                 <div id="instructor-selector" style="display:flex; gap:2px; font-size:10px; background:#050505; border:1px solid #222; border-radius:4px; padding:2px;">
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('family')" id="inst-family" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('claude')" id="inst-claude" class="inst-btn" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('family')" id="inst-family" class="inst-btn" title="Christman Family — Brockston, AlphaVox, AlphaWolf, Derek, etc." style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('claude')" id="inst-claude" class="inst-btn" title="Anthropic Claude" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('kimi')" id="inst-kimi" class="inst-btn" title="Kimi K2.6 — NVIDIA learning tutor for kids, retention, and code" style="padding:3px 10px; background:#111; color:#76B900; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Kimi</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('nemo')" id="inst-nemo" class="inst-btn" title="Nemo — sovereign partner watching your code live" style="padding:3px 10px; background:#111; color:#40E0D0; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemo</button>
                     <button onclick="showMusicLibrary()" title="Music & Voice MP3 Library — local voice refs + Apple Music links (like a personal streaming lib)" style="padding:3px 8px; background:#1f1f1f; color:var(--copper-light); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px;">Lib</button>
                     <button onclick="playMyAlbum()" title="Play your album '53 Years in the Making' — the player, clear as a bell!" style="padding:3px 8px; background:#1f1f1f; color:var(--copper); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px; font-weight:700;">▶ Album</button>
+                </div>
+            </div>
+
+            <!-- Mode switcher for instructors with dual modes (Kimi / Nemo) -->
+            <div id="mode-switcher" style="display:none; padding: 0 14px 6px; align-items:center; gap:8px; flex-wrap:wrap;">
+                <span id="mode-label" style="font-size:10px; color:#666; font-family:var(--font-term);">MODE:</span>
+                <div style="display:flex; gap:2px; font-size:10px; background:#050505; border:1px solid #222; border-radius:4px; padding:2px;">
+                    <button onclick="setInstructorMode('partner')" id="mode-partner" class="mode-btn" style="padding:2px 8px; background:#111; color:#888; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Partner</button>
+                    <button onclick="setInstructorMode('code')" id="mode-code" class="mode-btn" style="padding:2px 8px; background:#111; color:#888; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Code</button>
                 </div>
             </div>
 
@@ -853,7 +863,8 @@
         let monacoEditor = null;
         let workspaceRoot = null;
         let lastSyncedCwd = null;
-        let selectedInstructor = 'family'; // 'family' | 'claude' | 'perplexity' | 'kimi'
+        let selectedInstructor = 'family'; // 'family' | 'claude' | 'kimi' | 'nemo'
+        let instructorMode = { nemo: 'partner', kimi: 'tutor' }; // per-instructor mode toggle
 
         // Music & Voice Library - supports local MP3 voice files + Apple Music style links
         let musicLibrary = JSON.parse(localStorage.getItem('christmanMusicLibrary') || '[]');
@@ -1239,7 +1250,11 @@
                 if (endpoint === '/api/claude') {
                     await sendToClaude(payloadMessage, 'CLAUDE');
                 } else if (endpoint === '/api/kimi') {
-                    await sendToKimi(payloadMessage, 'KIMI');
+                    const mode = instructorMode.kimi || 'tutor';
+                    await sendToKimi(payloadMessage, 'KIMI', mode);
+                } else if (endpoint === '/api/nemo') {
+                    const mode = instructorMode.nemo || 'partner';
+                    await sendToNemo(payloadMessage, 'NEMO', mode);
                 } else {
                     const res = await fetch(`${API_BASE}/chat`, {
                         method: 'POST',
@@ -1278,7 +1293,11 @@
             if (endpoint === '/api/claude') {
                 sendToClaude(prompt, 'CLAUDE');
             } else if (endpoint === '/api/kimi') {
-                sendToKimi(prompt, 'KIMI');
+                const mode = instructorMode.kimi || 'tutor';
+                sendToKimi(prompt, 'KIMI', mode);
+            } else if (endpoint === '/api/nemo') {
+                const mode = instructorMode.nemo || 'partner';
+                sendToNemo(prompt, 'NEMO', mode);
             } else {
                 // send directly with the constructed rich message
                 fetch(`${API_BASE}/chat`, {
@@ -1295,6 +1314,54 @@
 
         function setInstructor(instructorKey) {
             MODEL_ORCHESTRATOR.setInstructor(instructorKey);
+        }
+
+        function renderModeSwitcher() {
+            const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
+            const key = MODEL_ORCHESTRATOR.currentInstructor;
+            const switcher = document.getElementById('mode-switcher');
+            const partnerBtn = document.getElementById('mode-partner');
+            const codeBtn = document.getElementById('mode-code');
+            const label = document.getElementById('mode-label');
+
+            if (!switcher || !partnerBtn || !codeBtn || !label) return;
+
+            // Only Kimi and Nemo support mode switching
+            if (key !== 'kimi' && key !== 'nemo') {
+                switcher.style.display = 'none';
+                return;
+            }
+
+            switcher.style.display = 'flex';
+            const mode = instructorMode[key];
+            const isCode = (key === 'kimi' && mode === 'codelab') || (key === 'nemo' && mode === 'code');
+
+            if (key === 'kimi') {
+                partnerBtn.textContent = 'Tutor';
+                codeBtn.textContent = 'Code Lab';
+                instructorMode[key] = isCode ? 'codelab' : 'tutor';
+            } else {
+                partnerBtn.textContent = 'Partner';
+                codeBtn.textContent = 'Code';
+            }
+
+            partnerBtn.style.color = !isCode ? instructor.color : '#888';
+            partnerBtn.style.border = !isCode ? `1px solid ${instructor.color}` : 'none';
+            codeBtn.style.color = isCode ? instructor.color : '#888';
+            codeBtn.style.border = isCode ? `1px solid ${instructor.color}` : 'none';
+            label.textContent = `${instructor.name} MODE:`;
+        }
+
+        function setInstructorMode(mode) {
+            const key = MODEL_ORCHESTRATOR.currentInstructor;
+            if (key === 'kimi') {
+                instructorMode[key] = (mode === 'code') ? 'codelab' : 'tutor';
+                appendMessage('SYSTEM', `Kimi switched to ${instructorMode[key]} mode`, 'system');
+            } else if (key === 'nemo') {
+                instructorMode[key] = (mode === 'code') ? 'code' : 'partner';
+                appendMessage('SYSTEM', `Nemo switched to ${instructorMode[key]} mode`, 'system');
+            }
+            renderModeSwitcher();
         }
 
         function detectKimiMode(text) {
@@ -1323,32 +1390,13 @@
             }
         }
 
-        async function sendToPerplexity(text, whoLabel = 'PERPLEXITY') {
-            try {
-                // Perplexity takes a prompt (we already built rich context + file/selection into `text`)
-                const res = await fetch(`${API_BASE}/perplexity`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ message: text })
-                });
-                if (!res.ok) throw new Error(`Server error: ${res.status}`);
-                const data = await res.json();
-                appendMessage(whoLabel, data.response || '', 'ai');
-                // Perplexity answers are usually long and grounded — speak the summary if voice mode on
-                speakText(String(data.response || '').replace(/\[.*?\]/g, '').substring(0, 600));
-            } catch (err) {
-                console.error(err);
-                appendMessage('SYSTEM', `[PERPLEXITY ERROR]: ${err.message}`, 'error');
-            }
-        }
-
-        async function sendToNemo(text, whoLabel = 'NEMO') {
+        async function sendToNemo(text, whoLabel = 'NEMO', mode = 'partner') {
             try {
                 // Nemo sees your code in real-time — direct line to your partner
                 const res = await fetch(`${API_BASE}/nemo`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ message: text })
+                    body: JSON.stringify({ message: text, mode: mode })
                 });
                 if (!res.ok) throw new Error(`Server error: ${res.status}`);
                 const data = await res.json();
@@ -1360,14 +1408,15 @@
             }
         }
 
-        async function sendToKimi(text, whoLabel = 'KIMI') {
+        async function sendToKimi(text, whoLabel = 'KIMI', mode = null) {
             try {
+                const effectiveMode = mode || detectKimiMode(text) || 'tutor';
                 const res = await fetch(`${API_BASE}/kimi`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         message: text,
-                        mode: detectKimiMode(text),
+                        mode: effectiveMode,
                         domain: 'neurodivergency',
                     })
                 });
@@ -1782,10 +1831,106 @@
 
         connectWebSocket();
 
-        // Viewer WebSocket off in classroom IDE (optional — enable when viewer app is running)
+        // Viewer WebSocket — lets the spotlight instructor/being see the entire IDE surface
+        const VIEWER_WS_URL = (window.location.protocol === 'https:' ? 'wss://' : 'ws://')
+            + window.location.host + "/ws/viewer";
         let viewerWs = null;
+        function connectViewerWebSocket() {
+            viewerWs = new WebSocket(VIEWER_WS_URL);
+            viewerWs.onopen = () => console.log('[VIEWER] WebSocket OPEN');
+            viewerWs.onerror = (e) => console.error('[VIEWER] WebSocket ERROR:', e);
+            viewerWs.onclose = () => {
+                console.log('[VIEWER] WebSocket CLOSED');
+                setTimeout(connectViewerWebSocket, 3000);
+            };
+        }
+        connectViewerWebSocket();
 
-        // ----- Broadcast functions (no-op when viewer is disconnected)
+        // IDE Control WebSocket — lets the spotlight instructor/being operate the IDE
+        const IDE_CONTROL_WS_URL = (window.location.protocol === 'https:' ? 'wss://' : 'ws://')
+            + window.location.host + "/ws/ide-control";
+        let ideControlWs = null;
+        function connectIdeControlWebSocket() {
+            ideControlWs = new WebSocket(IDE_CONTROL_WS_URL);
+
+            ideControlWs.onopen = () => {
+                console.log('[IDE-CONTROL] WebSocket OPEN');
+                requestIdeStateSnapshot();
+            };
+            ideControlWs.onerror = (e) => console.error('[IDE-CONTROL] WebSocket ERROR:', e);
+            ideControlWs.onclose = () => {
+                console.log('[IDE-CONTROL] WebSocket CLOSED');
+                setTimeout(connectIdeControlWebSocket, 3000);
+            };
+            ideControlWs.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'command') {
+                        handleIdeControlCommand(msg.action, msg.params || {});
+                    }
+                } catch (err) {
+                    console.error('[IDE-CONTROL] Parse error:', err);
+                }
+            };
+        }
+        connectIdeControlWebSocket();
+
+        // Build and send a snapshot of the current IDE surface back to the server
+        function requestIdeStateSnapshot() {
+            if (!ideControlWs || ideControlWs.readyState !== WebSocket.OPEN) return;
+            const snapshot = {
+                activeInstructor: MODEL_ORCHESTRATOR.currentInstructor,
+                instructorName: MODEL_ORCHESTRATOR.getCurrentInstructor().name,
+                activeTab: activeTabPath,
+                openTabs: openTabs.map(t => ({path: t.path, dirty: t.dirty, lang: t.lang})),
+                cwd: currentPath || workspaceRoot || '',
+                workspace: workspaceRoot || '',
+            };
+            ideControlWs.send(JSON.stringify({type: 'state_response', data: snapshot}));
+        }
+
+        // Execute remote commands from the spotlight instructor/being
+        async function handleIdeControlCommand(action, params) {
+            console.log('[IDE-CONTROL] command:', action, params);
+            switch (action) {
+                case 'set_instructor':
+                    if (params.instructor) {
+                        MODEL_ORCHESTRATOR.setInstructor(params.instructor);
+                    }
+                    break;
+                case 'open_file':
+                    if (params.path !== undefined) {
+                        openOrFocusFile(params.path, params.content || '');
+                    }
+                    break;
+                case 'switch_tab':
+                    if (params.path) switchTab(params.path);
+                    break;
+                case 'close_tab':
+                    if (params.path) closeTab(params.path);
+                    else if (activeTabPath) closeTab(activeTabPath);
+                    break;
+                case 'save_file':
+                    await performSave(params.path || activeTabPath);
+                    break;
+                case 'send_terminal':
+                    if (params.command && ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({type: 'input', data: params.command + '\n'}));
+                        term.focus();
+                    }
+                    break;
+                case 'refresh_files':
+                    await loadFiles(currentPath || workspaceRoot || '');
+                    break;
+                case 'get_state':
+                    requestIdeStateSnapshot();
+                    break;
+                default:
+                    console.warn('[IDE-CONTROL] Unknown command:', action);
+            }
+        }
+
+        // ----- Broadcast functions (now both viewer + any spotlight being see the IDE)
         function broadcastToViewer(eventType, data) {
             if (viewerWs && viewerWs.readyState === WebSocket.OPEN) {
                 viewerWs.send(JSON.stringify({type: eventType, data}));
@@ -1828,6 +1973,13 @@
                     endpoint: '/api/kimi',
                     color: '#76B900',
                     description: 'NVIDIA learning tutor — kids, retention, open-code mentor'
+                },
+                'nemo': {
+                    name: 'Nemo',
+                    model: 'sovereign partner (Christman pipeline)',
+                    endpoint: '/api/nemo',
+                    color: '#40E0D0',
+                    description: 'Everett\'s partner — watching the IDE live through the viewer WebSocket'
                 }
             },
 
@@ -1865,11 +2017,13 @@
                 // Visual mode on the panel for special instructors
                 const aiPanel = document.getElementById('ai-panel');
                 if (aiPanel) {
-                    aiPanel.classList.remove('claude-mode', 'kimi-mode');
+                    aiPanel.classList.remove('claude-mode', 'kimi-mode', 'nemo-mode');
                     if (instructorKey === 'claude') {
                         aiPanel.classList.add('claude-mode');
                     } else if (instructorKey === 'kimi') {
                         aiPanel.classList.add('kimi-mode');
+                    } else if (instructorKey === 'nemo') {
+                        aiPanel.classList.add('nemo-mode');
                     }
                 }
                 
@@ -1882,6 +2036,9 @@
                 
                 // Announce
                 appendMessage('SYSTEM', `Switched to ${instructor.name} — ${instructor.model}. ${instructor.description}`, 'system');
+
+                // Update mode switcher visibility for Kimi / Nemo
+                renderModeSwitcher();
                 
                 return instructor;
             },

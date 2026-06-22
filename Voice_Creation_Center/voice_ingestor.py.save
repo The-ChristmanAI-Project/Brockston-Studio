@@ -22,7 +22,7 @@ PURPOSE:
 
     WATCH MODE:
         Run with --watch and it monitors the incoming/ folder continuously.
-        Yorkie drops a file in. It's live. No terminal. No commands.
+        User drops a file in. It's live. No terminal. No commands.
         No asking anyone for help.
 
     This is the welcome mat. You drop it here. We handle the rest.
