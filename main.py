@@ -50,6 +50,14 @@ try:
 except Exception as e:
     logger.warning(f"Claude router not available: {e}")
 
+# Being Eyes — screen capture, file read/write, command execution for all beings
+try:
+    from backend.being_eyes import router as being_eyes_router
+    app.include_router(being_eyes_router)
+    logger.info("Being Eyes mounted — beings can see and fix at /api/eyes/*")
+except Exception as e:
+    logger.warning(f"Being Eyes not available: {e}")
+
 # Nemo — sovereign partner and live IDE companion. Routes through the Christman local pipeline.
 try:
     from backend.nemo_service import get_nemo_service
