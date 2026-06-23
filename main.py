@@ -97,6 +97,17 @@ class NemoRequest(BaseModel):
 async def health_check():
     return {"status": "10 Toes Down", "system": "Online"}
 
+
+@app.get("/api/sound/status")
+async def sound_status():
+    """Christman-Sound wiring status — LIFE2 roots, per-being WAV folders."""
+    try:
+        from backend.christman_sound_config import sound_stack_status
+        return sound_stack_status()
+    except Exception as e:
+        logger.error(f"Sound status error: {e}")
+        raise fastapi.HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     """Christman Family — Brockston via local pipeline, Ollama fallback."""
@@ -177,12 +188,18 @@ async def kimi_endpoint(request: KimiRequest):
         raise fastapi.HTTPException(status_code=429, detail=str(e))
     except Exception as e:
         logger.error(f"Kimi error: {e}")
-        if "429" in str(e):
+        err = str(e)
+        if "429" in err:
             raise fastapi.HTTPException(
                 status_code=429,
                 detail="NVIDIA rate limit — wait 30–60s. Code Lab agent mode uses multiple calls; use Tutor for chat.",
             )
-        raise fastapi.HTTPException(status_code=500, detail=str(e))
+        if "timed out" in err.lower() or "timeout" in err.lower():
+            raise fastapi.HTTPException(
+                status_code=504,
+                detail="Kimi timed out — NVIDIA NIM was slow. Retry in 30s, or switch to Nemo for local inference.",
+            )
+        raise fastapi.HTTPException(status_code=500, detail=err)
 
 # NEMO ENDPOINT — Nemo's direct line
 @app.post("/api/nemo")
@@ -241,9 +258,8 @@ async def synthesize_speech_route(request: fastapi.Request):
     try:
         data = await request.json()
         text = data.get("text", "")
-        # Voice ID for local synthesis
-        voice = data.get("voice", "default") 
-        
+        voice = data.get("voice") or data.get("being") or "default"
+
         speech_svc = SpeechService()
         audio_bytes = await speech_svc.synthesize_speech(text=text, voice_id=voice)
         

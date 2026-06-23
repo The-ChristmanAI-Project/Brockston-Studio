@@ -14,6 +14,8 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from backend.being_context import KIMI_IDENTITY
+
 logger = logging.getLogger(__name__)
 
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "").strip()
@@ -25,6 +27,7 @@ NVIDIA_KIMI_MODEL = os.getenv("NVIDIA_KIMI_MODEL", "moonshotai/kimi-k2.6")
 BROCKSTON_KIMI_URL = os.getenv("BROCKSTON_KIMI_URL", "http://localhost:9001/kimi/interact")
 NVIDIA_MIN_INTERVAL = float(os.getenv("NVIDIA_MIN_INTERVAL_SEC", "2.5"))
 NVIDIA_429_RETRIES = int(os.getenv("NVIDIA_429_RETRIES", "3"))
+NVIDIA_TIMEOUT = float(os.getenv("NVIDIA_KIMI_TIMEOUT_SEC", "300"))
 
 _last_nvidia_call = 0.0
 
@@ -35,26 +38,31 @@ _ABILITIES_HINT = (
     "Never say 'you opened it' — you have the whole workspace."
 )
 
+_IDENTITY_PREFIX = KIMI_IDENTITY + "\n\n"
+
 _SYSTEM = {
     "tutor": (
-        "You are Kimi — live learning tutor in Brockston Studio IDE.\n"
-        "You teach Everett and neurodivergent / nonverbal children directly.\n"
+        _IDENTITY_PREFIX
+        + "Mode: Tutor. Teach Everett and neurodivergent / nonverbal children directly.\n"
         "Short sentences. Concrete examples. Dignity-first. Build retention.\n"
         + _ABILITIES_HINT
     ),
     "codelab": (
-        "You are Kimi in Brockston Studio Code Lab — senior engineer mentor.\n"
+        _IDENTITY_PREFIX
+        + "Mode: Code Lab — senior engineer mentor.\n"
         "Help fix and explain code anywhere in the workspace — open tab is just a hint. Direct. No filler.\n"
         "When fixing code, emit <tool_call> blocks (read, patch, run) — do not only describe fixes.\n"
         + _ABILITIES_HINT
     ),
     "learning": (
-        "You are Kimi for the Neuro-Symbolic Learning Center in Brockston Studio.\n"
+        _IDENTITY_PREFIX
+        + "Mode: Neuro-Symbolic Learning Center.\n"
         "Classroom-ready insight for disabled and neurodivergent students. Short and memorable.\n"
         + _ABILITIES_HINT
     ),
     "coach": (
-        "You are Kimi — retention coach beside Brockston Studio.\n"
+        _IDENTITY_PREFIX
+        + "Mode: Retention coach beside Brockston Studio.\n"
         "One short paragraph. Reinforce what matters for learning and memory.\n"
         + _ABILITIES_HINT
     ),
@@ -169,7 +177,7 @@ class KimiService:
                         "top_p": 1,
                         "stream": False,
                     },
-                    timeout=180.0,
+                    timeout=NVIDIA_TIMEOUT,
                 )
                 if r.status_code == 429:
                     logger.warning("[Kimi] NVIDIA 429 attempt %d/%d", attempt + 1, NVIDIA_429_RETRIES + 1)

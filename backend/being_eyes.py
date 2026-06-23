@@ -52,7 +52,8 @@ def _safe_path(raw: str) -> Path:
     Relative paths are resolved against WORKSPACE_ROOT.
     Rule 13: Never silently redirects — if path is bad, raise immediately.
     """
-    p = Path(raw)
+    expanded = os.path.expanduser(raw.strip())
+    p = Path(expanded)
     if not p.is_absolute():
         p = WORKSPACE_ROOT / p
     return p.resolve()

@@ -1,0 +1,12 @@
+{
+  "pack_id": "brockston",
+  "being_name": "Brockston",
+  "language": "en-US",
+  "voicepack_path": "",
+  "version": "2026.06.23.1246",
+  "rolled_out_at": "2026-06-23T12:46:34.614795+00:00",
+  "source": "ingest_being_wav.py",
+  "reference_wavs": [
+    "/Users/EverettN/Brockston-Studio/Voice_Creation_Center/incoming/brockston/BROCKSTONuvclass.wav"
+  ]
+}

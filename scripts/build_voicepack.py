@@ -20,26 +20,15 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-BACKEND = PROJECT_ROOT / "backend"
-SOUND_ROOT = PROJECT_ROOT / "Christman-Sound"
-SDK_ROOT = SOUND_ROOT / "christman_voice_sdk "  # trailing space is real
-VOICEPACK_DIR = PROJECT_ROOT / "data" / "voicepacks"
+sys.path.insert(0, str(PROJECT_ROOT))
 
-for _p in [str(SOUND_ROOT), str(SDK_ROOT)]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+from backend.christman_sound_config import (  # noqa: E402
+    BEINGS,
+    VOICEPACK_DIR,
+    ensure_sound_paths,
+)
 
-BEINGS = {
-    "brockston":  {"tier": "ultra", "emotions": ["warm", "patient", "joyful", "gentle-firm", "grounded", "friendly"]},
-    "ultimateev": {"tier": "ultra", "emotions": ["precise", "authoritative", "direct", "terse-positive", "surgical"]},
-    "alphawolf":  {"tier": "ultra", "emotions": ["calm", "gentle", "steady", "warm", "reassuring"]},
-    "alphavox":   {"tier": "ultra", "emotions": ["gentle", "patient", "clear", "encouraging"]},
-    "giuseppe":   {"tier": "ultra", "emotions": ["expressive", "warm", "passionate", "joyful", "intense"]},
-    "inferno":    {"tier": "ultra", "emotions": ["grounded", "fierce", "tender", "resolute", "healing"]},
-    "derek":      {"tier": "ultra", "emotions": ["direct", "confident", "calm", "precise"]},
-    "siera":      {"tier": "ultra", "emotions": ["safe", "calm", "strong", "warm", "steady"]},
-    "aegis":      {"tier": "ultra", "emotions": ["protective", "calm", "clear", "reassuring"]},
-}
+ensure_sound_paths()
 
 
 def build(being: str, wav_files: list[Path]) -> Path:
@@ -49,7 +38,7 @@ def build(being: str, wav_files: list[Path]) -> Path:
 
     profile = BEINGS.get(being.lower())
     if not profile:
-        raise ValueError(f"Unknown being: {being}. Known: {list(BEINGS.keys())}")
+        raise ValueError(f"Unknown being: {being}. Known: {list(BEINGS)}")
 
     existing = [p for p in wav_files if p.exists()]
     if not existing:
@@ -61,7 +50,7 @@ def build(being: str, wav_files: list[Path]) -> Path:
     orch = VoiceSynthesisOrchestrator(tier=tier)
 
     metadata = VoicepackMetadata(
-        name=being.title(),
+        name=profile.get("label", being.title()),
         tier=profile["tier"],
         emotions=profile["emotions"],
         sample_count=len(existing),

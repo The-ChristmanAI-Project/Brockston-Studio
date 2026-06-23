@@ -94,41 +94,57 @@ class SpeechService:
 
     async def synthesize_speech(self, text: str, voice_id: str = "default") -> bytes:
         """
-        Convert text to speech using macOS say + ffmpeg.
-        Zero cost. No API key. Works offline. (Rule 15)
+        Christman-Sound XTTS when a being reference WAV exists, else macOS say.
+        Zero paid APIs. (Rule 15)
         """
+        import asyncio
         import subprocess
         import tempfile
         import os
         from pathlib import Path
+
+        being = (voice_id or "default").lower().strip()
+        loop = asyncio.get_event_loop()
+
+        express_audio = await loop.run_in_executor(
+            None, lambda: self._audio_from_voice_center_express(text, being)
+        )
+        if express_audio:
+            return express_audio
+
+        christman_audio = await loop.run_in_executor(
+            None, lambda: self._synthesize_christman_sound(text, being)
+        )
+        if christman_audio:
+            return christman_audio
 
         voice = "Daniel"
         if voice_id and voice_id not in ("default", ""):
             voice = voice_id
 
         aiff_path = tempfile.mktemp(suffix=".aiff")
-        mp3_path  = tempfile.mktemp(suffix=".mp3")
+        mp3_path = tempfile.mktemp(suffix=".mp3")
 
         try:
-            # Step 1 — macOS say → AIFF
             r = subprocess.run(
                 ["say", "-v", voice, "-o", aiff_path, text[:600]],
-                capture_output=True, timeout=30,
+                capture_output=True,
+                timeout=30,
             )
             if r.returncode != 0 or not Path(aiff_path).exists():
                 raise RuntimeError(f"say failed: {r.stderr.decode()[:200]}")
 
-            # Step 2 — AIFF → MP3 via ffmpeg
             r = subprocess.run(
                 ["ffmpeg", "-y", "-i", aiff_path,
                  "-codec:a", "libmp3lame", "-qscale:a", "2", mp3_path],
-                capture_output=True, timeout=30,
+                capture_output=True,
+                timeout=30,
             )
             if r.returncode != 0 or not Path(mp3_path).exists():
                 raise RuntimeError(f"ffmpeg failed: {r.stderr.decode()[:200]}")
 
             audio = Path(mp3_path).read_bytes()
-            logger.info(f"[TTS] Synthesized {len(audio)//1024}KB for '{text[:40]}...'")
+            logger.info("[TTS] macOS say %dKB being=%s", len(audio) // 1024, being)
             return audio
 
         finally:
@@ -137,6 +153,95 @@ class SpeechService:
                     os.unlink(p)
                 except Exception:
                     pass
+
+    def _audio_from_voice_center_express(self, text: str, being: str) -> bytes | None:
+        """Voice_Creation_Center express cache — pre-rendered phrases."""
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        try:
+            from backend.christman_sound_config import try_express_audio
+
+            raw = try_express_audio(text, being)
+            if not raw:
+                return None
+            return self._to_mp3_bytes(raw)
+        except Exception as exc:
+            logger.debug("[TTS] Voice_Creation_Center express miss: %s", exc)
+            return None
+
+    @staticmethod
+    def _to_mp3_bytes(audio: bytes) -> bytes | None:
+        """Convert WAV/raw bytes to MP3 for the IDE player."""
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        if audio[:4] == b"\xff\xfb" or audio[:3] == b"ID3":
+            return audio
+        wav_path = tempfile.mktemp(suffix=".wav")
+        mp3_path = tempfile.mktemp(suffix=".mp3")
+        try:
+            Path(wav_path).write_bytes(audio)
+            r = subprocess.run(
+                ["ffmpeg", "-y", "-i", wav_path, "-codec:a", "libmp3lame", "-qscale:a", "2", mp3_path],
+                capture_output=True,
+                timeout=45,
+            )
+            if r.returncode != 0 or not Path(mp3_path).exists():
+                return None
+            return Path(mp3_path).read_bytes()
+        finally:
+            for p in (wav_path, mp3_path):
+                try:
+                    import os
+                    os.unlink(p)
+                except Exception:
+                    pass
+
+    def _synthesize_christman_sound(self, text: str, being: str) -> bytes | None:
+        """Try Christman Voice SDK; return MP3 bytes or None to fall back."""
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        try:
+            from backend.christman_sound_config import (
+                ensure_sound_paths,
+                find_reference_wav,
+                load_being_manifest,
+            )
+
+            ensure_sound_paths()
+            manifest = load_being_manifest(being)
+            ref = find_reference_wav(being)
+            if not ref:
+                logger.debug("[TTS] No Voice_Creation_Center ref for being=%s", being)
+                return None
+
+            from CHRISTMAN_EAR_CANAL.SPEAK import speak
+
+            result = speak(text[:600], reference_audio=ref, allow_fallback=False)
+            wav_path = result.get("wav")
+            if not wav_path or not Path(wav_path).exists():
+                logger.debug("[TTS] Christman-Sound returned no wav: %s", result)
+                return None
+
+            audio = self._to_mp3_bytes(Path(wav_path).read_bytes())
+            if not audio:
+                return None
+            logger.info(
+                "[TTS] Voice_Creation_Center→Christman-Sound %dKB being=%s pack=%s ref=%s",
+                len(audio) // 1024,
+                being,
+                (manifest or {}).get("pack_id"),
+                ref.name,
+            )
+            return audio
+        except Exception as exc:
+            logger.debug("[TTS] Christman-Sound unavailable: %s", exc)
+            return None
 
     def _mock_transcribe(self, audio_data: bytes, filename: str) -> str:
         logger.info(f"MOCK: Received {len(audio_data)} bytes of audio ({filename})")
