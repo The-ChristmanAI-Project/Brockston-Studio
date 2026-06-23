@@ -104,7 +104,9 @@ async def chat_endpoint(request: ChatRequest):
     if not get_ai_response:
         raise fastapi.HTTPException(status_code=503, detail="AI client not available")
     try:
-        response_text = get_ai_response(request.message)
+        # Run in thread pool — ai_client uses sync httpx, must not block the event loop
+        loop = asyncio.get_event_loop()
+        response_text = await loop.run_in_executor(None, get_ai_response, request.message)
         return {"response": response_text}
     except Exception as e:
         logger.error(f"Chat error: {e}")
@@ -183,11 +185,16 @@ async def kimi_endpoint(request: KimiRequest):
 
         full_context = "\n\n".join(ide_context_parts) if ide_context_parts else None
 
-        result = _kimi_svc.interact(
-            message=request.message,
-            mode=mode,
-            context=full_context,
-            domain=request.domain,
+        # Run in thread pool — kimi interact uses sync httpx
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: _kimi_svc.interact(
+                message=request.message,
+                mode=mode,
+                context=full_context,
+                domain=request.domain,
+            )
         )
         text = result.get("text", "")
         return {"response": f"[KIMI]: {text}", "ok": True, "model": result.get("model")}
@@ -204,7 +211,11 @@ async def nemo_endpoint(request: NemoRequest):
         raise fastapi.HTTPException(status_code=503, detail="Nemo service not available")
     try:
         mode = request.mode if request.mode in ("partner", "code") else "partner"
-        reply = _nemo_svc.generate_content(request.message, mode=mode)
+        # Run in thread pool — generate_content uses sync httpx, must not block the event loop
+        loop = asyncio.get_event_loop()
+        reply = await loop.run_in_executor(
+            None, lambda: _nemo_svc.generate_content(request.message, mode=mode)
+        )
         return {"response": f"[NEMO]: {reply}", "source": "nemo", "mode": mode}
     except Exception as e:
         logger.error(f"Nemo error: {e}")
