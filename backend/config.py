@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Server configuration
 HOST = os.getenv("BROCKSTON_HOST", "127.0.0.1")
-PORT = int(os.getenv("BROCKSTON_PORT", "9001"))
+PORT = int(os.getenv("BROCKSTON_PORT", "9003"))
 
 # Model Settings
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
@@ -43,8 +43,7 @@ print(f"Ollama:    {OLLAMA_BASE_URL}")
 print(f"-------------------------------")
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-logger.debug(f"Workspace: {BROCKSTON_WORKSPACE}")
 
 # Patent pending — The Christman AI Project

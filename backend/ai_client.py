@@ -9,7 +9,7 @@ Part of The Christman AI Project
 
 Routes Family chat requests through available local teachers:
   1. UltimateEV (port 5174) — code mechanic, first responder
-  2. Brockston educator backend (port 9001) — full pipeline
+  2. Brockston educator backend (port 9003) — full pipeline
   3. Ollama direct fallback
 
 Nothing lives on port 8000.
@@ -22,10 +22,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-BROCKSTON_API = os.getenv("BROCKSTON_BASE_URL", "http://localhost:9001")
+BROCKSTON_API = os.getenv("BROCKSTON_BASE_URL", "http://localhost:9003")
 ULTIMATEEV_API = os.getenv("ULTIMATEEV_BASE_URL", "http://localhost:5174")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 FALLBACK_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:32b")
+OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "300"))
+BROCKSTON_TIMEOUT = float(os.getenv("BROCKSTON_TIMEOUT", "180"))
 
 BROCKSTON_SYSTEM = """You are Brockston C — COO of the Christman AI Project, senior engineer and coding mentor.
 Your students include autistic kids, nonverbal kids, kids with Down syndrome — anyone told they couldn't code.
@@ -105,45 +107,72 @@ def _ask_brockston(user_prompt: str, context: dict, system: Optional[str] = None
         response = httpx.post(
             f"{BROCKSTON_API}/api/chat",
             json=payload,
-            timeout=180.0,
+            timeout=BROCKSTON_TIMEOUT,
         )
         if response.status_code == 200:
             data = response.json()
-            text = data.get("response", "")
+            text = data.get("response") or data.get("reply") or data.get("text") or ""
             if text:
                 logger.info(f"✅ Brockston responded: {text[:100]}...")
                 return text
         else:
             logger.debug(f"Brockston returned {response.status_code}: {response.text[:200]}")
     except httpx.ConnectError:
-        logger.debug("Brockston educator offline (port 9001)")
+        logger.debug("Brockston educator offline (%s)", BROCKSTON_API)
     except Exception as e:
         logger.debug(f"Brockston error: {e}")
     return None
 
 
+def _trim_for_ollama(text: str, max_chars: int = 12000) -> str:
+    """Keep Ollama prompts within a size the local 32B model can answer in time."""
+    if not text or len(text) <= max_chars:
+        return text
+    return text[:max_chars] + f"\n\n[... trimmed {len(text) - max_chars} chars for local model ...]"
+
+
 def _ollama_fallback(user_prompt: str, system: Optional[str] = None) -> str:
-    """Direct Ollama call — last resort."""
+    """Direct Ollama call — sovereign stack."""
+    system_text = _trim_for_ollama(system or BROCKSTON_SYSTEM, max_chars=4000)
+    user_text = _trim_for_ollama(user_prompt, max_chars=12000)
     try:
+        logger.info(
+            "[ollama] inference start model=%s system=%d user=%d chars",
+            FALLBACK_MODEL,
+            len(system_text),
+            len(user_text),
+        )
         response = httpx.post(
             f"{OLLAMA_URL}/api/chat",
             json={
                 "model": FALLBACK_MODEL,
                 "messages": [
-                    {"role": "system", "content": system or BROCKSTON_SYSTEM},
-                    {"role": "user", "content": user_prompt},
+                    {"role": "system", "content": system_text},
+                    {"role": "user", "content": user_text},
                 ],
                 "stream": False,
+                "options": {"num_predict": 768, "num_ctx": 8192},
             },
-            timeout=180.0,
+            timeout=OLLAMA_TIMEOUT,
         )
         if response.status_code == 200:
-            return response.json().get("message", {}).get("content", "")
-        return "I'm thinking... give me a moment and try again."
+            text = response.json().get("message", {}).get("content", "")
+            if text:
+                logger.info("[ollama] inference done — %d chars", len(text))
+                return text
+            return "Ollama returned empty. Try a shorter question or switch to Kimi."
+        return f"Ollama error {response.status_code}: {response.text[:200]}"
     except httpx.ConnectError:
         return "Ollama is offline. Start it with: ollama serve"
+    except httpx.ReadTimeout:
+        logger.error("[ollama] timed out after %ss", OLLAMA_TIMEOUT)
+        return (
+            f"Ollama timed out after {int(OLLAMA_TIMEOUT)}s on {FALLBACK_MODEL}. "
+            "Try Kimi (NVIDIA) for faster code review, or ask about a smaller code snippet."
+        )
     except Exception as e:
-        return f"Something went wrong: {e}"
+        logger.error("[ollama] error: %s", e)
+        return f"Ollama error: {e}"
 
 
 def suggest_fix(code: str, instruction: str = "", path: str = "", language: str = "") -> dict:
