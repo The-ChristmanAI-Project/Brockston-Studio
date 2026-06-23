@@ -169,13 +169,16 @@ async def kimi_endpoint(request: KimiRequest):
                 logger.debug(f"[Kimi] Could not read open file: {fe}")
 
         ide_context_parts.append(
-            "=== BEING EYES API (use these to fix things) ===\n"
-            "GET  /api/eyes/read?path=<path>       → read any file\n"
-            "POST /api/eyes/write  {path, content} → write a file\n"
-            "POST /api/eyes/patch  {path, old_string, new_string} → fix a file\n"
-            "POST /api/eyes/run    {command}        → run shell command, get output\n"
-            "GET  /api/eyes/ls?path=<dir>           → list directory\n"
-            "GET  /api/eyes/screenshot              → see the full screen (base64 PNG)\n"
+            "=== BEING EYES API (use these to see and fix things) ===\n"
+            "GET  /api/eyes/read?path=<path>                          → read any file\n"
+            "POST /api/eyes/write  {path, content}                    → write a file\n"
+            "POST /api/eyes/patch  {path, old_string, new_string}     → fix a file\n"
+            "POST /api/eyes/move   {src, dst}                         → move/rename file or folder\n"
+            "POST /api/eyes/delete {path, recursive}                  → delete file or folder\n"
+            "POST /api/eyes/mkdir  ?path=<dir>                        → create directory\n"
+            "POST /api/eyes/run    {command}                          → run shell command, get output\n"
+            "GET  /api/eyes/ls?path=<dir>                             → list directory\n"
+            "GET  /api/eyes/screenshot                                → see the full screen (base64 PNG)\n"
         )
 
         full_context = "\n\n".join(ide_context_parts) if ide_context_parts else None
