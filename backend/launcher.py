@@ -39,7 +39,12 @@ app.add_middleware(
     allow_methods=["*"],
 )
 
-agent = BrockstonClient(base_url=OLLAMA_BASE_URL, model=LLM_MODEL_CODER)
+OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "300"))
+agent = BrockstonClient(
+    base_url=OLLAMA_BASE_URL,
+    model=LLM_MODEL_CODER,
+    timeout=OLLAMA_TIMEOUT,
+)
 
 class ChatRequest(BaseModel):
     messages: List
@@ -102,8 +107,16 @@ async def chat(request: ChatRequest):
     enriched_messages = (sensory_msgs + request.messages) if sensory_msgs else request.messages
 
     try:
+        logger.info(
+            "[chat] Ollama inference starting — model=%s messages=%d",
+            LLM_MODEL_CODER,
+            len(enriched_messages),
+        )
         reply = await agent.chat(messages=enriched_messages, context=request.context)
-        return {"reply": reply}
+        logger.info("[chat] Ollama inference complete — %d chars", len(reply or ""))
+        if not reply or str(reply).startswith("Ollama timed out"):
+            raise HTTPException(status_code=504, detail=reply or "Ollama returned empty")
+        return {"reply": reply, "response": reply, "ok": True}
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

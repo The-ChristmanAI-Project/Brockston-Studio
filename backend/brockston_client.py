@@ -30,7 +30,7 @@ class BrockstonClient:
         self,
         base_url: str = "http://localhost:11434",
         model: str = "qwen2.5-coder:32b",
-        timeout: float = 120.0
+        timeout: float = 300.0
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -99,13 +99,36 @@ class BrockstonClient:
                     ] + messages
 
             client = self._get_client()
+            logger.info(
+                "[BrockstonClient] POST /api/chat model=%s messages=%d",
+                self.model,
+                len(messages),
+            )
+            # Trim message payload — 32B local inference times out on huge prompts.
+            trimmed = []
+            total = 0
+            for msg in messages:
+                content = str(msg.get("content", ""))
+                if total + len(content) > 14000 and msg.get("role") != "user":
+                    content = content[: max(0, 14000 - total)] + "\n[...trimmed...]"
+                elif msg.get("role") == "user" and len(content) > 12000:
+                    content = content[:12000] + "\n[...trimmed...]"
+                trimmed.append({**msg, "content": content})
+                total += len(content)
+
             response = await client.post(
                 f"{self.base_url}/api/chat",
                 json={
                     "model": self.model,
-                    "messages": messages,
-                    "stream": False
-                }
+                    "messages": trimmed,
+                    "stream": False,
+                    "keep_alive": "30m",
+                    "options": {
+                        "num_predict": 512,
+                        "num_ctx": 8192,
+                        "temperature": 0.4,
+                    },
+                },
             )
 
             if response.status_code != 200:
@@ -118,6 +141,12 @@ class BrockstonClient:
         except httpx.ConnectError:
             logger.warning("Ollama unreachable on port 11434")
             return "Ollama is offline. Start it with: ollama serve"
+        except httpx.ReadTimeout:
+            logger.error("Ollama timed out after %ss", self.timeout)
+            return (
+                f"Ollama timed out after {int(self.timeout)}s on {self.model}. "
+                "Try Kimi in the IDE for faster responses."
+            )
         except Exception as e:
             logger.error(f"Chat error: {e}")
             return f"Error: {e}"

@@ -22,7 +22,7 @@ IDE_LOG="$LOG_DIR/ide.log"
 [ -f .env ] && set -a && source .env && set +a
 
 export BROCKSTON_HOST="${BROCKSTON_HOST:-127.0.0.1}"
-export BROCKSTON_PORT="${BROCKSTON_PORT:-9001}"          # Brockston educator backend
+export BROCKSTON_PORT="${BROCKSTON_PORT:-9003}"          # Educator backend (9001 = BROCKSTON api_server)
 export IDE_PORT="${IDE_PORT:-5055}"                       # IDE Board frontend (main.py)
 export ULTIMATEEV_PORT="${ULTIMATEEV_PORT:-5174}"         # UltimateEV node server
 export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"

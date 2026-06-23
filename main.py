@@ -125,81 +125,63 @@ async def kimi_endpoint(request: KimiRequest):
     try:
         mode = request.mode if request.mode in ("tutor", "codelab", "learning", "coach") else "tutor"
 
-        # ── Auto-inject IDE context so Kimi can see the project ───────────────
-        # Build a context block combining: (1) any caller-supplied context,
-        # (2) current IDE state, (3) open file content if available.
-        ide_context_parts = []
+        from backend.being_agent import run_kimi_agent, wants_agent_tools
+        from backend.being_context import build_being_context
+        from backend.kimi_service import KimiRateLimitError
 
-        if request.context:
-            ide_context_parts.append(request.context)
-
-        # Pull IDE state via Being Eyes (workspace + file tree)
-        try:
-            from backend.being_eyes import get_ide_state, list_directory, WORKSPACE_ROOT
-            state_resp = await get_ide_state()
-            workspace = state_resp.get("workspace", str(WORKSPACE_ROOT))
-            top_files = state_resp.get("workspace_files", [])
-            file_list = "\n".join(
-                f"  {'[DIR]' if e['type']=='dir' else '[FILE]'} {e['name']}"
-                for e in top_files[:30]
-            )
-            ide_context_parts.append(
-                f"=== WORKSPACE: {workspace} ===\n"
-                f"Top-level contents:\n{file_list}"
-            )
-        except Exception as ctx_err:
-            logger.debug(f"[Kimi] Could not fetch IDE state: {ctx_err}")
-
-        # If the IDE pushed a recent open-file path via ide_state, read its content
-        # Clients can also pass it directly as request.context with "open_file:<path>"
-        open_file_path = None
-        if request.context and request.context.startswith("open_file:"):
-            open_file_path = request.context.replace("open_file:", "", 1).strip()
-
-        if open_file_path:
-            try:
-                from backend.being_eyes import read_file as eyes_read
-                class _FakeQuery:
-                    def __init__(self, v): self.default = v
-                file_resp = await eyes_read(path=open_file_path, encoding="utf-8", max_kb=200)
-                content = file_resp.get("content", "")
-                lines = file_resp.get("lines", 0)
-                ide_context_parts.append(
-                    f"=== OPEN FILE: {open_file_path} ({lines} lines) ===\n{content}"
-                )
-            except Exception as fe:
-                logger.debug(f"[Kimi] Could not read open file: {fe}")
-
-        ide_context_parts.append(
-            "=== BEING EYES API (use these to see and fix things) ===\n"
-            "GET  /api/eyes/read?path=<path>                          → read any file\n"
-            "POST /api/eyes/write  {path, content}                    → write a file\n"
-            "POST /api/eyes/patch  {path, old_string, new_string}     → fix a file\n"
-            "POST /api/eyes/move   {src, dst}                         → move/rename file or folder\n"
-            "POST /api/eyes/delete {path, recursive}                  → delete file or folder\n"
-            "POST /api/eyes/mkdir  ?path=<dir>                        → create directory\n"
-            "POST /api/eyes/run    {command}                          → run shell command, get output\n"
-            "GET  /api/eyes/ls?path=<dir>                             → list directory\n"
-            "GET  /api/eyes/screenshot                                → see the full screen (base64 PNG)\n"
+        full_context = await build_being_context(
+            message=request.message,
+            extra_context=request.context,
+            compact=True,
+            for_kimi=True,
         )
 
-        full_context = "\n\n".join(ide_context_parts) if ide_context_parts else None
-
-        # Run in thread pool — kimi interact uses sync httpx
+        agent_mode = mode if mode in ("tutor", "codelab", "learning", "coach") else "tutor"
         loop = asyncio.get_event_loop()
+
+        if wants_agent_tools(request.message, agent_mode):
+            result = await run_kimi_agent(
+                _kimi_svc,
+                message=request.message,
+                context=full_context,
+                mode=agent_mode,
+                domain=request.domain,
+                max_steps=4,
+            )
+            text = result.get("text", "")
+            tool_count = result.get("tool_count", 0)
+            prefix = f"[KIMI — {tool_count} tool(s) executed on disk]: " if tool_count else "[KIMI]: "
+            return {
+                "response": f"{prefix}{text}",
+                "ok": True,
+                "model": "moonshotai/kimi-k2.6",
+                "tools_executed": result.get("tools_executed", []),
+                "tool_count": tool_count,
+                "agent": True,
+            }
+
         result = await loop.run_in_executor(
             None,
             lambda: _kimi_svc.interact(
                 message=request.message,
-                mode=mode,
+                mode=agent_mode,
                 context=full_context,
                 domain=request.domain,
-            )
+                thinking=False,
+            ),
         )
         text = result.get("text", "")
-        return {"response": f"[KIMI]: {text}", "ok": True, "model": result.get("model")}
+        return {"response": f"[KIMI]: {text}", "ok": True, "model": result.get("model"), "agent": False}
+    except KimiRateLimitError as e:
+        logger.warning(f"Kimi rate limit: {e}")
+        raise fastapi.HTTPException(status_code=429, detail=str(e))
     except Exception as e:
         logger.error(f"Kimi error: {e}")
+        if "429" in str(e):
+            raise fastapi.HTTPException(
+                status_code=429,
+                detail="NVIDIA rate limit — wait 30–60s. Code Lab agent mode uses multiple calls; use Tutor for chat.",
+            )
         raise fastapi.HTTPException(status_code=500, detail=str(e))
 
 # NEMO ENDPOINT — Nemo's direct line
@@ -211,12 +193,42 @@ async def nemo_endpoint(request: NemoRequest):
         raise fastapi.HTTPException(status_code=503, detail="Nemo service not available")
     try:
         mode = request.mode if request.mode in ("partner", "code") else "partner"
-        # Run in thread pool — generate_content uses sync httpx, must not block the event loop
+
+        from backend.being_agent import run_nemo_agent, wants_agent_tools
+        from backend.being_context import build_being_context
+
+        full_context = await build_being_context(
+            message=request.message,
+            ollama_route=True,
+        )
+
+        if wants_agent_tools(request.message, mode):
+            result = await run_nemo_agent(
+                _nemo_svc,
+                message=request.message,
+                context=full_context,
+                mode=mode,
+            )
+            text = result.get("text", "")
+            tool_count = result.get("tool_count", 0)
+            prefix = f"[NEMO — {tool_count} tool(s) executed on disk]: " if tool_count else "[NEMO]: "
+            return {
+                "response": f"{prefix}{text}",
+                "source": "nemo",
+                "mode": mode,
+                "tools_executed": result.get("tools_executed", []),
+                "tool_count": tool_count,
+                "agent": True,
+            }
+
         loop = asyncio.get_event_loop()
         reply = await loop.run_in_executor(
-            None, lambda: _nemo_svc.generate_content(request.message, mode=mode)
+            None,
+            lambda: _nemo_svc.generate_content(
+                request.message, mode=mode, context=full_context
+            ),
         )
-        return {"response": f"[NEMO]: {reply}", "source": "nemo", "mode": mode}
+        return {"response": f"[NEMO]: {reply}", "source": "nemo", "mode": mode, "agent": False}
     except Exception as e:
         logger.error(f"Nemo error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))
