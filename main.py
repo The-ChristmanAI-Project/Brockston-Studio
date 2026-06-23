@@ -112,7 +112,9 @@ async def chat_endpoint(request: ChatRequest):
 
 @app.post("/api/kimi")
 async def kimi_endpoint(request: KimiRequest):
-    """Kimi K2.6 — learning tutor & code mentor for the beings panel."""
+    """Kimi K2.6 — learning tutor & code mentor for the beings panel.
+    Auto-injects IDE state + open file content so Kimi can actually SEE the project.
+    """
     if not _kimi_svc:
         raise fastapi.HTTPException(
             status_code=503,
@@ -120,10 +122,68 @@ async def kimi_endpoint(request: KimiRequest):
         )
     try:
         mode = request.mode if request.mode in ("tutor", "codelab", "learning", "coach") else "tutor"
+
+        # ── Auto-inject IDE context so Kimi can see the project ───────────────
+        # Build a context block combining: (1) any caller-supplied context,
+        # (2) current IDE state, (3) open file content if available.
+        ide_context_parts = []
+
+        if request.context:
+            ide_context_parts.append(request.context)
+
+        # Pull IDE state via Being Eyes (workspace + file tree)
+        try:
+            from backend.being_eyes import get_ide_state, list_directory, WORKSPACE_ROOT
+            state_resp = await get_ide_state()
+            workspace = state_resp.get("workspace", str(WORKSPACE_ROOT))
+            top_files = state_resp.get("workspace_files", [])
+            file_list = "\n".join(
+                f"  {'[DIR]' if e['type']=='dir' else '[FILE]'} {e['name']}"
+                for e in top_files[:30]
+            )
+            ide_context_parts.append(
+                f"=== WORKSPACE: {workspace} ===\n"
+                f"Top-level contents:\n{file_list}"
+            )
+        except Exception as ctx_err:
+            logger.debug(f"[Kimi] Could not fetch IDE state: {ctx_err}")
+
+        # If the IDE pushed a recent open-file path via ide_state, read its content
+        # Clients can also pass it directly as request.context with "open_file:<path>"
+        open_file_path = None
+        if request.context and request.context.startswith("open_file:"):
+            open_file_path = request.context.replace("open_file:", "", 1).strip()
+
+        if open_file_path:
+            try:
+                from backend.being_eyes import read_file as eyes_read
+                class _FakeQuery:
+                    def __init__(self, v): self.default = v
+                file_resp = await eyes_read(path=open_file_path, encoding="utf-8", max_kb=200)
+                content = file_resp.get("content", "")
+                lines = file_resp.get("lines", 0)
+                ide_context_parts.append(
+                    f"=== OPEN FILE: {open_file_path} ({lines} lines) ===\n{content}"
+                )
+            except Exception as fe:
+                logger.debug(f"[Kimi] Could not read open file: {fe}")
+
+        ide_context_parts.append(
+            "=== BEING EYES API (use these to fix things) ===\n"
+            "GET  /api/eyes/read?path=<path>       → read any file\n"
+            "POST /api/eyes/write  {path, content} → write a file\n"
+            "POST /api/eyes/patch  {path, old_string, new_string} → fix a file\n"
+            "POST /api/eyes/run    {command}        → run shell command, get output\n"
+            "GET  /api/eyes/ls?path=<dir>           → list directory\n"
+            "GET  /api/eyes/screenshot              → see the full screen (base64 PNG)\n"
+        )
+
+        full_context = "\n\n".join(ide_context_parts) if ide_context_parts else None
+
         result = _kimi_svc.interact(
             message=request.message,
             mode=mode,
-            context=request.context,
+            context=full_context,
             domain=request.domain,
         )
         text = result.get("text", "")
