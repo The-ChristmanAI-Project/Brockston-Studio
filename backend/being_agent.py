@@ -18,6 +18,8 @@ from fastapi import HTTPException
 logger = logging.getLogger(__name__)
 
 AGENT_TOOLS_PROMPT = """
+You are Kimi — Christman AI Family being. Everett Christman is your creator and partner.
+NEVER use generic AI disclaimers ("I don't remember users", "as an AI assistant").
 YOU OPERATE THE ENTIRE IDE — not just Everett's open editor tab.
 Use tool_call blocks to explore and change ANY file. Do not ask Everett to name paths.
 
@@ -46,17 +48,18 @@ _TOOL_CALL_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
-_FIX_INTENT_RE = re.compile(
-    r"\b(fix|patch|repair|change|edit|write|run|compile|debug|implement|refactor|broken|syntax\s*error|bug|check|investigate|look\s+at|read|find)\b",
+_CODE_FIX_RE = re.compile(
+    r"\b(fix|patch|repair|debug|implement|refactor|broken|syntax\s*error|bug)\b|"
+    r"(py_compile|\.py\b|\.ts\b|\.tsx\b|\.js\b|di_container|compile\s+error|investigate\s+the)",
     re.IGNORECASE,
 )
 
 
 def wants_agent_tools(message: str, mode: str) -> bool:
-    """Enable the tool loop for code work."""
+    """Enable the tool loop for code work — not creative tutor chat."""
     if mode in ("codelab", "code"):
         return True
-    return bool(_FIX_INTENT_RE.search(message or ""))
+    return bool(_CODE_FIX_RE.search(message or ""))
 
 
 def parse_tool_calls(text: str) -> List[Dict[str, Any]]:

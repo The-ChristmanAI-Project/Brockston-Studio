@@ -1208,10 +1208,16 @@
         async function speakText(text) {
             if (!isVoiceModeEnabled) return;
             try {
+                const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
+                const being = MODEL_ORCHESTRATOR.currentInstructor || 'brockston';
                 const res = await fetch(`${API_BASE}/speech/synthesize`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({text})
+                    body: JSON.stringify({
+                        text,
+                        being: being === 'family' ? 'brockston' : being,
+                        voice: instructor.voice || being,
+                    })
                 });
                 if (!res.ok) throw new Error("Speech synth failed");
                 const blob = await res.blob();
@@ -1409,11 +1415,14 @@
         }
 
         async function sendToKimi(text, whoLabel = 'KIMI', mode = null) {
+            const controller = new AbortController();
+            const kimiTimer = setTimeout(() => controller.abort(), 300000);
             try {
                 const effectiveMode = mode || detectKimiMode(text) || 'tutor';
                 const res = await fetch(`${API_BASE}/kimi`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
+                    signal: controller.signal,
                     body: JSON.stringify({
                         message: text,
                         mode: effectiveMode,
@@ -1422,7 +1431,12 @@
                 });
                 if (!res.ok) {
                     const errBody = await res.text();
-                    throw new Error(errBody || `Server error: ${res.status}`);
+                    let detail = errBody;
+                    try {
+                        const parsed = JSON.parse(errBody);
+                        detail = parsed.detail || errBody;
+                    } catch (_) {}
+                    throw new Error(detail || `Server error: ${res.status}`);
                 }
                 const data = await res.json();
                 const reply = data.response || '';
@@ -1430,7 +1444,12 @@
                 speakText(String(reply).replace(/\[KIMI\]:?\s*/i, '').replace(/\[.*?\]/g, '').substring(0, 800));
             } catch (err) {
                 console.error(err);
-                appendMessage('SYSTEM', `[KIMI ERROR]: ${err.message}`, 'error');
+                const msg = err.name === 'AbortError'
+                    ? 'Kimi timed out after 5 minutes — retry or switch to Nemo.'
+                    : err.message;
+                appendMessage('SYSTEM', `[KIMI ERROR]: ${msg}`, 'error');
+            } finally {
+                clearTimeout(kimiTimer);
             }
         }
 

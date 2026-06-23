@@ -1,0 +1,12 @@
+{
+  "pack_id": "kimi",
+  "being_name": "Kimi",
+  "language": "en-US",
+  "voicepack_path": "",
+  "version": "2026.06.23.1303",
+  "rolled_out_at": "2026-06-23T13:03:24.604889+00:00",
+  "source": "ingest_being_wav.py",
+  "reference_wavs": [
+    "/Users/EverettN/Brockston-Studio/Voice_Creation_Center/incoming/kimi/KIMIK2.wav"
+  ]
+}
