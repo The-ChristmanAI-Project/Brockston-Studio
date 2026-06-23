@@ -215,6 +215,132 @@ async def write_file(req: WriteRequest):
         raise HTTPException(status_code=500, detail=f"Write error: {e}")
 
 
+# ── Move / rename ─────────────────────────────────────────────────────────────
+
+class MoveRequest(BaseModel):
+    src: str
+    dst: str
+    create_dirs: bool = True
+    overwrite: bool = False
+
+
+@router.post("/move")
+async def move_file(req: MoveRequest):
+    """
+    Move or rename a file or directory.
+    Works for single files and entire folders.
+    Rule 13: Fails loud if src doesn't exist or dst already exists (unless overwrite=True).
+
+    Returns:
+        {"status": "ok", "src": str, "dst": str, "type": "file"|"dir"}
+    """
+    import shutil
+
+    try:
+        src = _safe_path(req.src)
+        dst = _safe_path(req.dst)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Bad path: {e}")
+
+    if not src.exists():
+        raise HTTPException(status_code=404, detail=f"Source not found: {src}")
+
+    if dst.exists() and not req.overwrite:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Destination already exists: {dst} — set overwrite=true to replace it."
+        )
+
+    if req.create_dirs:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        kind = "dir" if src.is_dir() else "file"
+        shutil.move(str(src), str(dst))
+        logger.info(f"[BeingEyes] Moved {src} → {dst}")
+        return {
+            "status": "ok",
+            "src": str(src),
+            "dst": str(dst),
+            "type": kind,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Move error: {e}")
+
+
+# ── Delete ─────────────────────────────────────────────────────────────────────
+
+class DeleteRequest(BaseModel):
+    path: str
+    recursive: bool = False
+
+
+@router.post("/delete")
+async def delete_path(req: DeleteRequest):
+    """
+    Delete a file or directory.
+    Directories require recursive=True as a safety gate.
+    Rule 13: Fails loud if path doesn't exist.
+
+    Returns:
+        {"status": "ok", "path": str, "type": "file"|"dir"}
+    """
+    import shutil
+
+    try:
+        p = _safe_path(req.path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Bad path: {e}")
+
+    if not p.exists():
+        raise HTTPException(status_code=404, detail=f"Path not found: {p}")
+
+    try:
+        if p.is_dir():
+            if not req.recursive:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{p} is a directory — set recursive=true to delete it."
+                )
+            shutil.rmtree(str(p))
+            kind = "dir"
+        else:
+            p.unlink()
+            kind = "file"
+
+        logger.info(f"[BeingEyes] Deleted {p} ({kind})")
+        return {"status": "ok", "path": str(p), "type": kind}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete error: {e}")
+
+
+# ── Create directory ───────────────────────────────────────────────────────────
+
+@router.post("/mkdir")
+async def make_directory(
+    path: str = Query(..., description="Directory path to create"),
+):
+    """
+    Create a directory (and any missing parents).
+
+    Returns:
+        {"status": "ok", "path": str}
+    """
+    try:
+        p = _safe_path(path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Bad path: {e}")
+
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+        logger.info(f"[BeingEyes] Created dir {p}")
+        return {"status": "ok", "path": str(p)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"mkdir error: {e}")
+
+
 # ── File patch (find-and-replace) ──────────────────────────────────────────────
 
 class PatchRequest(BaseModel):
