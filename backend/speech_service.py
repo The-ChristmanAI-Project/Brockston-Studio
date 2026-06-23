@@ -94,19 +94,49 @@ class SpeechService:
 
     async def synthesize_speech(self, text: str, voice_id: str = "default") -> bytes:
         """
-        Convert text to speech using local speech synthesis.
-
-        Args:
-            text: Text to convert to speech
-            voice_id: Voice identifier (currently uses local synthesis)
-
-        Returns:
-            Audio data as bytes (MP3 format)
-
-        Raises:
-            RuntimeError: If synthesis fails
+        Convert text to speech using macOS say + ffmpeg.
+        Zero cost. No API key. Works offline. (Rule 15)
         """
-        return self._mock_synthesize(text, voice_id)
+        import subprocess
+        import tempfile
+        import os
+        from pathlib import Path
+
+        voice = "Daniel"
+        if voice_id and voice_id not in ("default", ""):
+            voice = voice_id
+
+        aiff_path = tempfile.mktemp(suffix=".aiff")
+        mp3_path  = tempfile.mktemp(suffix=".mp3")
+
+        try:
+            # Step 1 — macOS say → AIFF
+            r = subprocess.run(
+                ["say", "-v", voice, "-o", aiff_path, text[:600]],
+                capture_output=True, timeout=30,
+            )
+            if r.returncode != 0 or not Path(aiff_path).exists():
+                raise RuntimeError(f"say failed: {r.stderr.decode()[:200]}")
+
+            # Step 2 — AIFF → MP3 via ffmpeg
+            r = subprocess.run(
+                ["ffmpeg", "-y", "-i", aiff_path,
+                 "-codec:a", "libmp3lame", "-qscale:a", "2", mp3_path],
+                capture_output=True, timeout=30,
+            )
+            if r.returncode != 0 or not Path(mp3_path).exists():
+                raise RuntimeError(f"ffmpeg failed: {r.stderr.decode()[:200]}")
+
+            audio = Path(mp3_path).read_bytes()
+            logger.info(f"[TTS] Synthesized {len(audio)//1024}KB for '{text[:40]}...'")
+            return audio
+
+        finally:
+            for p in (aiff_path, mp3_path):
+                try:
+                    os.unlink(p)
+                except Exception:
+                    pass
 
     def _mock_transcribe(self, audio_data: bytes, filename: str) -> str:
         logger.info(f"MOCK: Received {len(audio_data)} bytes of audio ({filename})")
