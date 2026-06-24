@@ -22,14 +22,17 @@ IDE_LOG="$LOG_DIR/ide.log"
 [ -f .env ] && set -a && source .env && set +a
 
 export BROCKSTON_HOST="${BROCKSTON_HOST:-127.0.0.1}"
-export BROCKSTON_PORT="${BROCKSTON_PORT:-9003}"          # Educator backend (9001 = BROCKSTON api_server)
+export BROCKSTON_PORT="${BROCKSTON_PORT:-9003}"          # Educator backend (current: 9003)
 export IDE_PORT="${IDE_PORT:-5055}"                       # IDE Board frontend (main.py)
 export ULTIMATEEV_PORT="${ULTIMATEEV_PORT:-5174}"         # UltimateEV node server
 export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
-export OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:32b}"
-export LLM_MODEL_GENERAL="${LLM_MODEL_GENERAL:-qwen2.5-coder:32b}"
+export OLLAMA_MODEL="${OLLAMA_MODEL:-$LLM_MODEL_GENERAL}"
+export LLM_MODEL_GENERAL="${LLM_MODEL_GENERAL:-llama3.2}"
 export LLM_MODEL_CODER="${LLM_MODEL_CODER:-qwen2.5-coder:32b}"
 export LLM_MODEL="${LLM_MODEL:-$LLM_MODEL_GENERAL}"
+
+# Ensure all parts (IDE main.py, Being Eyes, terminal) agree on workspace root
+export BROCKSTON_WORKSPACE="${BROCKSTON_WORKSPACE:-$ROOT}"
 
 PIDS=()
 
@@ -189,14 +192,14 @@ wait_ready "http://127.0.0.1:$BROCKSTON_PORT/health" "Brockston"     || true
 wait_ready "http://127.0.0.1:$IDE_PORT/api/health" "IDE"             || \
 wait_ready "http://127.0.0.1:$IDE_PORT/" "IDE"                       || true
 
-# ----- Prewarm Ollama (load the 32B model into RAM before first user request)
+# ----- Prewarm Ollama (load fast GENERAL for vocal/chat first; CODER is heavy, loads on demand)
 if curl -fsS "$OLLAMA_BASE_URL/api/tags" >/dev/null 2>&1; then
-    info "Prewarming $OLLAMA_MODEL (one-time model load, can take ~60s)..."
+    info "Prewarming $LLM_MODEL_GENERAL for low-lag chat/vocal (CODER loads on heavy tasks)..."
     curl -fsS -X POST "$OLLAMA_BASE_URL/api/generate" \
         -H "Content-Type: application/json" \
-        -d "{\"model\":\"$OLLAMA_MODEL\",\"prompt\":\"ok\",\"stream\":false}" \
-        --max-time 180 >/dev/null 2>&1 && ok "Model loaded — first chat will respond fast" \
-        || warn "Prewarm timed out — first chat may be slow but will still work"
+        -d "{\"model\":\"$LLM_MODEL_GENERAL\",\"prompt\":\"ok\",\"stream\":false}" \
+        --max-time 120 >/dev/null 2>&1 && ok "Fast model loaded — chat/vocal will be responsive" \
+        || warn "Prewarm timed out — first chat may be slow but will still work. Pull a small model: ollama pull llama3.2"
 fi
 
 echo ""

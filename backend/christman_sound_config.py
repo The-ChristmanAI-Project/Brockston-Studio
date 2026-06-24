@@ -116,7 +116,10 @@ def load_being_manifest(being: str) -> Optional[dict]:
 
 
 def find_reference_wav(being: str) -> Optional[Path]:
-    """Resolve reference WAV through Voice_Creation_Center manifest, then incoming/."""
+    """Resolve reference WAV through Voice_Creation_Center manifest, then incoming/.
+    If the specific being has none, fall back to a default (brockston or first available)
+    so every being gets proper Christman-Sound XTTS instead of raw macOS say.
+    """
     key = being.lower().strip()
     if not key or key in ("default", "daniel"):
         key = "brockston"
@@ -139,6 +142,21 @@ def find_reference_wav(being: str) -> Optional[Path]:
         wavs = sorted(directory.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
         if wavs:
             return wavs[0]
+
+    # Fallback so NO being is stuck on macOS say TTS
+    if key != "brockston":
+        default = find_reference_wav("brockston")
+        if default:
+            logger = logging.getLogger(__name__)
+            logger.info("[TTS] No ref for %s — falling back to brockston reference for XTTS", being)
+            return default
+
+    # Last resort: any wav in the voice center
+    for directory in [VOICE_CENTER / "incoming" / "simple_phrases", incoming_dir("brockston")]:
+        if directory.is_dir():
+            wavs = list(directory.glob("*.wav"))
+            if wavs:
+                return wavs[0]
     return None
 
 
