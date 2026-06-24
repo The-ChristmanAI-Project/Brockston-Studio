@@ -40,7 +40,7 @@ That single command brings up all three elements:
 | Element        | Port  | What it does                                |
 |----------------|-------|---------------------------------------------|
 | IDE Board      | 5055  | Monaco editor, chat panel, terminal         |
-| Brockston      | 9001  | Educator backend (chat, file ops, suggest)  |
+| Brockston      | 9003  | Educator backend (chat, file ops, suggest)  |
 | UltimateEV     | 5174  | Code Mechanic (handles code questions first)|
 | Ollama         | 11434 | Local LLM host                              |
 
@@ -61,7 +61,7 @@ If you want each one in its own terminal:
 node ultimateev_server.js                                     # port 5174
 
 # Terminal 2
-python -m uvicorn backend.launcher:app --port 9001            # port 9001
+python -m uvicorn backend.launcher:app --port 9003            # port 9003
 
 # Terminal 3
 python -m uvicorn main:app --host 127.0.0.1 --port 5055       # port 5055
@@ -76,7 +76,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 5055       # port 5055
 | Variable             | Default                       | Purpose                                |
 |----------------------|-------------------------------|----------------------------------------|
 | `BROCKSTON_HOST`     | `127.0.0.1`                   | bind address                           |
-| `BROCKSTON_PORT`     | `9001`                        | Brockston educator port                |
+| `BROCKSTON_PORT`     | `9003`                        | Brockston educator port                |
 | `IDE_PORT`           | `5055`                        | IDE Board port                         |
 | `ULTIMATEEV_PORT`    | `5174`                        | UltimateEV port                        |
 | `OLLAMA_BASE_URL`    | `http://127.0.0.1:11434`      | where Ollama lives                     |

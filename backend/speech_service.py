@@ -144,7 +144,7 @@ class SpeechService:
                 raise RuntimeError(f"ffmpeg failed: {r.stderr.decode()[:200]}")
 
             audio = Path(mp3_path).read_bytes()
-            logger.info("[TTS] macOS say %dKB being=%s", len(audio) // 1024, being)
+            logger.warning("[TTS] Falling back to macOS 'say' for being=%s (no good Christman ref) — %dKB", being, len(audio) // 1024)
             return audio
 
         finally:
@@ -217,7 +217,7 @@ class SpeechService:
             manifest = load_being_manifest(being)
             ref = find_reference_wav(being)
             if not ref:
-                logger.debug("[TTS] No Voice_Creation_Center ref for being=%s", being)
+                logger.info("[TTS] No specific reference for being=%s — using fallback ref (or will hit macOS say)", being)
                 return None
 
             from CHRISTMAN_EAR_CANAL.SPEAK import speak

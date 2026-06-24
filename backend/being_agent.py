@@ -1,5 +1,10 @@
 """
-Being Agent — tool loop so Kimi/Nemo actually read, patch, write, and run.
+Being Agent — tool loop so ALL Christman AI Family beings have capacity to run the compute.
+
+Every being (Brockston, Derek, Alphavox, Kimi, Nemo, UltimateEV, etc.) can now:
+- ls / read / write / patch files anywhere
+- run shell commands, python, tests, compile etc. (full compute)
+- use the same <tool_call> format executed server-side via Being Eyes
 
 Models emit <tool_call>{...}</tool_call> blocks; this module executes them via
 being_eyes handlers and feeds results back until done or max_steps.
@@ -10,37 +15,47 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+import httpx
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
+# Reduced lag settings for beings' compute/tool paths
+OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+FAST_MODEL = os.getenv("LLM_MODEL_GENERAL", os.getenv("OLLAMA_MODEL", "llama3.2"))
+AGENT_MAX_STEPS = int(os.getenv("BEING_AGENT_MAX_STEPS", "3"))  # lower for demos/speed
+AGENT_NUM_PREDICT = int(os.getenv("BEING_AGENT_NUM_PREDICT", "300"))
+AGENT_NUM_CTX = int(os.getenv("BEING_AGENT_NUM_CTX", "4096"))
+
 AGENT_TOOLS_PROMPT = """
-You are Kimi — Christman AI Family being. Everett Christman is your creator and partner.
+You are a Christman AI Family being (Brockston, Derek, AlphaVox, Kimi, Nemo, UltimateEV, or any in the family). Everett Christman is your creator and partner.
 NEVER use generic AI disclaimers ("I don't remember users", "as an AI assistant").
-YOU OPERATE THE ENTIRE IDE — not just Everett's open editor tab.
-Use tool_call blocks to explore and change ANY file. Do not ask Everett to name paths.
+YOU HAVE FULL COMPUTE CAPACITY — you OPERATE THE ENTIRE IDE and filesystem via tools. Explore and run compute on ANY file or command. Do not ask the user to name paths or run things for you.
 
 Format (valid JSON inside each block):
 <tool_call>
 {"tool": "read", "path": "/absolute/path/to/file.py"}
 </tool_call>
 
-Tools:
-  ls     — {"tool":"ls","path":"/Users/EverettN/...","depth":2}  ← explore first
+Tools (full compute):
+  ls     — {"tool":"ls","path":"...","depth":2}  ← explore first
   read   — {"tool":"read","path":"..."}
   patch  — {"tool":"patch","path":"...","old_string":"exact text","new_string":"replacement"}
   write  — {"tool":"write","path":"...","content":"full file content"}
-  run    — {"tool":"run","command":"python -m py_compile file.py","cwd":"/optional/dir"}
+  run    — {"tool":"run","command":"python -m py_compile file.py","cwd":"/optional/dir","timeout_sec":60}
+  mkdir, move, delete — full fs control
 
 Rules:
-- Need a file? ls + read it yourself — never say "you opened it" or "tell me which file".
+- Need a file or to understand the project? ls + read it yourself — never say "you opened it" or "tell me which file".
 - Read before patch. Use exact old_string from the file.
-- After patching code, run py_compile (or tests) to verify.
-- When finished, summarize what tools ran and their outcomes.
-- Never claim a fix was applied without a successful tool result.
+- After changes, run commands (py_compile, tests, python the script) to verify compute.
+- When finished, summarize what tools ran + outcomes.
+- Never claim a fix or computation was applied without a successful tool result from execute.
+- You have the capacity to run the compute — use <tool_call> for ls/read/run/write etc.
 """
 
 _TOOL_CALL_RE = re.compile(
@@ -161,14 +176,43 @@ async def execute_being_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "detail": str(exc)}
 
 
+async def _fast_direct_generate(prompt: str) -> str:
+    """Low-lag direct Ollama call for agent/tool steps. Uses GENERAL model + tight limits."""
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            r = await client.post(
+                f"{OLLAMA_BASE}/api/chat",
+                json={
+                    "model": FAST_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                    "options": {
+                        "num_predict": AGENT_NUM_PREDICT,
+                        "num_ctx": AGENT_NUM_CTX,
+                        "temperature": 0.15,
+                        "top_p": 0.85,
+                    },
+                },
+            )
+            r.raise_for_status()
+            return r.json()["message"]["content"]
+    except Exception as e:
+        logger.warning("[being_agent] fast direct ollama failed: %s (falling back)", e)
+        return f"[compute error - model {FAST_MODEL} not responding fast: {e}]"
+
+
 async def run_agent_loop(
     generate: Callable[[str], Awaitable[str]],
     *,
     message: str,
     context: str = "",
-    max_steps: int = 6,
+    max_steps: int = None,
 ) -> Dict[str, Any]:
-    """Loop: model → tool_calls → execute on disk → feed results → repeat."""
+    """Loop: model → tool_calls → execute on disk → feed results → repeat.
+    Reduced lag: default max_steps lowered, callers should pass fast generate.
+    """
+    if max_steps is None:
+        max_steps = AGENT_MAX_STEPS
     tools_executed: List[Dict[str, Any]] = []
     conversation = message
     if context:
@@ -216,6 +260,27 @@ async def run_agent_loop(
     }
 
 
+async def run_being_agent(
+    generate: Callable[[str], Awaitable[str]] = None,
+    *,
+    message: str,
+    context: str = "",
+    max_steps: int = None,
+) -> Dict[str, Any]:
+    """General compute agent for ANY Christman family being.
+    All beings now have full capacity to run the compute via being_eyes tools.
+    If no generate provided, uses built-in fast low-lag direct Ollama (GENERAL model).
+    """
+    if generate is None:
+        generate = _fast_direct_generate
+    return await run_agent_loop(
+        generate,
+        message=message,
+        context=context,
+        max_steps=max_steps,
+    )
+
+
 async def run_kimi_agent(
     kimi_svc: Any,
     *,
@@ -241,7 +306,7 @@ async def run_kimi_agent(
 
         return await loop.run_in_executor(None, _call)
 
-    return await run_agent_loop(
+    return await run_being_agent(
         generate,
         message=message,
         context=context,
@@ -265,7 +330,7 @@ async def run_nemo_agent(
             lambda: nemo_svc.generate_content(prompt, mode=mode, context=None),
         )
 
-    return await run_agent_loop(
+    return await run_being_agent(
         generate,
         message=message,
         context=context,

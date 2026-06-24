@@ -206,6 +206,11 @@ async def write_file(req: WriteRequest):
     try:
         encoded = req.content.encode(req.encoding)
         p.write_bytes(encoded)
+        # Nudge parent so macOS Finder sees the change without refresh
+        try:
+            os.utime(p.parent, None)
+        except Exception:
+            pass
         logger.info(f"[BeingEyes] Wrote {p} ({len(encoded)} bytes)")
         return {
             "status": "ok",

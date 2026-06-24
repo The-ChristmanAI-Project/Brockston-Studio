@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "last_updated": "2026-06-23T21:13:02.397831+00:00",
+    "total_phrases": 0,
+    "express_target_ms": 50,
+    "priority_target_ms": 500
+  },
+  "phrases": []
+}

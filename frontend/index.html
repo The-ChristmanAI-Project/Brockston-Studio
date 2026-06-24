@@ -860,6 +860,7 @@
         const userMusic = document.getElementById('user-music');
         let currentMusicTrack = null;
         let currentPath = '';
+        let activeExplorerFile = null;  // so active tab/code is visibly selected in finder
         let monacoEditor = null;
         let workspaceRoot = null;
         let lastSyncedCwd = null;
@@ -1105,6 +1106,11 @@
                 monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
             } catch(e){}
             renderTabs();
+            // Make sure the active code shows as selected in the finder sidebar too
+            if (currentPath) {
+                // re-render current dir to pick up highlight via activeTabPath check
+                setTimeout(() => loadFiles(currentPath), 30);
+            }
             // status
             const fname = document.getElementById('sb-file-name');
             const lname = document.getElementById('sb-lang-name');
@@ -1614,6 +1620,10 @@
                         : file.name;
                     if (file.type === 'file') {
                         el.onclick = () => openFile(childPath);
+                        if (activeExplorerFile === childPath || activeTabPath === childPath) {
+                            el.style.background = '#1a1208';
+                            el.style.borderLeft = '3px solid var(--neon-orange)';
+                        }
                     } else {
                         el.onclick = () => loadFiles(childPath);
                     }
@@ -1622,6 +1632,15 @@
             } catch (err) {
                 fileList.innerHTML = `<div style="color:#ff6b6b;padding:10px;">Failed to load files: ${escapeHtml(err.message)}</div>`;
             }
+        }
+
+        // Early definition so ide-control + run handlers can use it reliably
+        let _refreshTimer = null;
+        function scheduleExplorerRefresh() {
+            if (_refreshTimer) clearTimeout(_refreshTimer);
+            _refreshTimer = setTimeout(() => {
+                try { loadFiles(currentPath || workspaceRoot || ''); } catch(e) {}
+            }, 650);
         }
 
         function languageFromName(name) {
@@ -1936,6 +1955,7 @@
                     if (params.command && ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({type: 'input', data: params.command + '\n'}));
                         term.focus();
+                        scheduleExplorerRefresh();
                     }
                     break;
                 case 'refresh_files':
@@ -2184,6 +2204,11 @@
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({type: 'input', data}));
             }
+            // If user submitted a command (has newline), schedule a finder refresh
+            // so new files / written output files appear in the explorer.
+            if (data && (data.includes('\n') || data.includes('\r'))) {
+                scheduleExplorerRefresh();
+            }
         });
 
         // ----- Boot
@@ -2345,6 +2370,8 @@
                 const st = document.getElementById('sb-term-state');
                 if (st) st.textContent = 'running...';
                 setTimeout(() => { if (st) st.textContent = 'terminal connected'; }, 4000);
+                // Auto-refresh finder so anything the run wrote (artifacts, outputs, new files) appears
+                setTimeout(() => { loadFiles(currentPath || workspaceRoot || ''); }, 650);
             };
         }
 

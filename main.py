@@ -110,15 +110,78 @@ async def sound_status():
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    """Christman Family — Brockston via local pipeline, Ollama fallback."""
+    """Christman Family — Brockston (and whole family) via local pipeline.
+    Now with full compute capacity: all beings can ls/read/write/patch/run via tools.
+    """
     logger.info(f"Chat request: {request.message[:120]}")
     if not get_ai_response:
         raise fastapi.HTTPException(status_code=503, detail="AI client not available")
     try:
-        # Run in thread pool — ai_client uses sync httpx, must not block the event loop
-        loop = asyncio.get_event_loop()
-        response_text = await loop.run_in_executor(None, get_ai_response, request.message)
-        return {"response": response_text}
+        from backend.being_agent import run_being_agent
+        from backend.being_context import build_being_context
+
+        # Build rich context so beings see the full workspace + abilities for compute
+        full_context = await build_being_context(
+            message=request.message,
+            extra_context=request.context,
+            compact=True,
+            ollama_route=True,
+        )
+
+        # Special reduced-lag demo path so beings can quickly demonstrate abilities
+        demo_trigger = any(w in (request.message or "").lower() for w in ("demonstrate", "demo abilities", "show your abilities", "run compute demo"))
+        if demo_trigger:
+            from backend.being_agent import run_being_agent as _demo_run
+            demo_task = "Demonstrate your compute abilities: ls a dir, read a small file, run 'echo DEMO SUCCESS', write+run a tiny temp python script that prints a success message, then summarize the tools used."
+            result = await _demo_run(message=demo_task, context=full_context)
+            return {"response": f"[DEMO — {result.get('tool_count',0)} tools]: {result.get('text','')}", "agent": True, "demo": True}
+
+        # Normal fast path for chat (reduced lag). 
+        # Only use the full agent tool loop (compute) when the query needs it (code, fix, demo, ls/run etc).
+        from backend.being_agent import wants_agent_tools
+        if wants_agent_tools(request.message, "code") or any(k in (request.message or "").lower() for k in ("tool", "run command", "execute", "patch", "write file", "demonstrate")):
+            result = await run_being_agent(
+                message=request.message,
+                context=full_context,
+            )
+            text = result.get("text", "")
+            tool_count = result.get("tool_count", 0)
+            prefix = f"[FAMILY/BROCKSTON — {tool_count} compute tool(s) executed]: " if tool_count else "[FAMILY]: "
+            return {
+                "response": f"{prefix}{text}",
+                "source": "family",
+                "tools_executed": result.get("tools_executed", []),
+                "tool_count": tool_count,
+                "agent": True,
+            }
+
+        # Fast direct low-lag chat path for normal questions (no agent overhead)
+        import os
+        import httpx
+        fast_model = os.getenv("LLM_MODEL_GENERAL", "llama3.2")
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(
+                    "http://127.0.0.1:11434/api/chat",
+                    json={
+                        "model": fast_model,
+                        "messages": [
+                            {"role": "system", "content": full_context[:1500] if full_context else "You are BROCKSTON, helpful and direct."},
+                            {"role": "user", "content": request.message}
+                        ],
+                        "stream": False,
+                        "options": {"num_predict": 256, "num_ctx": 4096, "temperature": 0.7}
+                    }
+                )
+                r.raise_for_status()
+                reply = r.json().get("message", {}).get("content", "No response")
+                return {"response": f"[FAMILY]: {reply}", "source": "family", "agent": False}
+        except Exception as e:
+            logger.warning(f"Fast chat failed, falling back: {e}")
+            # ultimate fallback
+            loop = asyncio.get_event_loop()
+            response_text = await loop.run_in_executor(None, get_ai_response, request.message)
+            return {"response": response_text}
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))
@@ -315,7 +378,7 @@ async def get_audio(filename: str):
 # like /etc/passwd while keeping every real project reachable.
 # ----------------------------------------------------------------------------
 USER_HOME = Path(os.path.expanduser("~")).resolve()
-WORKSPACE_ROOT = Path(".").resolve()
+WORKSPACE_ROOT = Path(os.environ.get("BROCKSTON_WORKSPACE", ".")).resolve()
 
 def _resolve_user_path(raw: str, default: Path) -> Path:
     """Resolve a path argument from the client.
@@ -408,7 +471,14 @@ async def write_file(request: WriteFileRequest):
         target.parent.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
             f.write(request.content)
+        # Nudge FS so macOS Finder sees new/changed files promptly (no manual refresh needed)
+        try:
+            os.utime(target.parent, None)
+        except Exception:
+            pass
         logger.info(f"Saved {target} ({len(request.content)} bytes)")
+        # Push refresh to any connected IDE clients / beings so explorer stays in sync
+        await broadcast_ide_control("refresh_files", {})
         return {"ok": True, "filename": str(target), "bytes": len(request.content)}
     except fastapi.HTTPException:
         raise
@@ -426,7 +496,7 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
     await websocket.accept()
     master_fd, slave_fd = pty.openpty()
     shell = os.environ.get("SHELL", "/bin/bash")
-    workspace_root = str(Path(".").resolve())
+    workspace_root = str(WORKSPACE_ROOT)
 
     # Inject OSC 7 emission into the shell so every prompt reports its cwd.
     # Works for bash, zsh, fish-style POSIX shells via PROMPT_COMMAND / precmd.
