@@ -13,8 +13,16 @@ from typing import Iterable, Optional
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Prefer local christman_sound present in this Brockston-Studio project
+# (user confirmed it is here). Fall back to cold storage volume only if no local.
+_local_sound = BASE_DIR / "christman_sound"
+if _local_sound.exists() and (_local_sound / "CHRISTMAN_EAR_CANAL").exists():
+    _default_sound = str(_local_sound)
+else:
+    _default_sound = "/Volumes/LIFE2/Christman-Sound"
+
 CHRISTMAN_SOUND_ROOT = Path(
-    os.getenv("CHRISTMAN_SOUND_ROOT", "/Volumes/LIFE2/Christman-Sound")
+    os.getenv("CHRISTMAN_SOUND_ROOT", _default_sound)
 ).expanduser()
 
 CHRISTMAN_MEDIA_INSTALLER_ROOT = Path(
@@ -80,13 +88,25 @@ def ensure_voice_folders() -> list[Path]:
 
 
 def ensure_sound_paths() -> list[str]:
-    """Add Christman-Sound + SDK to sys.path. Returns paths added."""
+    """Add Christman-Sound + SDK to sys.path. Returns paths added.
+    When using the local copy in this project, also add the voice_sdk subdir
+    so "import christman_voice_sdk" succeeds for per-being XTTS (Kimi etc).
+    """
     added: list[str] = []
     for path in (CHRISTMAN_SOUND_ROOT, sdk_root(), VOICE_CENTER):
         s = str(path)
         if path.exists() and s not in sys.path:
             sys.path.insert(0, s)
             added.append(s)
+
+    # Explicitly add the voice_sdk subdir for the import in SPEAK
+    voice_sdk = CHRISTMAN_SOUND_ROOT / "christman_voice_sdk"
+    if voice_sdk.exists():
+        s = str(voice_sdk)
+        if s not in sys.path:
+            sys.path.insert(0, s)
+            added.append(s)
+
     ear_paths = CHRISTMAN_SOUND_ROOT / "CHRISTMAN_EAR_CANAL"
     if ear_paths.is_dir():
         parent = str(CHRISTMAN_SOUND_ROOT)

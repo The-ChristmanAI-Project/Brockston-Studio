@@ -21,15 +21,16 @@ IDE_LOG="$LOG_DIR/ide.log"
 # ----- defaults (overridable via .env or shell) ------------------------------
 [ -f .env ] && set -a && source .env && set +a
 
+export LLM_MODEL_GENERAL="${LLM_MODEL_GENERAL:-llama3.2}"
+export LLM_MODEL_CODER="${LLM_MODEL_CODER:-qwen2.5-coder:32b}"
+export LLM_MODEL="${LLM_MODEL:-$LLM_MODEL_GENERAL}"
+
 export BROCKSTON_HOST="${BROCKSTON_HOST:-127.0.0.1}"
 export BROCKSTON_PORT="${BROCKSTON_PORT:-9003}"          # Educator backend (current: 9003)
 export IDE_PORT="${IDE_PORT:-5055}"                       # IDE Board frontend (main.py)
 export ULTIMATEEV_PORT="${ULTIMATEEV_PORT:-5174}"         # UltimateEV node server
 export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
 export OLLAMA_MODEL="${OLLAMA_MODEL:-$LLM_MODEL_GENERAL}"
-export LLM_MODEL_GENERAL="${LLM_MODEL_GENERAL:-llama3.2}"
-export LLM_MODEL_CODER="${LLM_MODEL_CODER:-qwen2.5-coder:32b}"
-export LLM_MODEL="${LLM_MODEL:-$LLM_MODEL_GENERAL}"
 
 # Ensure all parts (IDE main.py, Being Eyes, terminal) agree on workspace root
 export BROCKSTON_WORKSPACE="${BROCKSTON_WORKSPACE:-$ROOT}"
