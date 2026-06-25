@@ -220,25 +220,56 @@ class SpeechService:
                 logger.info("[TTS] No specific reference for being=%s — using fallback ref (or will hit macOS say)", being)
                 return None
 
-            from CHRISTMAN_EAR_CANAL.SPEAK import speak
+            # Prefer direct local christman_voice_sdk XTTSEngine (now wired since user confirmed local christman_sound present)
+            # This uses the exact reference WAV you provided for the being (e.g. Kimi) for real voice cloning.
+            try:
+                from christman_voice_sdk.engines.xtts_engine import XTTSEngine
+                engine = XTTSEngine()
+                engine.load_voice(ref)
+                synth_result = engine.synthesize(text[:600], language="en")
+                if synth_result and getattr(synth_result, "audio", None) is not None:
+                    import numpy as np
+                    from scipy.io.wavfile import write as write_wav
+                    import tempfile
+                    from pathlib import Path as PPath
+                    tmp = PPath(tempfile.mktemp(suffix=".wav"))
+                    sr = getattr(synth_result, "sample_rate", 22050)
+                    audio_arr = np.asarray(synth_result.audio)
+                    if audio_arr.dtype != np.int16:
+                        audio_arr = (audio_arr * 32767).astype(np.int16)
+                    write_wav(str(tmp), sr, audio_arr)
+                    audio = self._to_mp3_bytes(tmp.read_bytes())
+                    tmp.unlink(missing_ok=True)
+                    if audio:
+                        logger.info(
+                            "[TTS] Direct local XTTSEngine %dKB being=%s ref=%s",
+                            len(audio) // 1024, being, ref.name
+                        )
+                        return audio
+            except Exception as exc:
+                logger.debug("[TTS] Direct XTTSEngine failed for %s: %s", being, exc)
 
-            result = speak(text[:600], reference_audio=ref, allow_fallback=False)
-            wav_path = result.get("wav")
-            if not wav_path or not Path(wav_path).exists():
-                logger.debug("[TTS] Christman-Sound returned no wav: %s", result)
-                return None
+            # Fallback to the EAR_CANAL SPEAK wrapper (may still hit import issues)
+            try:
+                from CHRISTMAN_EAR_CANAL.SPEAK import speak
+                result = speak(text[:600], reference_audio=ref, allow_fallback=False)
+                wav_path = result.get("wav")
+                if wav_path and Path(wav_path).exists():
+                    audio = self._to_mp3_bytes(Path(wav_path).read_bytes())
+                    if audio:
+                        logger.info(
+                            "[TTS] Voice_Creation_Center→Christman-Sound %dKB being=%s pack=%s ref=%s",
+                            len(audio) // 1024,
+                            being,
+                            (manifest or {}).get("pack_id"),
+                            ref.name,
+                        )
+                        return audio
+            except Exception as exc:
+                logger.debug("[TTS] EAR_CANAL SPEAK failed: %s", exc)
 
-            audio = self._to_mp3_bytes(Path(wav_path).read_bytes())
-            if not audio:
-                return None
-            logger.info(
-                "[TTS] Voice_Creation_Center→Christman-Sound %dKB being=%s pack=%s ref=%s",
-                len(audio) // 1024,
-                being,
-                (manifest or {}).get("pack_id"),
-                ref.name,
-            )
-            return audio
+            logger.info("[TTS] No usable Christman audio for being=%s despite ref; will use macOS say", being)
+            return None
         except Exception as exc:
             logger.debug("[TTS] Christman-Sound unavailable: %s", exc)
             return None

@@ -82,6 +82,7 @@ except Exception as e:
 
 class ChatRequest(BaseModel):
     message: str
+    context: str | None = None
 
 class KimiRequest(BaseModel):
     message: str

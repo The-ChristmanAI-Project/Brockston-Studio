@@ -2430,6 +2430,10 @@
         let voiceRecognition = null;
         let isListening = false;
 
+        // ─── MIC TOGGLE MODE (STAYS ON UNTIL YOU TURN IT OFF) ───
+        let micToggleState = false;  // true = always listening
+        let micRecognition = null;
+
         function setupVoiceInput() {
             const micBtn = document.getElementById('mic-btn');
             if (!micBtn) return;
@@ -2442,12 +2446,12 @@
                 return;
             }
 
-            voiceRecognition = new SpeechRec();
-            voiceRecognition.continuous = false;
-            voiceRecognition.interimResults = true;
-            voiceRecognition.lang = 'en-US';
+            micRecognition = new SpeechRec();
+            micRecognition.continuous = true;        // ← STAY ON
+            micRecognition.interimResults = true;
+            micRecognition.lang = 'en-US';
 
-            voiceRecognition.onresult = (event) => {
+            micRecognition.onresult = (event) => {
                 let transcript = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     transcript += event.results[i][0].transcript;
@@ -2455,46 +2459,67 @@
                 const chatInput = document.getElementById('chat-input');
                 if (chatInput) {
                     chatInput.value = transcript.trim();
-                    // For nonverbal users: auto-send after final result if voice mode is enabled
-                    if (event.results[event.results.length-1].isFinal && isVoiceModeEnabled) {
+                    // Auto-send on final result when toggle is ON
+                    if (event.results[event.results.length-1].isFinal && micToggleState) {
                         setTimeout(() => {
                             const sendBtnEl = document.getElementById('send-btn');
                             if (sendBtnEl) sendBtnEl.click();
-                        }, 250);
+                        }, 400);  // slightly longer delay for natural pauses
                     }
                 }
             };
 
-            voiceRecognition.onerror = (e) => {
+            micRecognition.onerror = (e) => {
                 console.warn('Speech rec error', e);
-                stopListeningUI();
-                const chatHist = document.getElementById('chat-history');
-                if (chatHist) {
-                    appendMessage('SYSTEM', 'Voice input had trouble hearing. You can type or try again.', 'error');
+                // Don't stop on error — try to keep going unless it's fatal
+                if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+                    micToggleState = false;
+                    updateMicButtonUI();
+                    appendMessage('SYSTEM', 'Microphone access denied. Check browser permissions.', 'error');
                 }
             };
 
-            voiceRecognition.onend = () => {
-                stopListeningUI();
+            micRecognition.onend = () => {
+                // If toggle is still ON, restart immediately (keep listening)
+                if (micToggleState && micRecognition) {
+                    try { micRecognition.start(); } catch (err) {}
+                } else {
+                    updateMicButtonUI();
+                }
             };
 
             micBtn.onclick = () => {
-                if (isListening) {
-                    voiceRecognition.stop();
-                    return;
+                micToggleState = !micToggleState;
+                if (micToggleState) {
+                    try {
+                        micRecognition.start();
+                    } catch (err) {
+                        console.error(err);
+                        micToggleState = false;
+                    }
+                } else {
+                    try { micRecognition.stop(); } catch (err) {}
                 }
-                try {
-                    voiceRecognition.start();
-                    startListeningUI();
-                } catch (err) {
-                    console.error(err);
-                    stopListeningUI();
-                }
+                updateMicButtonUI();
             };
+        }
 
-            // Bonus: if voice mode is toggled on, make mic more obvious
-            const origVoiceToggle = btnVoice ? btnVoice.onclick : null;
-            // We don't override, just style hint on toggle (the existing voice listener already runs)
+        function updateMicButtonUI() {
+            const micBtn = document.getElementById('mic-btn');
+            if (!micBtn) return;
+            if (micToggleState) {
+                micBtn.style.background = 'var(--neon-orange)';
+                micBtn.style.color = '#000';
+                micBtn.style.borderColor = '#000';
+                micBtn.innerHTML = '●';
+                micBtn.title = 'MIC ON — click to stop listening';
+            } else {
+                micBtn.style.background = '#111';
+                micBtn.style.color = 'var(--neon-orange)';
+                micBtn.style.borderColor = 'var(--neon-orange)';
+                micBtn.innerHTML = '🎤';
+                micBtn.title = 'MIC OFF — click to start listening (stays on)';
+            }
         }
 
         function startListeningUI() {
