@@ -387,7 +387,9 @@ async def get_audio(filename: str):
 # like /etc/passwd while keeping every real project reachable.
 # ----------------------------------------------------------------------------
 USER_HOME = Path(os.path.expanduser("~")).resolve()
-WORKSPACE_ROOT = Path(os.environ.get("BROCKSTON_WORKSPACE", ".")).resolve()
+WORKSPACE_ROOT = Path(
+    os.path.expanduser(os.environ.get("BROCKSTON_WORKSPACE", "."))
+).resolve()
 
 def _resolve_user_path(raw: str, default: Path) -> Path:
     """Resolve a path argument from the client.

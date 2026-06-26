@@ -43,7 +43,9 @@ logger = logging.getLogger("being_eyes")
 router = APIRouter(prefix="/api/eyes", tags=["being_eyes"])
 
 # ── Workspace root — same as Studio's WORKSPACE_ROOT ─────────────────────────
-WORKSPACE_ROOT = Path(os.environ.get("BROCKSTON_WORKSPACE", str(Path.home())))
+WORKSPACE_ROOT = Path(
+    os.path.expanduser(os.environ.get("BROCKSTON_WORKSPACE", str(Path.home())))
+).resolve()
 
 
 def _safe_path(raw: str) -> Path:
