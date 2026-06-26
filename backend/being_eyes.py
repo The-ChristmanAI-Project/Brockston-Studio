@@ -132,18 +132,96 @@ async def get_screenshot(
 
 # ── File read ──────────────────────────────────────────────────────────────────
 
+DEFAULT_READ_LIMIT_LINES = 500
+
+
+def _read_file_paginated(
+    p: Path,
+    *,
+    encoding: str = "utf-8",
+    max_kb: int = 500,
+    offset_lines: int = 1,
+    limit_lines: int = 0,
+) -> dict:
+    """Read a slice of a text file by line range. Large files are scrolled, not dropped."""
+    offset_lines = max(1, int(offset_lines))
+    chunk_lines = int(limit_lines) if limit_lines and int(limit_lines) > 0 else DEFAULT_READ_LIMIT_LINES
+    byte_cap = max_kb * 1024 if max_kb > 0 else None
+
+    selected: list[str] = []
+    line_end = offset_lines - 1
+    byte_count = 0
+    has_more = False
+
+    with p.open("r", encoding=encoding, errors="replace") as handle:
+        for line_no, line in enumerate(handle, start=1):
+            if line_no < offset_lines:
+                continue
+            if len(selected) >= chunk_lines:
+                has_more = True
+                break
+            line_bytes = len(line.encode(encoding, errors="replace"))
+            if byte_cap is not None and byte_count + line_bytes > byte_cap:
+                has_more = True
+                break
+            selected.append(line)
+            line_end = line_no
+            byte_count += line_bytes
+
+    content = "".join(selected)
+    size_bytes = p.stat().st_size
+    total_lines: Optional[int] = None
+    if size_bytes < 2 * 1024 * 1024:
+        try:
+            with p.open("r", encoding=encoding, errors="replace") as handle:
+                total_lines = sum(1 for _ in handle)
+            if total_lines is not None and line_end >= total_lines:
+                has_more = False
+        except Exception:
+            total_lines = None
+
+    next_offset = line_end + 1 if has_more else None
+    path_str = str(p)
+    hint = None
+    if has_more and next_offset is not None:
+        hint = (
+            f'More content available. Read next chunk with '
+            f'{{"tool":"read","path":"{path_str}","offset_lines":{next_offset},'
+            f'"limit_lines":{chunk_lines}}}'
+        )
+
+    return {
+        "status": "ok",
+        "path": path_str,
+        "content": content,
+        "lines": len(selected),
+        "line_start": offset_lines if selected else None,
+        "line_end": line_end if selected else None,
+        "total_lines": total_lines,
+        "size_bytes": size_bytes,
+        "truncated": has_more,
+        "has_more": has_more,
+        "next_offset_lines": next_offset,
+        "hint": hint,
+    }
+
+
 @router.get("/read")
 async def read_file(
     path: str = Query(..., description="Absolute or workspace-relative file path"),
     encoding: str = Query(default="utf-8", description="Text encoding"),
-    max_kb: int = Query(default=500, description="Max kilobytes to return (0 = no limit)"),
+    max_kb: int = Query(default=500, description="Max kilobytes per chunk (0 = no byte cap)"),
+    offset_lines: int = Query(default=1, description="1-based line to start reading from"),
+    limit_lines: int = Query(default=0, description="Max lines per chunk (0 = 500)"),
 ):
     """
     Read a file from disk and return its content as text.
-    Truncates at max_kb kilobytes to protect against huge files.
+    Use offset_lines + limit_lines to scroll through large files in chunks.
 
     Returns:
-        {"status": "ok", "path": str, "content": str, "lines": int, "truncated": bool}
+        {"status": "ok", "path": str, "content": str, "lines": int,
+         "line_start": int, "line_end": int, "total_lines": int|None,
+         "truncated": bool, "has_more": bool, "next_offset_lines": int|None, "hint": str|None}
     """
     try:
         p = _safe_path(path)
@@ -156,21 +234,22 @@ async def read_file(
         raise HTTPException(status_code=400, detail=f"Not a file: {p}")
 
     try:
-        raw = p.read_bytes()
-        limit = max_kb * 1024 if max_kb > 0 else len(raw)
-        truncated = len(raw) > limit
-        content = raw[:limit].decode(encoding, errors="replace")
-        lines = content.count("\n") + 1
-
-        logger.info(f"[BeingEyes] Read {p} ({len(raw)//1024}KB, truncated={truncated})")
-        return {
-            "status": "ok",
-            "path": str(p),
-            "content": content,
-            "lines": lines,
-            "size_bytes": len(raw),
-            "truncated": truncated,
-        }
+        result = _read_file_paginated(
+            p,
+            encoding=encoding,
+            max_kb=max_kb,
+            offset_lines=offset_lines,
+            limit_lines=limit_lines,
+        )
+        logger.info(
+            "[BeingEyes] Read %s lines %s-%s (truncated=%s, has_more=%s)",
+            p,
+            result.get("line_start"),
+            result.get("line_end"),
+            result.get("truncated"),
+            result.get("has_more"),
+        )
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Read error: {e}")
 

@@ -1457,15 +1457,19 @@
             const kimiTimer = setTimeout(() => controller.abort(), 300000);
             try {
                 const effectiveMode = mode || detectKimiMode(text) || 'tutor';
+                const kimiPayload = {
+                    message: text,
+                    mode: effectiveMode,
+                };
+                // Teaching topic only — not a filesystem path. Skip in Code Lab scans.
+                if (effectiveMode === 'tutor' || effectiveMode === 'learning') {
+                    kimiPayload.domain = 'neurodivergency';
+                }
                 const res = await fetch(`${API_BASE}/kimi`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     signal: controller.signal,
-                    body: JSON.stringify({
-                        message: text,
-                        mode: effectiveMode,
-                        domain: 'neurodivergency',
-                    })
+                    body: JSON.stringify(kimiPayload)
                 });
                 if (!res.ok) {
                     const errBody = await res.text();

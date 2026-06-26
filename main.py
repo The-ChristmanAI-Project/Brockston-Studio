@@ -223,7 +223,9 @@ async def kimi_endpoint(request: KimiRequest):
                 domain=request.domain,
                 max_steps=4,
             )
-            text = result.get("text", "")
+            from backend.being_agent import strip_tool_blocks
+
+            text = strip_tool_blocks(result.get("text", ""))
             tool_count = result.get("tool_count", 0)
             prefix = f"[KIMI — {tool_count} tool(s) executed on disk]: " if tool_count else "[KIMI]: "
             return {
@@ -233,6 +235,7 @@ async def kimi_endpoint(request: KimiRequest):
                 "tools_executed": result.get("tools_executed", []),
                 "tool_count": tool_count,
                 "agent": True,
+                "agent_steps": result.get("agent_steps", 0),
             }
 
         result = await loop.run_in_executor(
