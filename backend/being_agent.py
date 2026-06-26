@@ -30,6 +30,9 @@ FAST_MODEL = os.getenv("LLM_MODEL_GENERAL", os.getenv("OLLAMA_MODEL", "llama3.2"
 AGENT_MAX_STEPS = int(os.getenv("BEING_AGENT_MAX_STEPS", "3"))  # lower for demos/speed
 AGENT_NUM_PREDICT = int(os.getenv("BEING_AGENT_NUM_PREDICT", "300"))
 AGENT_NUM_CTX = int(os.getenv("BEING_AGENT_NUM_CTX", "4096"))
+AGENT_TOOL_RESULT_MAX_CHARS = int(os.getenv("BEING_AGENT_TOOL_RESULT_MAX_CHARS", "2500"))
+AGENT_CONVERSATION_MAX_CHARS = int(os.getenv("BEING_AGENT_CONVERSATION_MAX_CHARS", "12000"))
+KIMI_AGENT_MAX_TOOLS_PER_STEP = int(os.getenv("KIMI_AGENT_MAX_TOOLS_PER_STEP", "3"))
 
 AGENT_TOOLS_PROMPT = """
 You are a Christman AI Family being (Brockston, Derek, AlphaVox, Kimi, Nemo, UltimateEV, or any in the family). Everett Christman is your creator and partner.
@@ -42,15 +45,29 @@ Format (valid JSON inside each block):
 </tool_call>
 
 Tools (full compute):
-  ls     — {"tool":"ls","path":"...","depth":2}  ← explore first
-  read   — {"tool":"read","path":"..."}
+  ls     — {"tool":"ls","path":"...","depth":2}  ← explore first — scan the whole project
+  read   — {"tool":"read","path":"...","offset_lines":1,"limit_lines":500}
+         — scroll large files: if result has "has_more":true, read again with offset_lines=next_offset_lines
   patch  — {"tool":"patch","path":"...","old_string":"exact text","new_string":"replacement"}
   write  — {"tool":"write","path":"...","content":"full file content"}
-  run    — {"tool":"run","command":"python -m py_compile file.py","cwd":"/optional/dir","timeout_sec":60}
+  run    — {"tool":"run","command":"rg -l 'pattern' backend/","cwd":"/workspace","timeout_sec":60}
   mkdir, move, delete — full fs control
+
+Project scan workflow (use before answering "where is X?" or "what's in this repo?"):
+  1. ls workspace root depth=2
+  2. ls backend/, frontend/, scripts/ as needed
+  3. read specific files; run rg/grep to search
+  4. read /Users/EverettN/.grok/skills/<name>/SKILL.md for domain playbooks
+
+Key paths (workspace — NOT /Users/EverettN/BROCKSTON unless explicitly asked):
+  backend/being_agent.py, being_eyes.py, being_context.py, kimi_service.py
+  Skills: /Users/EverettN/.grok/skills/  |  MCP: ~/.grok/projects/.../mcps/
+
+"Domain: neurodivergency" (if present) is a teaching topic — NOT a directory. Never ls frontend-neurodivergency or invent domain paths.
 
 Rules:
 - Need a file or to understand the project? ls + read it yourself — never say "you opened it" or "tell me which file".
+- If read returns truncated/has_more/hint — keep reading with offset_lines until has_more is false. Never stop and complain about truncation.
 - Read before patch. Use exact old_string from the file.
 - After changes, run commands (py_compile, tests, python the script) to verify compute.
 - When finished, summarize what tools ran + outcomes.
@@ -69,12 +86,62 @@ _CODE_FIX_RE = re.compile(
     re.IGNORECASE,
 )
 
+_SCAN_RE = re.compile(
+    r"\b(scan|explore|list\s+(files|dirs|directories)|project\s+structure|"
+    r"where\s+is|show\s+me|find\s+(the\s+)?file|entire\s+project|whole\s+project|"
+    r"skills?\s+(and\s+)?tools?|what(?:'s| is)\s+in|tree|directory)\b",
+    re.IGNORECASE,
+)
+
 
 def wants_agent_tools(message: str, mode: str) -> bool:
-    """Enable the tool loop for code work — not creative tutor chat."""
+    """Enable the tool loop for code work and project exploration — not creative tutor chat."""
     if mode in ("codelab", "code"):
         return True
-    return bool(_CODE_FIX_RE.search(message or ""))
+    text = message or ""
+    return bool(_CODE_FIX_RE.search(text) or _SCAN_RE.search(text))
+
+
+def strip_tool_blocks(text: str) -> str:
+    """Remove <tool_call> blocks from user-facing text."""
+    cleaned = _TOOL_CALL_RE.sub("", text or "")
+    return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+
+def _compact_tool_result(entry: Dict[str, Any], max_chars: int = AGENT_TOOL_RESULT_MAX_CHARS) -> Dict[str, Any]:
+    """Shrink large read outputs before feeding them back into the model."""
+    call = entry.get("call") or {}
+    result = dict(entry.get("result") or {})
+    content = result.get("content")
+    if isinstance(content, str) and len(content) > max_chars:
+        result["content"] = (
+            content[:max_chars]
+            + f"\n... [{len(content) - max_chars} chars omitted — "
+            f"use read offset_lines={result.get('next_offset_lines', (result.get('line_end') or 0) + 1)} to continue]"
+        )
+        result["content_truncated_for_agent_context"] = True
+    return {"call": call, "result": result}
+
+
+def _trim_conversation(text: str, max_chars: int = AGENT_CONVERSATION_MAX_CHARS) -> str:
+    """Keep the user request + latest tool results when context grows too large."""
+    if len(text) <= max_chars:
+        return text
+    marker = "User request:\n"
+    idx = text.find(marker)
+    if idx == -1:
+        return text[:2000] + "\n...[context trimmed]...\n" + text[-(max_chars - 2100):]
+    head = text[: idx + len(marker)]
+    body = text[idx + len(marker):]
+    first_break = body.find("\n")
+    user_line = body if first_break == -1 else body[: first_break + 1]
+    rest = body[len(user_line):]
+    tail_budget = max_chars - len(head) - len(user_line) - 40
+    if tail_budget < 500:
+        return head + user_line + "\n...[context trimmed]..."
+    if len(rest) <= tail_budget:
+        return head + body
+    return head + user_line + "\n...[older context trimmed]...\n" + rest[-tail_budget:]
 
 
 def parse_tool_calls(text: str) -> List[Dict[str, Any]]:
@@ -113,10 +180,13 @@ async def execute_being_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         if tool == "read":
+            limit_lines = payload.get("limit_lines") or payload.get("limit") or 0
             return await read_file(
                 path=payload["path"],
                 encoding=payload.get("encoding", "utf-8"),
                 max_kb=int(payload.get("max_kb", 500)),
+                offset_lines=int(payload.get("offset_lines", 1)),
+                limit_lines=int(limit_lines),
             )
         if tool == "patch":
             return await patch_file(
@@ -230,25 +300,50 @@ async def run_agent_loop(
             break
 
         batch_results: List[Dict[str, Any]] = []
-        for call in calls:
+        for call in calls[:KIMI_AGENT_MAX_TOOLS_PER_STEP]:
             result = await execute_being_tool(call)
             entry = {"call": call, "result": result}
             tools_executed.append(entry)
-            batch_results.append(entry)
+            batch_results.append(_compact_tool_result(entry))
             logger.info(
                 "[being_agent] step=%d tool=%s status=%s",
                 step + 1,
                 call.get("tool"),
                 result.get("status", result.get("exit_code")),
             )
+        if len(calls) > KIMI_AGENT_MAX_TOOLS_PER_STEP:
+            logger.warning(
+                "[being_agent] Capped tools step=%d from %d to %d",
+                step + 1,
+                len(calls),
+                KIMI_AGENT_MAX_TOOLS_PER_STEP,
+            )
 
-        conversation = (
+        conversation = _trim_conversation(
             f"{conversation}\n\n"
-            f"Assistant (step {step + 1}):\n{last_text}\n\n"
+            f"Assistant (step {step + 1}):\n{strip_tool_blocks(last_text)}\n\n"
             f"TOOL RESULTS (real execution on disk):\n"
             f"{json.dumps(batch_results, indent=2, default=str)}\n\n"
             "Continue with more <tool_call> blocks if needed, "
-            "or give a final summary of what was fixed and verified."
+            "or give a final plain-text summary for Everett. No raw tool_call XML in the final answer."
+        )
+
+    needs_finalize = bool(parse_tool_calls(last_text)) or (
+        tools_executed and strip_tool_blocks(last_text) == ""
+    )
+    if needs_finalize:
+        conversation = _trim_conversation(
+            f"{conversation}\n\n"
+            "STOP calling tools. Summarize what you found for Everett in plain text only. "
+            "No <tool_call> blocks. Short, direct, cite paths and line ranges from tool results."
+        )
+        last_text = await generate(conversation)
+
+    last_text = strip_tool_blocks(last_text)
+    if not last_text and tools_executed:
+        last_text = (
+            f"Completed {len(tools_executed)} tool(s) on disk. "
+            "Ask me to summarize a specific file or path."
         )
 
     return {
@@ -293,9 +388,8 @@ async def run_kimi_agent(
     loop = asyncio.get_event_loop()
 
     async def generate(prompt: str) -> str:
-        # Truncate for Kimi stability — very long agent prompts (e.g. broad IDE fixes) can trigger 500s on NVIDIA
-        if len(prompt) > 8000:
-            prompt = prompt[:8000] + "\n... [prompt truncated for Kimi to avoid server errors]"
+        # Trim middle of bloated agent context — keep user request + latest tool results
+        prompt = _trim_conversation(prompt, max_chars=8000)
         def _call() -> str:
             result = kimi_svc.interact(
                 message=prompt,
@@ -303,7 +397,6 @@ async def run_kimi_agent(
                 context=None,
                 domain=domain,
                 thinking=False,
-                max_tokens=4096,
             )
             return result.get("text", "")
 
