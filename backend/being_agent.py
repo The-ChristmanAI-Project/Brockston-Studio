@@ -79,6 +79,11 @@ _TOOL_CALL_RE = re.compile(
     r"<tool_call>\s*(\{.*?\})\s*</tool_call>",
     re.DOTALL | re.IGNORECASE,
 )
+# Kimi sometimes emits unclosed <tool_call>{...} without </tool_call>
+_TOOL_CALL_LEAK_RE = re.compile(
+    r"<tool_call>\s*\{[^}]*\}[^<]*(?:</tool_call>)?",
+    re.DOTALL | re.IGNORECASE,
+)
 
 _CODE_FIX_RE = re.compile(
     r"\b(fix|patch|repair|debug|implement|refactor|broken|syntax\s*error|bug)\b|"
@@ -103,9 +108,26 @@ def wants_agent_tools(message: str, mode: str) -> bool:
 
 
 def strip_tool_blocks(text: str) -> str:
-    """Remove <tool_call> blocks from user-facing text."""
-    cleaned = _TOOL_CALL_RE.sub("", text or "")
+    """Remove <tool_call> blocks from user-facing text (closed or unclosed)."""
+    raw = text or ""
+    cleaned = _TOOL_CALL_RE.sub("", raw)
+    cleaned = _TOOL_CALL_LEAK_RE.sub("", cleaned)
+    cleaned = re.sub(r"</?tool_call>", "", cleaned, flags=re.IGNORECASE)
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+
+def _is_tool_leak(text: str) -> bool:
+    """True when the model returned tool XML/JSON instead of a human answer."""
+    t = (text or "").strip().lower()
+    if not t:
+        return True
+    if "<tool_call>" in t or "</tool_call>" in t:
+        return True
+    if t.startswith("{") and '"tool"' in t:
+        return True
+    if '"tool":' in t and len(t) < 200:
+        return True
+    return False
 
 
 def _compact_tool_result(entry: Dict[str, Any], max_chars: int = AGENT_TOOL_RESULT_MAX_CHARS) -> Dict[str, Any]:
@@ -399,9 +421,9 @@ async def run_agent_loop(
         last_text = await generate(finalize_prompt)
 
     last_text = strip_tool_blocks(last_text)
-    if (not last_text or len(last_text) < 40) and tools_executed:
+    if tools_executed and (_is_tool_leak(last_text) or len(last_text) < 40):
         logger.warning(
-            "[being_agent] Model returned empty summary after %d tool(s) — using disk digest",
+            "[being_agent] Model leaked tool XML or empty summary after %d tool(s) — using disk digest",
             len(tools_executed),
         )
         last_text = _fallback_summary_from_tools(tools_executed, user_message=message)

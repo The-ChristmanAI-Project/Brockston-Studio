@@ -223,9 +223,14 @@ async def kimi_endpoint(request: KimiRequest):
                 domain=request.domain,
                 max_steps=4,
             )
-            from backend.being_agent import strip_tool_blocks
+            from backend.being_agent import strip_tool_blocks, _is_tool_leak, _fallback_summary_from_tools
 
             text = strip_tool_blocks(result.get("text", ""))
+            if _is_tool_leak(text) and result.get("tools_executed"):
+                text = _fallback_summary_from_tools(
+                    result["tools_executed"],
+                    user_message=request.message,
+                )
             tool_count = result.get("tool_count", 0)
             prefix = f"[KIMI — {tool_count} tool(s) executed on disk]: " if tool_count else "[KIMI]: "
             return {
