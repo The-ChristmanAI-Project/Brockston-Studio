@@ -365,6 +365,24 @@ async def git_status(path: str):
         logger.error(f"Git status error: {e}")
         return {"error": str(e)}
 
+@app.post("/kimi/interact")
+async def kimi_interact(payload: dict):
+    """Fallback proxy for Kimi when NVIDIA is rate-limited or errors.
+    Uses local GENERAL model (fast path). For agent/tool use, the prompt already contains instructions.
+    """
+    try:
+        message = payload.get("message", "")
+        mode = payload.get("mode", "tutor")
+        # Build simple messages; the agent prompt already has tools if needed
+        messages = [{"role": "user", "content": message}]
+        # Use the existing fast GENERAL client
+        text = await agent.chat(messages=messages)
+        tool_count = 0  # local simple path doesn't track tools here
+        return {"ok": True, "text": text or "Local fallback response unavailable.", "model": "local-general", "mode": mode, "agent": False, "tool_count": tool_count}
+    except Exception as e:
+        logger.error(f"Kimi proxy error: {e}")
+        return {"ok": False, "text": f"Local proxy error: {str(e)}", "error": str(e)}
+
 @app.get("/api/read_file")
 async def read_file(filename: str):
     try:

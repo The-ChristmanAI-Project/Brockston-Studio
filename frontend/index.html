@@ -889,6 +889,19 @@
             if (document.getElementById('music-lib-modal')) showMusicLibrary();
         }
 
+        function playFromLibraryById(id) {
+            const entry = musicLibrary.find(e => e.id === id);
+            if (entry) playFromLibrary(entry);
+        }
+
+        function removeFromLibrary(id) {
+            const idx = musicLibrary.findIndex(e => e.id === id);
+            if (idx >= 0) {
+                musicLibrary.splice(idx, 1);
+                saveMusicLibrary();
+            }
+        }
+
         function playFromLibrary(entry) {
             if (!entry) return;
             if (entry.source.startsWith('http')) {
@@ -920,19 +933,19 @@
             if (musicLibrary.length === 0) {
                 listHtml = `<div style="color:#666;text-align:center;padding:30px;">No items yet. Add voice ref MP3s or Apple Music links below.<br>Or use the big button to import your "53 Years in the Making" album. Click audio files in explorer to auto-add/play.</div>`;
             } else {
-                musicLibrary.forEach((entry, idx) => {
+                musicLibrary.forEach((entry) => {
                     const icon = entry.type === 'voice' ? '🎤' : '🎵';
-                    const playBtn = entry.source.includes('music.apple.com') ? '' : `<button onclick="playFromLibrary(musicLibrary[${idx}])" style="font-size:10px;padding:2px 8px;background:#222;border:1px solid #444;color:#aaa;border-radius:3px;cursor:pointer;">Play</button>`;
+                    const playBtn = entry.source.includes('music.apple.com') ? '' : `<button onclick="playFromLibraryById(${entry.id})" style="font-size:10px;padding:2px 8px;background:#222;border:1px solid #444;color:#aaa;border-radius:3px;cursor:pointer;">Play</button>`;
                     const itemBorder = entry.type === 'voice' ? 'var(--tiffany-blue)' : 'var(--copper)';
                     listHtml += `
                         <div style="display:flex;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid #222; transition: all 0.1s;">
-                            <div class="lib-item" style="flex:1;cursor:pointer;" onclick="playFromLibrary(musicLibrary[${idx}])" data-type="${entry.type}">
+                            <div class="lib-item" style="flex:1;cursor:pointer;" onclick="playFromLibraryById(${entry.id})" data-type="${entry.type}">
                                 ${icon} <span style="color:#ddd;">${entry.title}</span>
                                 <span style="font-size:9px;color:#555;margin-left:6px;">(${entry.type})</span>
                             </div>
                             ${playBtn}
                             <button onclick="window.open('${entry.source}', '_blank')" style="font-size:10px;padding:2px 6px;background:#222;border:1px solid ${itemBorder};color:#aaa;border-radius:3px;cursor:pointer;">Link</button>
-                            <button onclick="musicLibrary.splice(${idx},1);saveMusicLibrary();showMusicLibrary();" style="font-size:10px;padding:2px 6px;background:#422;border:1px solid #644;color:#f99;border-radius:3px;cursor:pointer;">×</button>
+                            <button onclick="removeFromLibrary(${entry.id}); showMusicLibrary();" style="font-size:10px;padding:2px 6px;background:#422;border:1px solid #644;color:#f99;border-radius:3px;cursor:pointer;">×</button>
                         </div>
                     `;
                 });
@@ -993,11 +1006,12 @@
                 const res = await fetch(`${API_BASE}/files?path=${encodeURIComponent(folderPath)}`);
                 if (!res.ok) throw new Error("Could not read folder");
                 const data = await res.json();
+                const basePath = data.path || folderPath;
                 const audioFiles = (data.files || [])
                     .filter(f => f.type === 'file' && isAudioFile(f.name))
                     .map(f => {
-                        const sep = folderPath.endsWith('/') || folderPath.endsWith('\\') ? '' : '/';
-                        return folderPath + sep + f.name;
+                        const sep = basePath.endsWith('/') || basePath.endsWith('\\') ? '' : '/';
+                        return basePath + sep + f.name;
                     });
 
                 if (audioFiles.length === 0) {
@@ -1018,9 +1032,17 @@
         }
 
         function playMyAlbum(albumName = "53 Years in the Making") {
-            const albumTracks = musicLibrary.filter(e => e.album === albumName);
+            let albumTracks = musicLibrary.filter(e => e.album === albumName);
             if (albumTracks.length === 0) {
-                appendMessage('SYSTEM', `No tracks for "${albumName}" in library yet. Use the "Import My Album" button or click MP3s in the explorer.`, 'system');
+                // Auto-add the known Brockston track if not present (your local file)
+                const defaultPath = "/Users/EverettN/Downloads/Brockston.mp3";
+                if (!musicLibrary.some(e => e.source === defaultPath)) {
+                    addToLibrary("Brockston (from 53 Years in the Making)", defaultPath, 'music', albumName);
+                }
+                albumTracks = musicLibrary.filter(e => e.album === albumName);
+            }
+            if (albumTracks.length === 0) {
+                appendMessage('SYSTEM', `No tracks for "${albumName}" in library yet. Use the "Import My Album" button or click MP3s in the explorer (or put Brockston.mp3 in Downloads).`, 'system');
                 return;
             }
             appendMessage('SYSTEM', `🎶 Playing full album: ${albumName} — your player, clear as a bell!`, 'system');
@@ -1028,6 +1050,9 @@
             function playNext() {
                 if (index >= albumTracks.length) {
                     appendMessage('SYSTEM', `Album "${albumName}" finished. Want to loop or play another?`, 'system');
+                    const seg = document.getElementById('sb-music');
+                    if (seg) seg.style.display = 'none';
+                    currentMusicTrack = null;
                     return;
                 }
                 const track = albumTracks[index];
@@ -1167,6 +1192,13 @@
 
             // Pass the absolute path; the backend resolves it against $HOME.
             loadFiles(absPath);
+        }
+
+        function cdInTerminal(path) {
+            if (!path || !ws || ws.readyState !== WebSocket.OPEN) return;
+            // Use JSON.stringify for safe quoting (handles spaces, quotes, etc. in paths)
+            const cmd = `cd ${JSON.stringify(path)}\n`;
+            ws.send(JSON.stringify({type: 'input', data: cmd}));
         }
 
         // ----- Music toggle (smart: stops user music too, for the old school tracks)
@@ -1450,9 +1482,12 @@
                 speakText(String(reply).replace(/\[KIMI\]:?\s*/i, '').replace(/\[.*?\]/g, '').substring(0, 800));
             } catch (err) {
                 console.error(err);
-                const msg = err.name === 'AbortError'
-                    ? 'Kimi timed out after 5 minutes — retry or switch to Nemo.'
-                    : err.message;
+                let msg = err.message;
+                if (err.name === 'AbortError') {
+                    msg = 'Kimi timed out after 5 minutes — retry or switch to Nemo.';
+                } else if (msg.includes('500') || msg.includes('server error')) {
+                    msg = 'Kimi (NVIDIA) hit a server error (often on large agent prompts for broad tasks like "fix IDE"). Retried with local fallback if available. Try scoped requests or Nemo.';
+                }
                 appendMessage('SYSTEM', `[KIMI ERROR]: ${msg}`, 'error');
             } finally {
                 clearTimeout(kimiTimer);
@@ -1577,6 +1612,11 @@
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 currentPath = data.path || path;
+                const breadcrumb = document.getElementById('explorer-path');
+                if (breadcrumb) {
+                    breadcrumb.textContent = currentPath;
+                    breadcrumb.title = currentPath;
+                }
                 const homeRoot = data.home || '';
                 fileList.innerHTML = '';
 
@@ -1589,7 +1629,9 @@
                         const parts = currentPath.split('/').filter(p => p);
                         parts.pop();
                         const parent = '/' + parts.join('/');
+                        lastSyncedCwd = parent;
                         loadFiles(parent);
+                        cdInTerminal(parent);
                     };
                     fileList.appendChild(backBtn);
                 }
@@ -1600,7 +1642,11 @@
                     homeBtn.className = 'file-item';
                     homeBtn.style.color = 'var(--neon-orange)';
                     homeBtn.innerHTML = `<i class="fas fa-home" style="color:var(--neon-orange)"></i> Back to workspace`;
-                    homeBtn.onclick = () => loadFiles(workspaceRoot);
+                    homeBtn.onclick = () => {
+                        lastSyncedCwd = workspaceRoot;
+                        loadFiles(workspaceRoot);
+                        cdInTerminal(workspaceRoot);
+                    };
                     fileList.appendChild(homeBtn);
                 }
 
@@ -1625,7 +1671,11 @@
                             el.style.borderLeft = '3px solid var(--neon-orange)';
                         }
                     } else {
-                        el.onclick = () => loadFiles(childPath);
+                        el.onclick = () => {
+                            lastSyncedCwd = childPath;
+                            loadFiles(childPath);
+                            cdInTerminal(childPath);
+                        };
                     }
                     fileList.appendChild(el);
                 });
@@ -1640,7 +1690,33 @@
             if (_refreshTimer) clearTimeout(_refreshTimer);
             _refreshTimer = setTimeout(() => {
                 try { loadFiles(currentPath || workspaceRoot || ''); } catch(e) {}
+                try { reloadOpenFilesFromDisk(); } catch(e) {}
             }, 650);
+        }
+
+        function reloadOpenFilesFromDisk() {
+            // When terminal edits (nano, vim, etc.) change files, update open tabs and explorer
+            if (!openTabs || !openTabs.length) return;
+            openTabs.forEach(async (tab) => {
+                if (!tab.path) return;
+                try {
+                    const res = await fetch(`${API_BASE}/read_file?filename=${encodeURIComponent(tab.path)}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        const newContent = data.content || '';
+                        if (newContent !== (tab.content || '')) {
+                            tab.content = newContent;
+                            if (activeTabPath === tab.path && monacoEditor) {
+                                monacoEditor.setValue(newContent);
+                            }
+                            // Mark clean since it came from disk
+                            tab.dirty = false;
+                            renderTabs();
+                            appendMessage('SYSTEM', `Updated from terminal: ${tab.path}`, 'system');
+                        }
+                    }
+                } catch (e) {}
+            });
         }
 
         function languageFromName(name) {
@@ -1791,8 +1867,23 @@
         term.loadAddon(fitAddon);
         term.open(document.getElementById('terminal'));
         fitAddon.fit();
-        new ResizeObserver(() => { try { fitAddon.fit(); } catch (e) {} })
+        function fitTerminalAndNotify() {
+            try {
+                fitAddon.fit();
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'resize',
+                        cols: term.cols,
+                        rows: term.rows
+                    }));
+                }
+            } catch (e) {}
+        }
+        new ResizeObserver(() => fitTerminalAndNotify())
             .observe(document.getElementById('terminal-container'));
+
+        // Initial size notify after connect
+        setTimeout(fitTerminalAndNotify, 300);
 
         let ws = null;
         let reconnectAttempts = 0;
@@ -1809,7 +1900,7 @@
                 const el = document.getElementById('sb-term-state');
                 if (el) el.textContent = 'terminal connected';
                 // Refit after layout settles
-                setTimeout(() => { try { fitAddon.fit(); } catch(e) {} }, 100);
+                setTimeout(fitTerminalAndNotify, 100);
             };
 
             ws.onerror = (error) => {
@@ -1856,6 +1947,7 @@
                             .replace(/\[\?2004h/g, '')
                             .replace(/\[\?2004l/g, '');
                         term.write(data);
+                        scheduleExplorerRefresh();  // catch file changes from nano/vim/etc in terminal
                     } else if (msg.type === 'cwd') {
                         // Initial cwd from backend on socket open
                         workspaceRoot = msg.workspace || msg.path;
@@ -2221,7 +2313,10 @@
                 }
             }, 80);
         }).catch(() => {});
-        window.addEventListener('focus', () => term.focus());
+        window.addEventListener('focus', () => {
+            term.focus();
+            scheduleExplorerRefresh();  // catch any external/terminal updates when returning to IDE
+        });
 
         // Highlight additional beings/instructors (orchestrator already set Family above)
         setTimeout(() => {
