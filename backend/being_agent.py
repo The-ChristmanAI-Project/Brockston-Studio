@@ -293,6 +293,9 @@ async def run_kimi_agent(
     loop = asyncio.get_event_loop()
 
     async def generate(prompt: str) -> str:
+        # Truncate for Kimi stability — very long agent prompts (e.g. broad IDE fixes) can trigger 500s on NVIDIA
+        if len(prompt) > 8000:
+            prompt = prompt[:8000] + "\n... [prompt truncated for Kimi to avoid server errors]"
         def _call() -> str:
             result = kimi_svc.interact(
                 message=prompt,

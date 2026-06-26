@@ -2,7 +2,7 @@
 Kimi K2.6 — NVIDIA learning tutor for Brockston Studio IDE.
 
 Calls NVIDIA NIM directly with 429 retry + throttle.
-Optional fallback: BROCKSTON :9001/kimi/interact when configured.
+Optional fallback: BROCKSTON :9003/kimi/interact when configured.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ NVIDIA_CHAT_URL = os.getenv(
     "https://integrate.api.nvidia.com/v1/chat/completions",
 )
 NVIDIA_KIMI_MODEL = os.getenv("NVIDIA_KIMI_MODEL", "moonshotai/kimi-k2.6")
-BROCKSTON_KIMI_URL = os.getenv("BROCKSTON_KIMI_URL", "http://localhost:9001/kimi/interact")
+BROCKSTON_KIMI_URL = os.getenv("BROCKSTON_KIMI_URL", "http://localhost:9003/kimi/interact")
 NVIDIA_MIN_INTERVAL = float(os.getenv("NVIDIA_MIN_INTERVAL_SEC", "2.5"))
 NVIDIA_429_RETRIES = int(os.getenv("NVIDIA_429_RETRIES", "3"))
 NVIDIA_TIMEOUT = float(os.getenv("NVIDIA_KIMI_TIMEOUT_SEC", "300"))
@@ -129,9 +129,14 @@ class KimiService:
                 return {"ok": True, "text": text, "model": NVIDIA_KIMI_MODEL, "mode": mode}
             except KimiRateLimitError:
                 logger.warning("[Kimi] NVIDIA 429 — trying BROCKSTON proxy")
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code != 429:
-                    raise
+            except (httpx.HTTPStatusError, Exception) as exc:
+                # 5xx or other server errors -> fallback to proxy if possible
+                if "500" in str(exc) or "server error" in str(exc).lower():
+                    logger.warning("[Kimi] NVIDIA 5xx — trying BROCKSTON proxy")
+                else:
+                    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code != 429:
+                        raise
+                    # otherwise let it go to proxy logic
 
         text = self._call_brockston_proxy(
             mode=mode_key,
@@ -171,7 +176,7 @@ class KimiService:
                     json={
                         "model": NVIDIA_KIMI_MODEL,
                         "messages": messages,
-                        "chat_template_kwargs": {"thinking": thinking},
+                        **({"chat_template_kwargs": {"thinking": thinking}} if thinking else {}),
                         "max_tokens": max_tokens,
                         "temperature": 0.6,
                         "top_p": 1,
@@ -184,6 +189,10 @@ class KimiService:
                     last_exc = KimiRateLimitError(
                         "NVIDIA rate limit (429). Wait 30s and retry, or use Nemo for local inference."
                     )
+                    continue
+                if 500 <= r.status_code < 600:
+                    logger.warning("[Kimi] NVIDIA 5xx %s attempt %d/%d", r.status_code, attempt + 1, NVIDIA_429_RETRIES + 1)
+                    last_exc = Exception(f"NVIDIA server error {r.status_code}: {r.text[:200]}")
                     continue
                 r.raise_for_status()
                 data = r.json()
@@ -198,6 +207,9 @@ class KimiService:
                     last_exc = KimiRateLimitError(
                         "NVIDIA rate limit (429). Wait 30s and retry, or use Nemo for local inference."
                     )
+                    continue
+                if 500 <= exc.response.status_code < 600:
+                    last_exc = Exception(f"NVIDIA server error {exc.response.status_code}: {exc.response.text[:200]}")
                     continue
                 raise
 
@@ -232,7 +244,7 @@ class KimiService:
                     return data["text"]
             if r.status_code == 404:
                 raise KimiRateLimitError(
-                    "NVIDIA rate limit (429) and no BROCKSTON /kimi/interact on :9001. "
+                    "NVIDIA rate limit (429) and no BROCKSTON /kimi/interact on :9003. "
                     "Wait 30–60s between Kimi requests, or switch to Nemo."
                 )
         except KimiRateLimitError:
@@ -241,7 +253,7 @@ class KimiService:
             pass
         raise KimiRateLimitError(
             "NVIDIA rate limit (429). BROCKSTON Kimi proxy unreachable. "
-            "Wait 30–60s, then retry. Agent mode uses multiple API calls — use Code Lab only when fixing."
+            "Wait 30–60s, then retry. Agent mode uses multiple API calls — use Tutor mode for broad IDE fixes."
         )
 
 

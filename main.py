@@ -263,6 +263,11 @@ async def kimi_endpoint(request: KimiRequest):
                 status_code=504,
                 detail="Kimi timed out — NVIDIA NIM was slow. Retry in 30s, or switch to Nemo for local inference.",
             )
+        if "500" in err or "server error" in err.lower():
+            raise fastapi.HTTPException(
+                status_code=502,
+                detail="NVIDIA Kimi returned 500 (internal server error). This can happen with very large prompts in agent mode (e.g. broad 'fix IDE weaknesses'). Retry in 30s, use smaller scope, or switch to Nemo/local for IDE fixes.",
+            )
         raise fastapi.HTTPException(status_code=500, detail=err)
 
 # NEMO ENDPOINT — Nemo's direct line
@@ -397,7 +402,8 @@ def _resolve_user_path(raw: str, default: Path) -> Path:
     parts = raw.replace("\\", "/").split("/")
     if any(p == ".." for p in parts):
         raise fastapi.HTTPException(status_code=400, detail="Path contains '..'")
-    candidate = Path(raw)
+    # Support ~ for home
+    candidate = Path(os.path.expanduser(raw))
     if not candidate.is_absolute():
         candidate = WORKSPACE_ROOT / candidate
     resolved = candidate.resolve()
@@ -499,11 +505,24 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
     shell = os.environ.get("SHELL", "/bin/bash")
     workspace_root = str(WORKSPACE_ROOT)
 
+    # Set initial terminal size from env or defaults (will be updated by frontend fit)
+    try:
+        import fcntl
+        import termios
+        import struct
+        rows = int(os.environ.get("LINES", 24))
+        cols = int(os.environ.get("COLUMNS", 80))
+        winsize = struct.pack("HHHH", rows, cols, 0, 0)
+        fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+    except Exception:
+        pass
+
     # Inject OSC 7 emission into the shell so every prompt reports its cwd.
     # Works for bash, zsh, fish-style POSIX shells via PROMPT_COMMAND / precmd.
     shell_name = os.path.basename(shell)
     env = os.environ.copy()
     env["BROCKSTON_WORKSPACE"] = workspace_root
+    env.setdefault("TERM", "xterm-256color")  # better support for nano, vim, etc. TUIs
 
     # OSC 7 sequence: ESC ] 7 ; file://hostname/path ESC \
     # We install the hook via shell init files so the user never sees the
@@ -594,6 +613,18 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
                 payload = json.loads(data)
                 if payload.get("type") == "input":
                     os.write(master_fd, payload.get("data", "").encode())
+                elif payload.get("type") == "resize":
+                    # Support TUI apps like nano/vim by updating PTY window size
+                    try:
+                        import fcntl
+                        import termios
+                        import struct
+                        cols = int(payload.get("cols", 80))
+                        rows = int(payload.get("rows", 24))
+                        winsize = struct.pack("HHHH", rows, cols, 0, 0)
+                        fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+                    except Exception:
+                        pass  # best effort
         except Exception:
             pass
 
