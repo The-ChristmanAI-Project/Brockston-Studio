@@ -144,6 +144,61 @@ def _trim_conversation(text: str, max_chars: int = AGENT_CONVERSATION_MAX_CHARS)
     return head + user_line + "\n...[older context trimmed]...\n" + rest[-tail_budget:]
 
 
+def _build_tool_digest(tools_executed: List[Dict[str, Any]], max_entries: int = 12) -> str:
+    """Compact plain-text digest of tool results for finalize prompts and fallbacks."""
+    lines: List[str] = []
+    for i, entry in enumerate(tools_executed[:max_entries], 1):
+        call = entry.get("call") or {}
+        result = entry.get("result") or {}
+        tool = call.get("tool", "?")
+        path = call.get("path") or call.get("src") or call.get("command", "")[:60]
+
+        if tool == "ls":
+            entries = result.get("entries") or []
+            names = [e.get("name", "?") for e in entries[:20]]
+            suffix = f" (+{len(entries) - 20} more)" if len(entries) > 20 else ""
+            lines.append(f"{i}. ls {path} → {len(entries)} entries: {', '.join(names)}{suffix}")
+        elif tool == "read":
+            content = (result.get("content") or "").strip()
+            preview = "\n".join(content.splitlines()[:8])
+            if len(content.splitlines()) > 8:
+                preview += "\n..."
+            range_note = ""
+            if result.get("line_start") and result.get("line_end"):
+                range_note = f" (lines {result['line_start']}-{result['line_end']}"
+                if result.get("total_lines"):
+                    range_note += f" of {result['total_lines']}"
+                range_note += ")"
+            lines.append(f"{i}. read {path}{range_note}:\n{preview}")
+        elif tool == "run":
+            stdout = (result.get("stdout") or result.get("output") or "")[:400]
+            code = result.get("exit_code", result.get("status", "?"))
+            lines.append(f"{i}. run {call.get('command', '')[:80]} → exit {code}\n{stdout}")
+        elif tool == "patch":
+            lines.append(f"{i}. patch {path} → {result.get('status', '?')}")
+        else:
+            lines.append(f"{i}. {tool} {path} → {result.get('status', result.get('detail', 'ok'))}")
+
+    if len(tools_executed) > max_entries:
+        lines.append(f"... +{len(tools_executed) - max_entries} more tool(s)")
+    return "\n\n".join(lines)
+
+
+def _fallback_summary_from_tools(
+    tools_executed: List[Dict[str, Any]],
+    *,
+    user_message: str = "",
+) -> str:
+    """When the model returns empty, still give Everett a real answer from disk."""
+    digest = _build_tool_digest(tools_executed)
+    request = (user_message or "your request").strip()[:200]
+    return (
+        f"Summary for: {request}\n\n"
+        f"Executed {len(tools_executed)} tool(s) on disk:\n\n"
+        f"{digest}"
+    )
+
+
 def parse_tool_calls(text: str) -> List[Dict[str, Any]]:
     calls: List[Dict[str, Any]] = []
     for match in _TOOL_CALL_RE.finditer(text or ""):
@@ -328,23 +383,28 @@ async def run_agent_loop(
             "or give a final plain-text summary for Everett. No raw tool_call XML in the final answer."
         )
 
+    stripped = strip_tool_blocks(last_text)
     needs_finalize = bool(parse_tool_calls(last_text)) or (
-        tools_executed and strip_tool_blocks(last_text) == ""
+        tools_executed and not stripped
     )
-    if needs_finalize:
-        conversation = _trim_conversation(
-            f"{conversation}\n\n"
-            "STOP calling tools. Summarize what you found for Everett in plain text only. "
-            "No <tool_call> blocks. Short, direct, cite paths and line ranges from tool results."
+    if needs_finalize and tools_executed:
+        digest = _build_tool_digest(tools_executed)
+        finalize_prompt = (
+            f"User request:\n{message}\n\n"
+            f"TOOL RESULTS DIGEST (already executed on disk):\n{digest}\n\n"
+            "Write a direct plain-text summary for Everett. "
+            "3-8 sentences. Cite paths and what was found. "
+            "No <tool_call> blocks. No asking him to ask again."
         )
-        last_text = await generate(conversation)
+        last_text = await generate(finalize_prompt)
 
     last_text = strip_tool_blocks(last_text)
-    if not last_text and tools_executed:
-        last_text = (
-            f"Completed {len(tools_executed)} tool(s) on disk. "
-            "Ask me to summarize a specific file or path."
+    if (not last_text or len(last_text) < 40) and tools_executed:
+        logger.warning(
+            "[being_agent] Model returned empty summary after %d tool(s) — using disk digest",
+            len(tools_executed),
         )
+        last_text = _fallback_summary_from_tools(tools_executed, user_message=message)
 
     return {
         "ok": True,
