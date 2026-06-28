@@ -39,16 +39,20 @@ DEPENDENCY_OVERRIDES = {
 # ============================================
 # The hacker corrupted cross-project imports. These restore them.
 
+import os
 import sys
 from pathlib import Path
 
-# Christman-Sound lives in AlphaVox
-CHRISTMAN_SOUND_PATH = Path("/Users/EverettN/AlphaVox/backend")
-if str(CHRISTMAN_SOUND_PATH) not in sys.path:
-    sys.path.insert(0, str(CHRISTMAN_SOUND_PATH))
+# Optional cross-project Christman-Sound path (set CHRISTMAN_SOUND_PATH in .env)
+CHRISTMAN_SOUND_PATH = Path(
+    os.getenv("CHRISTMAN_SOUND_PATH", "")
+).expanduser()
+if CHRISTMAN_SOUND_PATH and CHRISTMAN_SOUND_PATH.is_dir():
+    if str(CHRISTMAN_SOUND_PATH) not in sys.path:
+        sys.path.insert(0, str(CHRISTMAN_SOUND_PATH))
 
-# Brockston-Studio is the main project
-BROCKSTON_PATH = Path("/Users/EverettN/Brockston-Studio")
+# Brockston-Studio is this repo
+BROCKSTON_PATH = Path(__file__).resolve().parent
 if str(BROCKSTON_PATH) not in sys.path:
     sys.path.insert(0, str(BROCKSTON_PATH))
 

@@ -61,11 +61,11 @@ Project scan workflow (use before answering "where is X?" or "what's in this rep
   1. ls workspace root depth=2
   2. ls backend/, frontend/, scripts/ as needed
   3. read specific files; run rg/grep to search
-  4. read /Users/EverettN/.grok/skills/<name>/SKILL.md for domain playbooks
+  4. read ~/.grok/skills/<name>/SKILL.md for domain playbooks (optional)
 
-Key paths (workspace — NOT /Users/EverettN/BROCKSTON unless explicitly asked):
+Key paths (use BROCKSTON_WORKSPACE / workspace root — not random home subfolders):
   backend/being_agent.py, being_eyes.py, being_context.py, kimi_service.py
-  Skills: /Users/EverettN/.grok/skills/  |  MCP: ~/.grok/projects/.../mcps/
+  Skills (optional): ~/.grok/skills/  |  MCP: ~/.grok/projects/*/mcps/
 
 "Domain: neurodivergency" (if present) is a teaching topic — NOT a directory. Never ls frontend-neurodivergency or invent domain paths.
 

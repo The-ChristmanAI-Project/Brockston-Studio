@@ -85,6 +85,19 @@ Never commit `.env` — it is gitignored.
 
 ---
 
+## Privacy & secrets (public repo)
+
+**Safe by default — downloaders do NOT get:**
+- Your `.env` or API keys (gitignored; never committed in history)
+- `backend/venv/`, `logs/`, or personal voice WAVs in `Voice_Creation_Center/incoming/`
+- Machine-specific indexes (`inventory/index.json`, `express_index.json`, voice `manifest.json`)
+
+**They bring their own keys** by copying `.env.example` → `.env`. Optional services (Kimi, Claude, ElevenLabs) stay empty until they fill them in.
+
+**Never put real API keys in source files** — only in `.env` on your machine.
+
+---
+
 ## Project layout
 
 ```

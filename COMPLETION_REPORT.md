@@ -238,10 +238,10 @@ python -c "from backend.speech_service import SpeechService; print('OK')"
 
 ```bash
 # 1. Activate virtual environment (already done for you)
-source /Users/EverettN/Brockston-Studio/venv/bin/activate
+source backend/venv/bin/activate
 
 # 2. Install all dependencies (no heavy audio libs needed)
-cd /Users/EverettN/Brockston-Studio
+cd Brockston-Studio
 pip install -r requirements.txt
 
 # 3. Start the server
