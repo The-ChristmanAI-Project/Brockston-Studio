@@ -52,6 +52,29 @@ def sdk_root() -> Path:
     return CHRISTMAN_SOUND_ROOT / "christman_voice_sdk"
 
 
+# Read-aloud: map chat beings to male Christman reference WAVs (Brockston uvclass, etc.)
+TTS_BEING_ALIASES: dict[str, str] = {
+    "family": "brockston",
+    "kimi": "brockston",
+    "nemo": "brockston",
+    "claude": "brockston",
+    "default": "brockston",
+}
+
+# macOS `say` male fallbacks when XTTS is unavailable (all English male voices on this Mac)
+MACOS_MALE_VOICES: dict[str, str] = {
+    "brockston": "Daniel",
+    "derek": "Daniel",
+    "ultimateev": "Alex",
+    "nemo": "Fred",
+    "kimi": "Alex",
+    "inferno": "Daniel",
+    "aegis": "Daniel",
+    "alphawolf": "Daniel",
+    "giuseppe": "Daniel",
+    "default": "Daniel",
+}
+
 BEINGS: dict[str, dict] = {
     "brockston": {"label": "Brockston", "tier": "ultra", "emotions": ["warm", "direct", "grounded"]},
     "kimi": {"label": "Kimi", "tier": "ultra", "emotions": ["warm", "patient", "clear"]},
@@ -65,6 +88,21 @@ BEINGS: dict[str, dict] = {
     "siera": {"label": "Siera", "tier": "ultra", "emotions": ["safe", "calm", "steady"]},
     "ultimateev": {"label": "UltimateEV", "tier": "ultra", "emotions": ["precise", "direct", "surgical"]},
 }
+
+
+def resolve_tts_being(being: str) -> str:
+    """Which being's reference WAV to use for read-aloud (male Brockston by default)."""
+    key = (being or "default").lower().strip()
+    override = os.getenv("TTS_READ_BEING", "").strip().lower()
+    if override:
+        return override
+    return TTS_BEING_ALIASES.get(key, key if key in BEINGS else "brockston")
+
+
+def macos_voice_for_being(being: str) -> str:
+    """Male macOS voice when Christman-Sound XTTS is unavailable."""
+    key = resolve_tts_being(being)
+    return MACOS_MALE_VOICES.get(key, MACOS_MALE_VOICES["default"])
 
 
 def incoming_dir(being: str) -> Path:
@@ -193,7 +231,7 @@ def try_express_audio(text: str, being: str) -> Optional[bytes]:
 
         express = VoiceExpress()
         express.load()
-        result = express.serve(text[:600], being_label)
+        result = express.serve(text[:3500], being_label)
         if result.success and result.audio_data:
             return result.audio_data
     except Exception:

@@ -14,6 +14,38 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+TTS_MAX_CHUNK_CHARS = int(os.getenv("TTS_MAX_CHUNK_CHARS", "3500"))
+
+
+def _chunk_text_for_tts(text: str, max_chars: int = TTS_MAX_CHUNK_CHARS) -> list[str]:
+    """Split long replies at sentence boundaries so TTS reads the full message."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return []
+    if len(cleaned) <= max_chars:
+        return [cleaned]
+    chunks: list[str] = []
+    rest = cleaned
+    while rest:
+        if len(rest) <= max_chars:
+            chunks.append(rest)
+            break
+        window = rest[:max_chars]
+        cut_at = -1
+        for sep in ("\n\n", ". ", "? ", "! ", ".\n", ";\n", "\n", " "):
+            idx = window.rfind(sep)
+            if idx > max_chars // 3:
+                cut_at = idx + len(sep)
+                break
+        if cut_at <= 0:
+            cut_at = max_chars
+        piece = rest[:cut_at].strip()
+        if piece:
+            chunks.append(piece)
+        rest = rest[cut_at:].strip()
+    return chunks
+
+
 class SpeechService:
     """
     Service for speech operations: transcription and synthesis.
@@ -95,31 +127,57 @@ class SpeechService:
     async def synthesize_speech(self, text: str, voice_id: str = "default") -> bytes:
         """
         Christman-Sound XTTS when a being reference WAV exists, else macOS say.
+        Long replies are chunked and concatenated so voice mode reads everything.
         Zero paid APIs. (Rule 15)
         """
         import asyncio
+
+        chunks = _chunk_text_for_tts(text)
+        if not chunks:
+            raise RuntimeError("No text to synthesize")
+
+        loop = asyncio.get_event_loop()
+        parts: list[bytes] = []
+        for i, chunk in enumerate(chunks):
+            audio = await loop.run_in_executor(
+                None, lambda c=chunk: self._synthesize_one_chunk(c, voice_id)
+            )
+            if audio:
+                parts.append(audio)
+            else:
+                logger.warning("[TTS] chunk %d/%d produced no audio", i + 1, len(chunks))
+
+        if not parts:
+            raise RuntimeError("TTS produced no audio for any chunk")
+
+        if len(parts) == 1:
+            return parts[0]
+        return await loop.run_in_executor(None, lambda: self._concat_mp3(parts))
+
+    def _synthesize_one_chunk(self, text: str, voice_id: str) -> bytes | None:
+        """Synthesize a single chunk — express → XTTS → macOS male say."""
         import subprocess
         import tempfile
         import os
         from pathlib import Path
 
-        being = (voice_id or "default").lower().strip()
-        loop = asyncio.get_event_loop()
+        from backend.christman_sound_config import macos_voice_for_being, resolve_tts_being
 
-        express_audio = await loop.run_in_executor(
-            None, lambda: self._audio_from_voice_center_express(text, being)
-        )
+        being = resolve_tts_being(voice_id)
+
+        express_audio = self._audio_from_voice_center_express(text, being)
         if express_audio:
             return express_audio
 
-        christman_audio = await loop.run_in_executor(
-            None, lambda: self._synthesize_christman_sound(text, being)
-        )
+        christman_audio = self._synthesize_christman_sound(text, being)
         if christman_audio:
             return christman_audio
 
-        voice = "Daniel"
-        if voice_id and voice_id not in ("default", ""):
+        # macOS say — male voice map (Daniel, Fred, Alex, etc.)
+        voice = macos_voice_for_being(voice_id)
+        if voice_id and voice_id not in ("default", "") and voice_id in (
+            "Daniel", "Fred", "Alex", "Albert", "Ralph", "Reed", "Eddy", "Grandpa"
+        ):
             voice = voice_id
 
         aiff_path = tempfile.mktemp(suffix=".aiff")
@@ -127,9 +185,9 @@ class SpeechService:
 
         try:
             r = subprocess.run(
-                ["say", "-v", voice, "-o", aiff_path, text[:600]],
+                ["say", "-v", voice, "-o", aiff_path, text],
                 capture_output=True,
-                timeout=30,
+                timeout=90,
             )
             if r.returncode != 0 or not Path(aiff_path).exists():
                 raise RuntimeError(f"say failed: {r.stderr.decode()[:200]}")
@@ -138,17 +196,62 @@ class SpeechService:
                 ["ffmpeg", "-y", "-i", aiff_path,
                  "-codec:a", "libmp3lame", "-qscale:a", "2", mp3_path],
                 capture_output=True,
-                timeout=30,
+                timeout=60,
             )
             if r.returncode != 0 or not Path(mp3_path).exists():
                 raise RuntimeError(f"ffmpeg failed: {r.stderr.decode()[:200]}")
 
             audio = Path(mp3_path).read_bytes()
-            logger.warning("[TTS] Falling back to macOS 'say' for being=%s (no good Christman ref) — %dKB", being, len(audio) // 1024)
+            logger.warning(
+                "[TTS] macOS say voice=%s being=%s — %dKB (%d chars)",
+                voice, being, len(audio) // 1024, len(text),
+            )
             return audio
 
         finally:
             for p in (aiff_path, mp3_path):
+                try:
+                    os.unlink(p)
+                except Exception:
+                    pass
+
+    @staticmethod
+    def _concat_mp3(parts: list[bytes]) -> bytes:
+        """Join MP3 chunks into one stream for uninterrupted playback."""
+        import subprocess
+        import tempfile
+        import os
+        from pathlib import Path
+
+        if len(parts) == 1:
+            return parts[0]
+
+        temp_files: list[str] = []
+        list_path = tempfile.mktemp(suffix=".txt")
+        out_path = tempfile.mktemp(suffix=".mp3")
+        try:
+            with open(list_path, "w", encoding="utf-8") as handle:
+                for i, blob in enumerate(parts):
+                    chunk_path = tempfile.mktemp(suffix=f"_{i}.mp3")
+                    Path(chunk_path).write_bytes(blob)
+                    temp_files.append(chunk_path)
+                    handle.write(f"file '{chunk_path}'\n")
+
+            r = subprocess.run(
+                [
+                    "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                    "-i", list_path, "-codec:a", "libmp3lame", "-qscale:a", "2", out_path,
+                ],
+                capture_output=True,
+                timeout=120,
+            )
+            if r.returncode == 0 and Path(out_path).exists():
+                logger.info("[TTS] concatenated %d chunks → %dKB", len(parts), Path(out_path).stat().st_size // 1024)
+                return Path(out_path).read_bytes()
+            logger.warning("[TTS] ffmpeg concat failed — returning first chunk only")
+            return parts[0]
+        finally:
+            for p in temp_files + [list_path, out_path]:
                 try:
                     os.unlink(p)
                 except Exception:
@@ -226,7 +329,7 @@ class SpeechService:
                 from christman_voice_sdk.engines.xtts_engine import XTTSEngine
                 engine = XTTSEngine()
                 engine.load_voice(ref)
-                synth_result = engine.synthesize(text[:600], language="en")
+                synth_result = engine.synthesize(text[:TTS_MAX_CHUNK_CHARS], language="en")
                 if synth_result and getattr(synth_result, "audio", None) is not None:
                     import numpy as np
                     from scipy.io.wavfile import write as write_wav
@@ -252,7 +355,7 @@ class SpeechService:
             # Fallback to the EAR_CANAL SPEAK wrapper (may still hit import issues)
             try:
                 from CHRISTMAN_EAR_CANAL.SPEAK import speak
-                result = speak(text[:600], reference_audio=ref, allow_fallback=False)
+                result = speak(text[:TTS_MAX_CHUNK_CHARS], reference_audio=ref, allow_fallback=False)
                 wav_path = result.get("wav")
                 if wav_path and Path(wav_path).exists():
                     audio = self._to_mp3_bytes(Path(wav_path).read_bytes())
