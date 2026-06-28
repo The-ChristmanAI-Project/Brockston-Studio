@@ -286,6 +286,6 @@ if __name__ == "__main__":
         resp = get_ai_response("What is a variable?")
         print(f"Teacher: {resp}")
     else:
-        print("Start the stack: cd /Users/EverettN/Brockston-Studio && ./start.sh")
+        print("Start the stack: ./start.sh  (from the Brockston-Studio repo root)")
 
 # Patent pending — The Christman AI Project

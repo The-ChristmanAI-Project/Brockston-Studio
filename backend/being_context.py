@@ -11,14 +11,28 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+_HOME = Path.home()
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
 _SKILL_ROOTS = (
-    Path.home() / ".grok" / "skills",
-    Path.home() / ".agents" / "skills",
-    Path.home() / ".claude" / "skills",
-    Path("/Users/EverettN/Brockston-Studio/.grok/skills"),
+    _HOME / ".grok" / "skills",
+    _HOME / ".agents" / "skills",
+    _HOME / ".claude" / "skills",
+    _REPO_ROOT / ".grok" / "skills",
 )
 
-_MCP_ROOT = Path.home() / ".grok/projects/Users-EverettN-Brockston-Studio/mcps"
+def _discover_mcp_root() -> Path:
+    """First mcps/ folder under ~/.grok/projects (machine-specific project slug)."""
+    projects = _HOME / ".grok" / "projects"
+    if projects.is_dir():
+        for child in sorted(projects.iterdir()):
+            mcps = child / "mcps"
+            if mcps.is_dir():
+                return mcps
+    return projects / "mcps"
+
+
+_MCP_ROOT = _discover_mcp_root()
 
 ABILITIES_MANIFEST = """=== BROCKSTON STUDIO ABILITIES (you have these — use them) ===
 
@@ -117,19 +131,17 @@ main.py           — Studio server entry (port 5055)
 start.sh          — Launch script
 .env              — BROCKSTON_WORKSPACE sets the scan root"""
 
-SKILLS_AND_TOOLS_MAP = """=== SKILLS & TOOLS LOCATIONS ===
+def _skills_and_tools_map() -> str:
+    return f"""=== SKILLS & TOOLS LOCATIONS ===
 
-GROK SKILLS — read SKILL.md before domain tasks:
-  /Users/EverettN/.grok/skills/              — tcap-master, vega-production, xlsx, docx, pptx, check-work, ...
-  /Users/EverettN/Brockston-Studio/.grok/skills/  — project-local skills
-  /Users/EverettN/.agents/skills/            — workctl operator
-  /Users/EverettN/.claude/skills/            — alphavox-preflight-repair, etc.
+GROK SKILLS — read SKILL.md before domain tasks (optional; not required for IDE):
+  {_HOME}/.grok/skills/           — user skills (if installed)
+  {_REPO_ROOT}/.grok/skills/      — project-local skills
+  {_HOME}/.agents/skills/         — agent skills (if installed)
+  {_HOME}/.claude/skills/         — Claude skills (if installed)
 
-MCP TOOLS — JSON descriptors under mcps/<server>/tools/*.json:
-  /Users/EverettN/.grok/projects/Users-EverettN-Brockston-Studio/mcps/
-    grok_com_github/tools/   — GitHub (PRs, issues, code search)
-    grok_com_vercel/tools/   — Vercel deploy + logs
-    Perplexity/tools/        — web search
+MCP TOOLS — JSON descriptors under mcps/<server>/tools/*.json (if installed):
+  {_MCP_ROOT}/
 
 COMPUTE TOOLS — emit as <tool_call> blocks (executed by backend/being_eyes.py):
   ls, read, patch, write, run, mkdir, move, delete
@@ -185,8 +197,8 @@ If has_more:true → read again with offset_lines=next_offset_lines until has_mo
 4. SEARCH — rg/grep via run:
 <tool_call>{{"tool":"run","command":"rg -l 'pattern' backend/","cwd":"{workspace}"}}</tool_call>
 
-5. SKILLS — read SKILL.md before specialized work:
-<tool_call>{{"tool":"read","path":"/Users/EverettN/.grok/skills/tcap-master/SKILL.md"}}</tool_call>
+5. SKILLS — read SKILL.md before specialized work (if present on this machine):
+<tool_call>{{"tool":"read","path":"{Path.home()}/.grok/skills/tcap-master/SKILL.md"}}</tool_call>
 
 Never ask Everett for paths you can discover with ls + run."""
 
@@ -328,7 +340,7 @@ async def build_being_context(
         parts.insert(0, IDE_SOVEREIGNTY)
         parts.insert(0, KIMI_IDENTITY)
         parts.append(BROCKSTON_STUDIO_LAYOUT)
-        parts.append(SKILLS_AND_TOOLS_MAP)
+        parts.append(_skills_and_tools_map())
         parts.append(f"=== AVAILABLE SKILLS (SKILL.md) ===\n{_discover_skills_catalog()}")
         parts.append(f"=== AVAILABLE MCP TOOLS ===\n{_discover_mcp_catalog()}")
         parts.append(build_project_scan_guide(workspace_str))

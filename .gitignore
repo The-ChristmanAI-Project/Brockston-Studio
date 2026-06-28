@@ -65,3 +65,15 @@ main/frontend/node_modules
 # Local Grok / CLI / TUI / agent tooling (skills, runtime state)
 .grok/
 
+# Local IDE / agent tooling (never ship personal launch configs)
+.claude/
+
+# Machine-specific env (repo root .env is already ignored above)
+backend/.env
+
+# Personal voice ingest + machine-built indexes (ship .example templates instead)
+Voice_Creation_Center/incoming/
+Voice_Creation_Center/inventory/index.json
+Voice_Creation_Center/express/express_index.json
+Voice_Creation_Center/packs/*/manifest.json
+
