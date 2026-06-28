@@ -1,16 +1,18 @@
 """
 Kimi K2.6 — NVIDIA learning tutor for Brockston Studio IDE.
 
-Calls NVIDIA NIM directly with 429 retry + throttle.
-Optional fallback: BROCKSTON :9001/kimi/interact when configured.
+Uses the Kimi K native API via integrate.api.nvidia.com (OpenAI-compatible).
+Optional fallback: BROCKSTON /kimi/interact when NVIDIA is rate-limited or errors.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 import os
 import time
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
 
 import httpx
 
@@ -24,7 +26,10 @@ NVIDIA_CHAT_URL = os.getenv(
     "https://integrate.api.nvidia.com/v1/chat/completions",
 )
 NVIDIA_KIMI_MODEL = os.getenv("NVIDIA_KIMI_MODEL", "moonshotai/kimi-k2.6")
-BROCKSTON_KIMI_URL = os.getenv("BROCKSTON_KIMI_URL", "http://localhost:9001/kimi/interact")
+BROCKSTON_KIMI_URL = os.getenv("BROCKSTON_KIMI_URL", "http://localhost:9003/kimi/interact")
+NVIDIA_KIMI_MAX_TOKENS = int(os.getenv("NVIDIA_KIMI_MAX_TOKENS", "16384"))
+NVIDIA_KIMI_TEMPERATURE = float(os.getenv("NVIDIA_KIMI_TEMPERATURE", "1.0"))
+NVIDIA_KIMI_TOP_P = float(os.getenv("NVIDIA_KIMI_TOP_P", "1.0"))
 NVIDIA_MIN_INTERVAL = float(os.getenv("NVIDIA_MIN_INTERVAL_SEC", "2.5"))
 NVIDIA_429_RETRIES = int(os.getenv("NVIDIA_429_RETRIES", "3"))
 NVIDIA_TIMEOUT = float(os.getenv("NVIDIA_KIMI_TIMEOUT_SEC", "300"))
@@ -33,7 +38,10 @@ _last_nvidia_call = 0.0
 
 _ABILITIES_HINT = (
     "You are a full IDE operator in Brockston Studio — not limited to Everett's open tab. "
-    "Explore with <tool_call>{\"tool\":\"ls\"...}</tool_call>, read any path, patch, write, run. "
+    "Scan the project: <tool_call>{\"tool\":\"ls\",\"path\":\"<workspace>\",\"depth\":2}</tool_call> "
+    "then read/patch/run. Large files: read with offset_lines; if has_more, keep scrolling — never stop at truncated. "
+    "Skills live in /Users/EverettN/.grok/skills/<name>/SKILL.md — read before domain work. "
+    "Tools spec: backend/being_agent.py; executor: backend/being_eyes.py. "
     "Never ask Everett to name a file you can ls+read yourself. "
     "Never say 'you opened it' — you have the whole workspace."
 )
@@ -82,7 +90,15 @@ def _throttle_nvidia() -> None:
     _last_nvidia_call = time.time()
 
 
+def read_b64(path: Union[str, Path]) -> str:
+    """Read a local file and return base64 (NVIDIA Kimi K native API helper)."""
+    with open(path, "rb") as handle:
+        return base64.b64encode(handle.read()).decode("ascii")
+
+
 class KimiService:
+    read_b64 = staticmethod(read_b64)
+
     @property
     def is_available(self) -> bool:
         return bool(NVIDIA_API_KEY) or self._brockston_kimi_reachable()
@@ -105,14 +121,16 @@ class KimiService:
         mode: str = "tutor",
         context: Optional[str] = None,
         domain: Optional[str] = None,
-        thinking: bool = True,
-        max_tokens: int = 4096,
+        thinking: bool = False,
+        max_tokens: int = NVIDIA_KIMI_MAX_TOKENS,
     ) -> Dict[str, Any]:
         mode_key = mode if mode in _SYSTEM else "tutor"
         system = _SYSTEM[mode_key]
         user_parts = []
         if domain:
-            user_parts.append(f"Domain: {domain}")
+            user_parts.append(
+                f"Teaching domain (topic for tone — NOT a folder or path): {domain}"
+            )
         if context:
             user_parts.append(f"Context:\n{context}")
         user_parts.append(message)
@@ -129,9 +147,14 @@ class KimiService:
                 return {"ok": True, "text": text, "model": NVIDIA_KIMI_MODEL, "mode": mode}
             except KimiRateLimitError:
                 logger.warning("[Kimi] NVIDIA 429 — trying BROCKSTON proxy")
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code != 429:
-                    raise
+            except (httpx.HTTPStatusError, Exception) as exc:
+                # 5xx or other server errors -> fallback to proxy if possible
+                if "500" in str(exc) or "server error" in str(exc).lower():
+                    logger.warning("[Kimi] NVIDIA 5xx — trying BROCKSTON proxy")
+                else:
+                    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code != 429:
+                        raise
+                    # otherwise let it go to proxy logic
 
         text = self._call_brockston_proxy(
             mode=mode_key,
@@ -142,6 +165,35 @@ class KimiService:
             max_tokens=max_tokens,
         )
         return {"ok": True, "text": text, "model": "brockston-kimi-proxy", "mode": mode}
+
+    @staticmethod
+    def _nvidia_headers(*, stream: bool = False) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {NVIDIA_API_KEY}",
+            "Accept": "text/event-stream" if stream else "application/json",
+            "Content-Type": "application/json",
+        }
+
+    @staticmethod
+    def _nvidia_payload(
+        messages: list[dict],
+        *,
+        thinking: bool,
+        max_tokens: int,
+        stream: bool = False,
+    ) -> dict[str, Any]:
+        """Match NVIDIA's published Kimi K2.6 playground request shape."""
+        payload: dict[str, Any] = {
+            "model": NVIDIA_KIMI_MODEL,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": NVIDIA_KIMI_TEMPERATURE,
+            "top_p": NVIDIA_KIMI_TOP_P,
+            "stream": stream,
+        }
+        if thinking:
+            payload["chat_template_kwargs"] = {"thinking": True}
+        return payload
 
     def _call_nvidia(
         self,
@@ -155,6 +207,12 @@ class KimiService:
 
         backoff = [0, 3, 8, 15]
         last_exc: Optional[Exception] = None
+        payload = self._nvidia_payload(
+            messages,
+            thinking=thinking,
+            max_tokens=max_tokens,
+            stream=False,
+        )
 
         for attempt in range(min(NVIDIA_429_RETRIES + 1, len(backoff))):
             if backoff[attempt]:
@@ -163,20 +221,8 @@ class KimiService:
             try:
                 r = httpx.post(
                     NVIDIA_CHAT_URL,
-                    headers={
-                        "Authorization": f"Bearer {NVIDIA_API_KEY}",
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                    },
-                    json={
-                        "model": NVIDIA_KIMI_MODEL,
-                        "messages": messages,
-                        "chat_template_kwargs": {"thinking": thinking},
-                        "max_tokens": max_tokens,
-                        "temperature": 0.6,
-                        "top_p": 1,
-                        "stream": False,
-                    },
+                    headers=self._nvidia_headers(stream=False),
+                    json=payload,
                     timeout=NVIDIA_TIMEOUT,
                 )
                 if r.status_code == 429:
@@ -184,6 +230,10 @@ class KimiService:
                     last_exc = KimiRateLimitError(
                         "NVIDIA rate limit (429). Wait 30s and retry, or use Nemo for local inference."
                     )
+                    continue
+                if 500 <= r.status_code < 600:
+                    logger.warning("[Kimi] NVIDIA 5xx %s attempt %d/%d", r.status_code, attempt + 1, NVIDIA_429_RETRIES + 1)
+                    last_exc = Exception(f"NVIDIA server error {r.status_code}: {r.text[:200]}")
                     continue
                 r.raise_for_status()
                 data = r.json()
@@ -198,6 +248,9 @@ class KimiService:
                     last_exc = KimiRateLimitError(
                         "NVIDIA rate limit (429). Wait 30s and retry, or use Nemo for local inference."
                     )
+                    continue
+                if 500 <= exc.response.status_code < 600:
+                    last_exc = Exception(f"NVIDIA server error {exc.response.status_code}: {exc.response.text[:200]}")
                     continue
                 raise
 
@@ -232,7 +285,7 @@ class KimiService:
                     return data["text"]
             if r.status_code == 404:
                 raise KimiRateLimitError(
-                    "NVIDIA rate limit (429) and no BROCKSTON /kimi/interact on :9001. "
+                    "NVIDIA rate limit (429) and no BROCKSTON /kimi/interact on :9003. "
                     "Wait 30–60s between Kimi requests, or switch to Nemo."
                 )
         except KimiRateLimitError:
@@ -241,7 +294,7 @@ class KimiService:
             pass
         raise KimiRateLimitError(
             "NVIDIA rate limit (429). BROCKSTON Kimi proxy unreachable. "
-            "Wait 30–60s, then retry. Agent mode uses multiple API calls — use Code Lab only when fixing."
+            "Wait 30–60s, then retry. Agent mode uses multiple API calls — use Tutor mode for broad IDE fixes."
         )
 
 

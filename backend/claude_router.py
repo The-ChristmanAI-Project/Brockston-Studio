@@ -1,9 +1,20 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable, Awaitable
 import os
 import logging
+import asyncio
 from anthropic import AsyncAnthropic
+
+# Give Claude full compute capacity like Kimi/Nemo/Brockston family
+try:
+    from backend.being_agent import run_being_agent, wants_agent_tools
+    from backend.being_context import ABILITIES_MANIFEST, ABILITIES_COMPACT
+except Exception:
+    run_being_agent = None
+    wants_agent_tools = lambda m, mo: False
+    ABILITIES_MANIFEST = "Studio tools: use /api/eyes (read|ls|write|patch|run) and /api/ide/command for full compute."
+    ABILITIES_COMPACT = ABILITIES_MANIFEST
 
 # WIRING NOTE: mcp-media-ingestor (the sensory bridge at 8765 + its MCP tools)
 # provides get_latest_transcript / get_recent_transcripts (with energy/tone), get_current_view (ImageContent),
@@ -78,17 +89,19 @@ async def call_claude(req: ClaudeRequest):
         "temperature": req.temperature,
     }
 
-    # System prompt handling
+    # System prompt handling — always give full compute capacity
     system_prompt = req.system.strip() if req.system else None
+    abilities = ABILITIES_COMPACT
     if system_prompt:
-        payload["system"] = system_prompt
+        payload["system"] = system_prompt + "\n\n" + abilities + "\n\nYOU HAVE FULL CAPACITY TO RUN THE COMPUTE using tool calls (ls/read/run/write/patch via being eyes)."
     else:
         # Gentle default Claude teaching persona when nothing provided
         payload["system"] = (
             "You are a patient, warm, and precise educator in the Christman AI Family. "
             "You speak clearly, use short sentences when helpful, and always leave space "
             "for the student to think. You never talk down to anyone. "
-            "Your goal is to help the person love themselves more through learning."
+            "Your goal is to help the person love themselves more through learning.\n\n"
+            + abilities + "\n\nYOU OPERATE THE IDE AND RUN COMPUTE — use <tool_call> for files and shell commands."
         )
 
     if req.top_p is not None:
@@ -97,6 +110,45 @@ async def call_claude(req: ClaudeRequest):
         payload["stop_sequences"] = req.stop_sequences
 
     try:
+        # Give Claude (and any being routing here) full capacity to run the compute.
+        # If the request smells like code/compute work, run the agent tool loop.
+        user_message_for_check = ""
+        for m in req.messages:
+            if m.get("role") == "user":
+                user_message_for_check = (m.get("content") or "") if isinstance(m.get("content"), str) else str(m.get("content", ""))
+                break
+
+        if run_being_agent and (wants_agent_tools(user_message_for_check, "code") or "tool" in (req.system or "").lower() or len(req.messages) > 2):
+            loop = asyncio.get_event_loop()
+            async def claude_generate(prompt: str) -> str:
+                p = dict(payload)
+                p["messages"] = [{"role": "user", "content": prompt}]
+                p["max_tokens"] = min(p.get("max_tokens", 1024), 600)  # reduced for tool-step speed
+                # ensure abilities in this turn
+                if "system" not in p or not p.get("system"):
+                    p["system"] = payload.get("system", "") + "\n" + ABILITIES_COMPACT
+                resp = await client.messages.create(**p)
+                parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
+                return "\n".join(parts).strip()
+
+            # Use the unified agent runner so Claude has same compute power as family/kimi/nemo
+            agent_result = await run_being_agent(
+                claude_generate,
+                message=user_message_for_check or (req.messages[-1].get("content", "") if req.messages else ""),
+                context=ABILITIES_MANIFEST,
+                max_steps=4,
+            )
+            text = agent_result.get("text", "")
+            tool_count = agent_result.get("tool_count", 0)
+            return {
+                "content": f"[CLAUDE — {tool_count} compute ops via tools]: {text}",
+                "model": payload.get("model"),
+                "agent": True,
+                "tools_executed": agent_result.get("tools_executed", []),
+                "tool_count": tool_count,
+            }
+
+        # Standard direct path (still has abilities in system prompt)
         response = await client.messages.create(**payload)
 
         # Extract every text block (Claude 3+ can return mixed content)

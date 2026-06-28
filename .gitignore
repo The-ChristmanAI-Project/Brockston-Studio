@@ -61,3 +61,7 @@ htmlcov/
 /node_modules   
 frontend/node_modules*
 main/frontend/node_modules 
+
+# Local Grok / CLI / TUI / agent tooling (skills, runtime state)
+.grok/
+

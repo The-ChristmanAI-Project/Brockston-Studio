@@ -56,6 +56,7 @@ class NemoService:
         prompt: str,
         mode: str = "partner",
         context: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> str:
         """Generate Nemo's response via direct Ollama (sovereign stack).
 
@@ -65,7 +66,7 @@ class NemoService:
         system = NEMO_SYSTEM_CODE if mode == "code" else NEMO_SYSTEM_PARTNER
         if context:
             system = f"{system}\n\n{context}"
-        return get_ai_response(prompt, system=system, target="ollama")
+        return get_ai_response(prompt, system=system, target="ollama", model=model)
 
 
 _nemo_instance: Optional[NemoService] = None

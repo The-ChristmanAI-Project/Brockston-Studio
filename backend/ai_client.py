@@ -25,7 +25,11 @@ logger = logging.getLogger(__name__)
 BROCKSTON_API = os.getenv("BROCKSTON_BASE_URL", "http://localhost:9003")
 ULTIMATEEV_API = os.getenv("ULTIMATEEV_BASE_URL", "http://localhost:5174")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-FALLBACK_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:32b")
+FALLBACK_MODEL = os.getenv("LLM_MODEL_GENERAL", os.getenv("OLLAMA_MODEL", "llama3.2"))
+CODER_MODEL = os.getenv(
+    "BEING_AGENT_MODEL",
+    os.getenv("LLM_MODEL_CODER", "qwen2.5-coder:32b"),
+)
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "300"))
 BROCKSTON_TIMEOUT = float(os.getenv("BROCKSTON_TIMEOUT", "180"))
 
@@ -35,7 +39,13 @@ Your students include autistic kids, nonverbal kids, kids with Down syndrome —
 Speak directly. Be patient. Be real. No corporate AI voice. Celebrate every line of code."""
 
 
-def get_ai_response(user_prompt: str, system: Optional[str] = None, context: Optional[dict] = None, target: Optional[str] = None) -> str:
+def get_ai_response(
+    user_prompt: str,
+    system: Optional[str] = None,
+    context: Optional[dict] = None,
+    target: Optional[str] = None,
+    model: Optional[str] = None,
+) -> str:
     """
     Route a Family chat request to the right local teacher.
 
@@ -57,11 +67,11 @@ def get_ai_response(user_prompt: str, system: Optional[str] = None, context: Opt
     context = context or {}
 
     if target == "ultimateev":
-        return _ask_ultimateev(user_prompt) or _ollama_fallback(user_prompt, system)
+        return _ask_ultimateev(user_prompt) or _ollama_fallback(user_prompt, system, model=model)
     if target == "brockston":
-        return _ask_brockston(user_prompt, context, system) or _ollama_fallback(user_prompt, system)
+        return _ask_brockston(user_prompt, context, system) or _ollama_fallback(user_prompt, system, model=model)
     if target == "ollama":
-        return _ollama_fallback(user_prompt, system)
+        return _ollama_fallback(user_prompt, system, model=model)
 
     # Default chain: UltimateEV first, then Brockston, then Ollama
     reply = _ask_ultimateev(user_prompt)
@@ -72,7 +82,7 @@ def get_ai_response(user_prompt: str, system: Optional[str] = None, context: Opt
     if reply:
         return reply
 
-    return _ollama_fallback(user_prompt, system)
+    return _ollama_fallback(user_prompt, system, model=model)
 
 
 def _ask_ultimateev(user_prompt: str) -> str | None:
@@ -126,27 +136,33 @@ def _ask_brockston(user_prompt: str, context: dict, system: Optional[str] = None
 
 
 def _trim_for_ollama(text: str, max_chars: int = 12000) -> str:
-    """Keep Ollama prompts within a size the local 32B model can answer in time."""
+    """Keep Ollama prompts within a size the local model can answer quickly (vocal/chat path)."""
     if not text or len(text) <= max_chars:
         return text
     return text[:max_chars] + f"\n\n[... trimmed {len(text) - max_chars} chars for local model ...]"
 
 
-def _ollama_fallback(user_prompt: str, system: Optional[str] = None) -> str:
+def _ollama_fallback(
+    user_prompt: str,
+    system: Optional[str] = None,
+    *,
+    model: Optional[str] = None,
+) -> str:
     """Direct Ollama call — sovereign stack."""
+    ollama_model = model or FALLBACK_MODEL
     system_text = _trim_for_ollama(system or BROCKSTON_SYSTEM, max_chars=4000)
     user_text = _trim_for_ollama(user_prompt, max_chars=12000)
     try:
         logger.info(
             "[ollama] inference start model=%s system=%d user=%d chars",
-            FALLBACK_MODEL,
+            ollama_model,
             len(system_text),
             len(user_text),
         )
         response = httpx.post(
             f"{OLLAMA_URL}/api/chat",
             json={
-                "model": FALLBACK_MODEL,
+                "model": ollama_model,
                 "messages": [
                     {"role": "system", "content": system_text},
                     {"role": "user", "content": user_text},
@@ -169,7 +185,7 @@ def _ollama_fallback(user_prompt: str, system: Optional[str] = None) -> str:
         logger.error("[ollama] timed out after %ss", OLLAMA_TIMEOUT)
         return (
             f"Ollama timed out after {int(OLLAMA_TIMEOUT)}s on {FALLBACK_MODEL}. "
-            "Try Kimi (NVIDIA) for faster code review, or ask about a smaller code snippet."
+            "Use a smaller model for vocal/chat or shorten the prompt."
         )
     except Exception as e:
         logger.error("[ollama] error: %s", e)

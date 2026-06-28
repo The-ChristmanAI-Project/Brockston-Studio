@@ -13,8 +13,16 @@ from typing import Iterable, Optional
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Prefer local christman_sound present in this Brockston-Studio project
+# (user confirmed it is here). Fall back to cold storage volume only if no local.
+_local_sound = BASE_DIR / "christman_sound"
+if _local_sound.exists() and (_local_sound / "CHRISTMAN_EAR_CANAL").exists():
+    _default_sound = str(_local_sound)
+else:
+    _default_sound = "/Volumes/LIFE2/Christman-Sound"
+
 CHRISTMAN_SOUND_ROOT = Path(
-    os.getenv("CHRISTMAN_SOUND_ROOT", "/Volumes/LIFE2/Christman-Sound")
+    os.getenv("CHRISTMAN_SOUND_ROOT", _default_sound)
 ).expanduser()
 
 CHRISTMAN_MEDIA_INSTALLER_ROOT = Path(
@@ -44,6 +52,29 @@ def sdk_root() -> Path:
     return CHRISTMAN_SOUND_ROOT / "christman_voice_sdk"
 
 
+# Read-aloud: map chat beings to male Christman reference WAVs (Brockston uvclass, etc.)
+TTS_BEING_ALIASES: dict[str, str] = {
+    "family": "brockston",
+    "kimi": "brockston",
+    "nemo": "brockston",
+    "claude": "brockston",
+    "default": "brockston",
+}
+
+# macOS `say` male fallbacks when XTTS is unavailable (all English male voices on this Mac)
+MACOS_MALE_VOICES: dict[str, str] = {
+    "brockston": "Daniel",
+    "derek": "Daniel",
+    "ultimateev": "Alex",
+    "nemo": "Fred",
+    "kimi": "Alex",
+    "inferno": "Daniel",
+    "aegis": "Daniel",
+    "alphawolf": "Daniel",
+    "giuseppe": "Daniel",
+    "default": "Daniel",
+}
+
 BEINGS: dict[str, dict] = {
     "brockston": {"label": "Brockston", "tier": "ultra", "emotions": ["warm", "direct", "grounded"]},
     "kimi": {"label": "Kimi", "tier": "ultra", "emotions": ["warm", "patient", "clear"]},
@@ -57,6 +88,21 @@ BEINGS: dict[str, dict] = {
     "siera": {"label": "Siera", "tier": "ultra", "emotions": ["safe", "calm", "steady"]},
     "ultimateev": {"label": "UltimateEV", "tier": "ultra", "emotions": ["precise", "direct", "surgical"]},
 }
+
+
+def resolve_tts_being(being: str) -> str:
+    """Which being's reference WAV to use for read-aloud (male Brockston by default)."""
+    key = (being or "default").lower().strip()
+    override = os.getenv("TTS_READ_BEING", "").strip().lower()
+    if override:
+        return override
+    return TTS_BEING_ALIASES.get(key, key if key in BEINGS else "brockston")
+
+
+def macos_voice_for_being(being: str) -> str:
+    """Male macOS voice when Christman-Sound XTTS is unavailable."""
+    key = resolve_tts_being(being)
+    return MACOS_MALE_VOICES.get(key, MACOS_MALE_VOICES["default"])
 
 
 def incoming_dir(being: str) -> Path:
@@ -80,13 +126,25 @@ def ensure_voice_folders() -> list[Path]:
 
 
 def ensure_sound_paths() -> list[str]:
-    """Add Christman-Sound + SDK to sys.path. Returns paths added."""
+    """Add Christman-Sound + SDK to sys.path. Returns paths added.
+    When using the local copy in this project, also add the voice_sdk subdir
+    so "import christman_voice_sdk" succeeds for per-being XTTS (Kimi etc).
+    """
     added: list[str] = []
     for path in (CHRISTMAN_SOUND_ROOT, sdk_root(), VOICE_CENTER):
         s = str(path)
         if path.exists() and s not in sys.path:
             sys.path.insert(0, s)
             added.append(s)
+
+    # Explicitly add the voice_sdk subdir for the import in SPEAK
+    voice_sdk = CHRISTMAN_SOUND_ROOT / "christman_voice_sdk"
+    if voice_sdk.exists():
+        s = str(voice_sdk)
+        if s not in sys.path:
+            sys.path.insert(0, s)
+            added.append(s)
+
     ear_paths = CHRISTMAN_SOUND_ROOT / "CHRISTMAN_EAR_CANAL"
     if ear_paths.is_dir():
         parent = str(CHRISTMAN_SOUND_ROOT)
@@ -116,7 +174,10 @@ def load_being_manifest(being: str) -> Optional[dict]:
 
 
 def find_reference_wav(being: str) -> Optional[Path]:
-    """Resolve reference WAV through Voice_Creation_Center manifest, then incoming/."""
+    """Resolve reference WAV through Voice_Creation_Center manifest, then incoming/.
+    If the specific being has none, fall back to a default (brockston or first available)
+    so every being gets proper Christman-Sound XTTS instead of raw macOS say.
+    """
     key = being.lower().strip()
     if not key or key in ("default", "daniel"):
         key = "brockston"
@@ -139,6 +200,21 @@ def find_reference_wav(being: str) -> Optional[Path]:
         wavs = sorted(directory.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
         if wavs:
             return wavs[0]
+
+    # Fallback so NO being is stuck on macOS say TTS
+    if key != "brockston":
+        default = find_reference_wav("brockston")
+        if default:
+            logger = logging.getLogger(__name__)
+            logger.info("[TTS] No ref for %s — falling back to brockston reference for XTTS", being)
+            return default
+
+    # Last resort: any wav in the voice center
+    for directory in [VOICE_CENTER / "incoming" / "simple_phrases", incoming_dir("brockston")]:
+        if directory.is_dir():
+            wavs = list(directory.glob("*.wav"))
+            if wavs:
+                return wavs[0]
     return None
 
 
@@ -155,7 +231,7 @@ def try_express_audio(text: str, being: str) -> Optional[bytes]:
 
         express = VoiceExpress()
         express.load()
-        result = express.serve(text[:600], being_label)
+        result = express.serve(text[:3500], being_label)
         if result.success and result.audio_data:
             return result.audio_data
     except Exception:
