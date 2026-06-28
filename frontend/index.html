@@ -184,6 +184,73 @@
             text-shadow: var(--neon-glow);
         }
 
+        .icon-btn.review-mode-on {
+            color: var(--neon-orange);
+            background: rgba(255, 95, 31, 0.22);
+            border-left: 3px solid var(--neon-orange);
+            box-shadow: 0 0 14px rgba(255, 95, 31, 0.35);
+            animation: review-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes review-pulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(255, 95, 31, 0.25); }
+            50% { box-shadow: 0 0 18px rgba(255, 95, 31, 0.45); }
+        }
+
+        #review-mode-banner {
+            display: none;
+            margin: 0 14px 8px;
+            padding: 8px 12px;
+            background: rgba(255, 95, 31, 0.12);
+            border: 1px solid var(--neon-orange);
+            border-radius: 4px;
+            font-family: var(--font-term);
+            font-size: 10px;
+            color: var(--neon-orange);
+            line-height: 1.5;
+        }
+
+        #review-mode-banner.on { display: block; }
+
+        #btn-review-run {
+            margin-top: 6px;
+            background: var(--neon-orange);
+            color: #000;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 10px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            font-size: 10px;
+            cursor: pointer;
+        }
+
+        #btn-explorer-review {
+            cursor: pointer;
+            font-size: 10px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            color: #666;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 3px;
+            padding: 2px 8px;
+            letter-spacing: 0.5px;
+        }
+
+        #btn-explorer-review.review-mode-on {
+            color: #000;
+            background: var(--neon-orange);
+            border-color: var(--neon-orange);
+            box-shadow: 0 0 10px rgba(255, 95, 31, 0.4);
+        }
+
+        #ai-panel.review-mode #send-btn {
+            background: var(--neon-orange);
+            color: #000;
+            border-color: var(--neon-orange);
+        }
+
         .icon-btn .tooltip {
             position: absolute;
             left: 65px;
@@ -692,6 +759,10 @@
                 <i class="fab fa-git-alt"></i>
                 <span class="tooltip">Git Status</span>
             </div>
+            <div class="icon-btn" id="btn-review" role="button" tabindex="0" title="Whole project review — scan explorer folder">
+                <i class="fas fa-clipboard-check"></i>
+                <span class="tooltip">Whole Project Review</span>
+            </div>
 
             <div class="sidebar-bottom">
                 <div class="icon-btn" id="btn-music" role="button" tabindex="0" title="Focus music (double-click for library)">
@@ -712,7 +783,8 @@
         <div id="explorer" class="split">
             <div class="explorer-header" style="display:flex;align-items:center;justify-content:space-between;">
                 <div><i class="fas fa-folder-open" style="margin-right: 5px;"></i> PROJECT EXPLORER</div>
-                <div style="display:flex;gap:6px;">
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <button type="button" id="btn-explorer-review" title="Arm whole-project review on this folder">Review</button>
                     <span id="btn-refresh-explorer" title="Refresh" style="cursor:pointer;font-size:11px;color:#666;">⟳</span>
                     <span id="btn-new-file" title="New file in current dir" style="cursor:pointer;font-size:11px;color:#666;">+f</span>
                 </div>
@@ -757,6 +829,13 @@
                 </div>
             </div>
 
+            <div id="review-mode-banner">
+                <div><strong>WHOLE PROJECT REVIEW</strong> — beings will scan the explorer folder (not just the open file).</div>
+                <div id="review-mode-path" style="color:#ccc;margin-top:4px;"></div>
+                <div style="color:#888;margin-top:4px;">Add optional notes below, hit <strong>SEND</strong>, or click <strong>Run review now</strong>.</div>
+                <button type="button" id="btn-review-run">Run review now</button>
+            </div>
+
             <!-- Mode switcher for instructors with dual modes (Kimi / Nemo) -->
             <div id="mode-switcher" style="display:none; padding: 0 14px 6px; align-items:center; gap:8px; flex-wrap:wrap;">
                 <span id="mode-label" style="font-size:10px; color:#666; font-family:var(--font-term);">MODE:</span>
@@ -772,7 +851,7 @@
                 <button class="quick-action" onclick="quickAsk('Suggest a better version of')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Refactor</button>
                 <button class="quick-action" onclick="quickAsk('Find bugs or issues in')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Find bugs</button>
                 <button class="quick-action" onclick="quickAsk('Write tests for')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Write tests</button>
-                <button class="quick-action" onclick="reviewProject()" style="font-size:10px;background:#1a1208;border:1px solid var(--neon-orange);color:var(--neon-orange);padding:2px 7px;border-radius:3px;cursor:pointer;" title="Review entire explorer folder">Review project</button>
+                <button class="quick-action" onclick="setWholeProjectReviewMode(true)" style="font-size:10px;background:#1a1208;border:1px solid var(--neon-orange);color:var(--neon-orange);padding:2px 7px;border-radius:3px;cursor:pointer;" title="Arm whole-project review on explorer folder">Review project</button>
             </div>
 
             <div id="chat-history">
@@ -876,10 +955,12 @@
         const btnCode     = document.getElementById('btn-code');
         const btnTerminal = document.getElementById('btn-terminal');
         const btnGit      = document.getElementById('btn-git');
+        const btnReview   = document.getElementById('btn-review');
         const btnSettings = document.getElementById('btn-settings');
 
         let isMusicPlaying = false;
         let isVoiceModeEnabled = false;
+        let wholeProjectReviewMode = false;
         let bgMusicReady = false;
 
         // User music player for senior students' old school rock & Soul Train
@@ -1350,9 +1431,85 @@
             return `[EXPLORER PATH: ${root}]\n`;
         }
 
+        function reviewTargetPath() {
+            return currentPath || workspaceRoot || '';
+        }
+
+        function updateWholeProjectReviewUI() {
+            const root = reviewTargetPath();
+            const banner = document.getElementById('review-mode-banner');
+            const pathEl = document.getElementById('review-mode-path');
+            const explorerBtn = document.getElementById('btn-explorer-review');
+            const aiPanel = document.getElementById('ai-panel');
+
+            if (btnReview) {
+                btnReview.classList.toggle('review-mode-on', wholeProjectReviewMode);
+                btnReview.title = wholeProjectReviewMode
+                    ? 'Whole project review ON — click to turn off'
+                    : 'Whole project review — scan explorer folder';
+            }
+            if (explorerBtn) {
+                explorerBtn.classList.toggle('review-mode-on', wholeProjectReviewMode);
+                explorerBtn.textContent = wholeProjectReviewMode ? 'Review ON' : 'Review';
+            }
+            if (banner) banner.classList.toggle('on', wholeProjectReviewMode);
+            if (pathEl) {
+                pathEl.textContent = root
+                    ? `Target: ${root}`
+                    : 'Target: (waiting for explorer path...)';
+            }
+            if (aiPanel) aiPanel.classList.toggle('review-mode', wholeProjectReviewMode);
+
+            if (chatInput) {
+                chatInput.placeholder = wholeProjectReviewMode
+                    ? 'Optional review notes (security, Cardinal Rules, architecture…) — SEND scans whole project'
+                    : `Ask ${MODEL_ORCHESTRATOR.getCurrentInstructor().name}...`;
+            }
+            if (sendBtn) {
+                sendBtn.textContent = wholeProjectReviewMode ? 'REVIEW' : 'SEND';
+            }
+        }
+
+        function setWholeProjectReviewMode(on, { announce = true, runNow = false } = {}) {
+            wholeProjectReviewMode = !!on;
+            updateWholeProjectReviewUI();
+
+            if (wholeProjectReviewMode) {
+                const key = MODEL_ORCHESTRATOR.currentInstructor;
+                if (key === 'kimi') setInstructorMode('code');
+                if (key === 'nemo') setInstructorMode('code');
+                if (announce) {
+                    const root = reviewTargetPath() || '(explorer folder)';
+                    appendMessage(
+                        'SYSTEM',
+                        `Whole project review ON — target: ${root}. Beings will ls/read/rg the full tree. Hit SEND or Run review now.`,
+                        'system'
+                    );
+                }
+                if (runNow) reviewProject(chatInput.value.trim());
+            } else if (announce) {
+                appendMessage('SYSTEM', 'Whole project review OFF — back to normal chat.', 'system');
+            }
+        }
+
+        function toggleWholeProjectReview() {
+            if (wholeProjectReviewMode) {
+                setWholeProjectReviewMode(false);
+            } else {
+                setWholeProjectReviewMode(true);
+            }
+        }
+
         async function sendChat(extraContext = '') {
             let text = chatInput.value.trim();
-            if (!text) return;
+            if (!text && !wholeProjectReviewMode) return;
+
+            if (wholeProjectReviewMode) {
+                chatInput.value = '';
+                await reviewProject(text);
+                return;
+            }
+
             if (extraContext) text = extraContext + '\n\n' + text;
 
             // build rich context for the AI
@@ -1504,7 +1661,7 @@
         }
 
         async function reviewProject(extraNotes = '') {
-            const root = currentPath || workspaceRoot || '';
+            const root = reviewTargetPath();
             if (!root) {
                 appendMessage('SYSTEM', 'Explorer path not ready — wait for files to load or pick a folder.', 'system');
                 return;
@@ -1513,7 +1670,10 @@
             const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
             const label = instructor.name || 'BROCKSTON';
             const userLine = extraNotes || 'Review this entire project for architecture, bugs, and Cardinal Rule compliance.';
-            appendMessage('YOU', `Review project: ${root}`, 'user');
+            const youLine = extraNotes
+                ? `Review project (${root}): ${extraNotes}`
+                : `Review whole project: ${root}`;
+            appendMessage('YOU', youLine, 'user');
             appendMessage('SYSTEM', `Scanning ${root} — beings will ls/read/rg the whole tree (may take a minute).`, 'system');
 
             const controller = new AbortController();
@@ -1718,6 +1878,19 @@
             try { fitAddon.fit(); fitTerminalAndNotify(); } catch (e) {}
         });
 
+        btnReview.addEventListener('click', () => {
+            toggleWholeProjectReview();
+        });
+
+        document.getElementById('btn-explorer-review')?.addEventListener('click', () => {
+            toggleWholeProjectReview();
+        });
+
+        document.getElementById('btn-review-run')?.addEventListener('click', () => {
+            if (!wholeProjectReviewMode) setWholeProjectReviewMode(true, { announce: false });
+            reviewProject(chatInput.value.trim());
+        });
+
         btnGit.addEventListener('click', async () => {
             setActiveSidebar(btnGit);
             setWorkspaceView('git');
@@ -1794,6 +1967,7 @@
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 currentPath = data.path || path;
+                if (wholeProjectReviewMode) updateWholeProjectReviewUI();
                 const breadcrumb = document.getElementById('explorer-path');
                 if (breadcrumb) {
                     breadcrumb.textContent = currentPath;
@@ -2503,7 +2677,9 @@
         });
 
         // ----- Boot — reopen last folder if remembered, else workspace default from .env
+        updateWholeProjectReviewUI();
         loadFiles(savedStartPath || '').then(() => {
+            updateWholeProjectReviewUI();
             // Apply any filter that might have been typed early + initial friendly state
             setTimeout(() => {
                 const fi = document.getElementById('explorer-filter');
