@@ -1380,22 +1380,34 @@
 
         function prepareSpeechText(raw) {
             return String(raw || '')
-                .replace(/\[(?:KIMI|NEMO|FAMILY|BROCKSTON|CLAUDE|SYSTEM|DEMO)[^\]]*\]:?\s*/gi, '')
+                .replace(/\[(?:KIMI REVIEW|KIMI|NEMO|FAMILY|BROCKSTON|CLAUDE|SYSTEM|DEMO|PROJECT REVIEW)[^\]]*\]:?\s*/gi, '')
+                .replace(/\{"tool"\s*:[^}]+\}/g, '')
                 .replace(/\[.*?\]/g, '')
                 .replace(/`{1,3}[\s\S]*?`{1,3}/g, ' code block ')
                 .replace(/\s+/g, ' ')
                 .trim();
         }
 
+        function extractReviewForSpeech(text) {
+            const clean = prepareSpeechText(text);
+            if (!clean) return '';
+            const verdictM = clean.match(/\bVERDICT\b[:\s—-]*(.+?)$/i);
+            const archM = clean.match(/\bARCHITECTURE\b[:\s—-]*(.+?)(?=\bCRITICAL\b|\bWARNING\b|\bVERDICT\b|$)/i);
+            const parts = [];
+            if (archM) parts.push(archM[1].trim().slice(0, 700));
+            if (verdictM) parts.push('Verdict: ' + verdictM[1].trim().slice(0, 350));
+            return parts.join(' ') || clean.slice(0, 1200);
+        }
+
         let ttsQueue = Promise.resolve();
 
-        async function speakText(text) {
-            if (!isVoiceModeEnabled) return;
+        async function speakText(text, force = false) {
+            if (!force && !isVoiceModeEnabled) return;
             const clean = prepareSpeechText(text);
             if (!clean) return;
 
             ttsQueue = ttsQueue.then(async () => {
-                if (!isVoiceModeEnabled) return;
+                if (!force && !isVoiceModeEnabled) return;
                 try {
                     const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
                     const key = MODEL_ORCHESTRATOR.currentInstructor || 'brockston';
@@ -1706,7 +1718,13 @@
                 }
                 const data = await res.json();
                 appendMessage(label, data.response || '', 'ai');
-                speakText(data.response);
+                const speech = extractReviewForSpeech(data.response || '');
+                if (speech) {
+                    speakText(speech, true);
+                    if (!isVoiceModeEnabled) {
+                        appendMessage('SYSTEM', 'Reading review aloud (voice auto-on for project review).', 'system');
+                    }
+                }
             } catch (err) {
                 console.error(err);
                 let msg = err.message;

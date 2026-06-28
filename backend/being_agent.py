@@ -90,7 +90,7 @@ _KIMI_TOOL_ARG_RE = re.compile(
     re.DOTALL,
 )
 _TOOL_JSON_BLOB_RE = re.compile(
-    r'\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"[^"]+"\s*:[^}]+\}',
+    r'\{\s*"tool"\s*:\s*"[^"]+"[^}]*\}',
     re.DOTALL,
 )
 # Kimi sometimes emits unclosed <tool_call>{...} without </tool_call>
@@ -125,6 +125,9 @@ _REVIEW_RE = re.compile(
 )
 
 AGENT_REVIEW_MAX_STEPS = int(os.getenv("BEING_AGENT_REVIEW_MAX_STEPS", "12"))
+AGENT_REVIEW_MIN_TOOLS = int(os.getenv("BEING_AGENT_REVIEW_MIN_TOOLS", "5"))
+AGENT_REVIEW_TOOLS_PER_STEP = int(os.getenv("BEING_AGENT_REVIEW_TOOLS_PER_STEP", "8"))
+AGENT_REVIEW_NUM_PREDICT = int(os.getenv("BEING_AGENT_REVIEW_NUM_PREDICT", "1024"))
 
 PROJECT_REVIEW_TASK = """Review the ENTIRE project at [PROJECT ROOT].
 
@@ -179,6 +182,7 @@ def strip_tool_blocks(text: str) -> str:
     cleaned = re.sub(r"<\|tool_call_argument_begin\|>", "", cleaned)
     cleaned = re.sub(r"functions\.tool_call:\d+", "", cleaned)
     cleaned = re.sub(r'\{\s*"tool"\s*:\s*"[^"]+"[^}]*\}', "", cleaned)
+    cleaned = re.sub(r'^\s*\{\s*"tool"\s*:.*$', "", cleaned, flags=re.MULTILINE)
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
 
@@ -193,7 +197,11 @@ def _is_tool_leak(text: str) -> bool:
         return True
     if t.startswith("{") and '"tool"' in t:
         return True
-    if '"tool":' in t and len(t) < 400:
+    if '"tool":' in t and len(t) < 800:
+        return True
+    if "i need to stop here" in t or "hit my limit" in t:
+        return True
+    if re.search(r'\{\s*"tool"\s*:', text or ""):
         return True
     return False
 
@@ -309,6 +317,25 @@ def _fallback_summary_from_tools(
     )
 
 
+def _normalize_tool_payload(
+    payload: Dict[str, Any],
+    *,
+    scope_root: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Map Kimi aliases (rg/grep) to real being_eyes tools."""
+    tool = str(payload.get("tool", "")).lower().strip()
+    if tool in ("rg", "grep", "search", "find", "ack", "ag"):
+        pattern = str(payload.get("pattern") or payload.get("query") or ".").replace("'", "")
+        root = payload.get("path") or payload.get("cwd") or scope_root or "."
+        return {
+            "tool": "run",
+            "command": f"rg -n --max-count 25 '{pattern}' . 2>/dev/null | head -50",
+            "cwd": root,
+            "timeout_sec": int(payload.get("timeout_sec", 60)),
+        }
+    return payload
+
+
 def _append_tool_call(calls: List[Dict[str, Any]], seen: set, raw: str) -> None:
     try:
         payload = json.loads(raw.strip())
@@ -333,7 +360,56 @@ def parse_tool_calls(text: str) -> List[Dict[str, Any]]:
         _append_tool_call(calls, seen, match.group(1))
     for match in _TOOL_JSON_BLOB_RE.finditer(source):
         _append_tool_call(calls, seen, match.group(0))
+    for line in source.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("{") and '"tool"' in stripped:
+            _append_tool_call(calls, seen, stripped)
     return calls
+
+
+def _review_finalize_prompt(
+    *,
+    message: str,
+    digest: str,
+    scope_root: str,
+    tool_count: int,
+) -> str:
+    return (
+        f"User request:\n{message}\n\n"
+        f"Project boundary: {scope_root}\n"
+        f"Tools executed on disk: {tool_count}\n\n"
+        f"TOOL RESULTS DIGEST (ONLY source of truth — do not invent files):\n{digest}\n\n"
+        "Write a project review for Everett using ONLY paths and facts from the digest above.\n"
+        "If a file is not in the digest, write 'not verified' — never guess.\n"
+        "Do not mention being_agent.py or being_eyes.py unless they appear in the digest.\n"
+        "Sections: ARCHITECTURE, CRITICAL, WARNING, CLEAN, VERDICT.\n"
+        "Plain English only. No JSON. No tool markup."
+    )
+
+
+async def _review_finalize_generate(prompt: str) -> str:
+    """Local Ollama summary — longer output for reviews."""
+    try:
+        async with httpx.AsyncClient(timeout=AGENT_OLLAMA_TIMEOUT) as client:
+            r = await client.post(
+                f"{OLLAMA_BASE}/api/chat",
+                json={
+                    "model": AGENT_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                    "options": {
+                        "num_predict": AGENT_REVIEW_NUM_PREDICT,
+                        "num_ctx": max(AGENT_NUM_CTX, 8192),
+                        "temperature": 0.1,
+                        "top_p": 0.85,
+                    },
+                },
+            )
+            r.raise_for_status()
+            return r.json()["message"]["content"]
+    except Exception as e:
+        logger.warning("[being_agent] review finalize ollama failed: %s", e)
+        return ""
 
 
 async def execute_being_tool(
@@ -358,6 +434,7 @@ async def execute_being_tool(
         write_file,
     )
 
+    payload = _normalize_tool_payload(payload, scope_root=scope_root)
     tool = str(payload.get("tool", "")).lower().strip()
     logger.info("[being_agent] Executing tool=%s path=%s", tool, payload.get("path", ""))
 
@@ -483,7 +560,9 @@ def _scoped_agent_prompt(scope_root: Optional[str]) -> str:
         f"Project root: {scope_root}\n"
         f"Every tool path MUST be inside {scope_root}.\n"
         f"Do NOT access Brockston-Studio, ~/.grok, or other projects.\n"
-        f"Final answer: plain English summary only — no tool markup."
+        f"Valid tools: ls, read, run, patch, write only. For search use run+rg, not {{\"tool\":\"rg\"}}.\n"
+        f"Do not invent file paths — ls first, then read files that exist.\n"
+        f"Final answer: plain English summary only — no tool markup, no JSON lines."
     )
 
 
@@ -508,6 +587,11 @@ async def run_agent_loop(
 
     last_text = ""
     steps_used = 0
+    tools_per_step = (
+        AGENT_REVIEW_TOOLS_PER_STEP if scope_root else KIMI_AGENT_MAX_TOOLS_PER_STEP
+    )
+    min_review_tools = AGENT_REVIEW_MIN_TOOLS if scope_root else 0
+
     for step in range(max_steps):
         steps_used = step + 1
         prompt = f"{_scoped_agent_prompt(scope_root)}\n\n{conversation}" if step == 0 else conversation
@@ -515,10 +599,18 @@ async def run_agent_loop(
         last_text = await generate(prompt)
         calls = parse_tool_calls(last_text)
         if not calls:
+            if scope_root and len(tools_executed) < min_review_tools and step + 1 < max_steps:
+                conversation = _trim_conversation(
+                    f"{conversation}\n\n"
+                    f"SYSTEM: Review incomplete — only {len(tools_executed)} tool(s) ran. "
+                    f"Emit <tool_call> blocks to ls {scope_root} depth=2, read README/main files, "
+                    f"and run rg inside {scope_root}. Do not summarize yet."
+                )
+                continue
             break
 
         batch_results: List[Dict[str, Any]] = []
-        for call in calls[:KIMI_AGENT_MAX_TOOLS_PER_STEP]:
+        for call in calls[:tools_per_step]:
             result = await execute_being_tool(call, scope_root=scope_root)
             entry = {"call": call, "result": result}
             tools_executed.append(entry)
@@ -529,12 +621,12 @@ async def run_agent_loop(
                 call.get("tool"),
                 result.get("status", result.get("exit_code")),
             )
-        if len(calls) > KIMI_AGENT_MAX_TOOLS_PER_STEP:
+        if len(calls) > tools_per_step:
             logger.warning(
                 "[being_agent] Capped tools step=%d from %d to %d",
                 step + 1,
                 len(calls),
-                KIMI_AGENT_MAX_TOOLS_PER_STEP,
+                tools_per_step,
             )
 
         conversation = _trim_conversation(
@@ -542,29 +634,44 @@ async def run_agent_loop(
             f"Assistant (step {step + 1}):\n{strip_tool_blocks(last_text)}\n\n"
             f"TOOL RESULTS (real execution on disk):\n"
             f"{json.dumps(batch_results, indent=2, default=str)}\n\n"
-            "Continue with more <tool_call> blocks if needed, "
-            "or give a final plain-text summary for Everett. "
-            "No raw tool_call XML, no <|tool_call|> tokens, no JSON tool payloads."
+            "Continue with more <tool_call> blocks if needed. "
+            "Do not paste JSON tool lines — use <tool_call> wrappers only. "
+            "Do not summarize until you have ls + reads + rg results from inside the project."
         )
 
-    stripped = strip_tool_blocks(last_text)
-    needs_finalize = bool(parse_tool_calls(last_text)) or (
-        tools_executed and (not stripped or _is_tool_leak(last_text))
-    )
-    if needs_finalize and tools_executed:
-        digest = _build_tool_digest(tools_executed)
-        scope_note = f"\nProject boundary: {scope_root}\n" if scope_root else ""
-        finalize_prompt = (
-            f"User request:\n{message}\n"
-            f"{scope_note}\n"
-            f"TOOL RESULTS DIGEST (already executed on disk):\n{digest}\n\n"
-            "Write a direct plain-text project review for Everett.\n"
-            "Sections: ARCHITECTURE, CRITICAL, WARNING, CLEAN, VERDICT.\n"
-            "3-12 sentences total. Cite file paths. Plain English only.\n"
-            "No tool_call blocks. No <|tool_call|> markup. No JSON."
+    digest = _build_tool_digest(tools_executed)
+    finalize_gen = finalize_generate or _fast_direct_generate
+
+    if scope_root:
+        if len(tools_executed) < min_review_tools:
+            last_text = (
+                f"Review incomplete — only {len(tools_executed)} tool(s) executed "
+                f"(need {min_review_tools}+ inside {scope_root}).\n\n"
+                f"What was actually read on disk:\n\n{digest}\n\n"
+                "Try again with Family or Nemo (local tool loop), or re-run review."
+            )
+        else:
+            prompt = _review_finalize_prompt(
+                message=message,
+                digest=digest,
+                scope_root=scope_root,
+                tool_count=len(tools_executed),
+            )
+            last_text = await _review_finalize_generate(prompt)
+            if not strip_tool_blocks(last_text):
+                last_text = await finalize_gen(prompt)
+    elif tools_executed:
+        stripped = strip_tool_blocks(last_text)
+        needs_finalize = bool(parse_tool_calls(last_text)) or (
+            not stripped or _is_tool_leak(last_text)
         )
-        finalize_gen = finalize_generate or generate
-        last_text = await finalize_gen(finalize_prompt)
+        if needs_finalize:
+            finalize_prompt = (
+                f"User request:\n{message}\n\n"
+                f"TOOL RESULTS DIGEST:\n{digest}\n\n"
+                "Write a direct plain-text summary for Everett. Plain English only."
+            )
+            last_text = await finalize_gen(finalize_prompt)
 
     last_text = strip_tool_blocks(last_text)
     if tools_executed and (_is_tool_leak(last_text) or len(last_text) < 40):
@@ -641,7 +748,7 @@ async def run_kimi_agent(
         context=context,
         max_steps=max_steps,
         scope_root=scope_root,
-        finalize_generate=_fast_direct_generate,
+        finalize_generate=_review_finalize_generate if scope_root else _fast_direct_generate,
     )
 
 
@@ -673,5 +780,5 @@ async def run_nemo_agent(
         context=context,
         max_steps=max_steps,
         scope_root=scope_root,
-        finalize_generate=_fast_direct_generate,
+        finalize_generate=_review_finalize_generate if scope_root else _fast_direct_generate,
     )
