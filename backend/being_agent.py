@@ -24,10 +24,14 @@ from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
-# Reduced lag settings for beings' compute/tool paths
+# Compute agent uses the CODER model — GENERAL stays for fast chat only
 OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-FAST_MODEL = os.getenv("LLM_MODEL_GENERAL", os.getenv("OLLAMA_MODEL", "llama3.2"))
-AGENT_MAX_STEPS = int(os.getenv("BEING_AGENT_MAX_STEPS", "3"))  # lower for demos/speed
+AGENT_MODEL = os.getenv(
+    "BEING_AGENT_MODEL",
+    os.getenv("LLM_MODEL_CODER", os.getenv("OLLAMA_MODEL", "qwen2.5-coder:32b")),
+)
+AGENT_MAX_STEPS = int(os.getenv("BEING_AGENT_MAX_STEPS", "6"))
+AGENT_OLLAMA_TIMEOUT = float(os.getenv("BEING_AGENT_OLLAMA_TIMEOUT_SEC", "180"))
 AGENT_NUM_PREDICT = int(os.getenv("BEING_AGENT_NUM_PREDICT", "300"))
 AGENT_NUM_CTX = int(os.getenv("BEING_AGENT_NUM_CTX", "4096"))
 AGENT_TOOL_RESULT_MAX_CHARS = int(os.getenv("BEING_AGENT_TOOL_RESULT_MAX_CHARS", "2500"))
@@ -324,13 +328,13 @@ async def execute_being_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def _fast_direct_generate(prompt: str) -> str:
-    """Low-lag direct Ollama call for agent/tool steps. Uses GENERAL model + tight limits."""
+    """Direct Ollama call for compute agent steps — uses CODER model, not chat GENERAL."""
     try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
+        async with httpx.AsyncClient(timeout=AGENT_OLLAMA_TIMEOUT) as client:
             r = await client.post(
                 f"{OLLAMA_BASE}/api/chat",
                 json={
-                    "model": FAST_MODEL,
+                    "model": AGENT_MODEL,
                     "messages": [{"role": "user", "content": prompt}],
                     "stream": False,
                     "options": {
@@ -344,8 +348,8 @@ async def _fast_direct_generate(prompt: str) -> str:
             r.raise_for_status()
             return r.json()["message"]["content"]
     except Exception as e:
-        logger.warning("[being_agent] fast direct ollama failed: %s (falling back)", e)
-        return f"[compute error - model {FAST_MODEL} not responding fast: {e}]"
+        logger.warning("[being_agent] agent ollama failed model=%s: %s", AGENT_MODEL, e)
+        return f"[compute error - model {AGENT_MODEL} not responding: {e}]"
 
 
 async def run_agent_loop(
@@ -446,7 +450,7 @@ async def run_being_agent(
 ) -> Dict[str, Any]:
     """General compute agent for ANY Christman family being.
     All beings now have full capacity to run the compute via being_eyes tools.
-    If no generate provided, uses built-in fast low-lag direct Ollama (GENERAL model).
+    If no generate provided, uses built-in direct Ollama (CODER / BEING_AGENT_MODEL).
     """
     if generate is None:
         generate = _fast_direct_generate
@@ -505,7 +509,12 @@ async def run_nemo_agent(
     async def generate(prompt: str) -> str:
         return await loop.run_in_executor(
             None,
-            lambda: nemo_svc.generate_content(prompt, mode=mode, context=None),
+            lambda: nemo_svc.generate_content(
+                prompt,
+                mode=mode,
+                context=None,
+                model=AGENT_MODEL,
+            ),
         )
 
     return await run_being_agent(
