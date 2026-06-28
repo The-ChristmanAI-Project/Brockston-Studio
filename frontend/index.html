@@ -1432,7 +1432,8 @@
         }
 
         function reviewTargetPath() {
-            return currentPath || workspaceRoot || '';
+            // Explorer path first; fall back to terminal cwd (OSC 7 sync) then workspace
+            return currentPath || lastSyncedCwd || workspaceRoot || '';
         }
 
         function updateWholeProjectReviewUI() {
@@ -1696,6 +1697,11 @@
                         const parsed = JSON.parse(errBody);
                         detail = parsed.detail || errBody;
                     } catch (_) {}
+                    if (res.status === 404 && String(detail).toLowerCase().includes('not found')) {
+                        throw new Error(
+                            'Review API not found — restart ./start.sh (Ctrl+C then ./start.sh) so the IDE loads the latest code.'
+                        );
+                    }
                     throw new Error(detail || `Server error: ${res.status}`);
                 }
                 const data = await res.json();
@@ -2687,6 +2693,12 @@
                     try { fi.dispatchEvent(new Event('input')); } catch(e){}
                 }
             }, 80);
+        }).catch(() => {});
+
+        fetch(`${API_BASE}/health`).then(r => r.json()).then(h => {
+            if (h.features && h.features.review_project === false) {
+                appendMessage('SYSTEM', 'Whole-project review needs a server restart — Ctrl+C ./start.sh then run it again.', 'system');
+            }
         }).catch(() => {});
         window.addEventListener('focus', () => {
             term.focus();
