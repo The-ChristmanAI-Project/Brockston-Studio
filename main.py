@@ -221,7 +221,7 @@ async def kimi_endpoint(request: KimiRequest):
                 context=full_context,
                 mode=agent_mode,
                 domain=request.domain,
-                max_steps=4,
+                max_steps=6,
             )
             from backend.being_agent import strip_tool_blocks, _is_tool_leak, _fallback_summary_from_tools
 

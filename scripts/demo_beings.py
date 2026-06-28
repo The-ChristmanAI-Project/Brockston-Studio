@@ -7,7 +7,7 @@ capacity via the agent tool loop:
 
   python scripts/demo_beings.py
 
-Uses the fast direct path (GENERAL model + tight ctx/predict) so lag is minimized
+Uses the compute agent path (CODER / BEING_AGENT_MODEL) for tool orchestration
 for the demo. The being will actually:
 - ls directories
 - read files
@@ -46,7 +46,7 @@ async def main():
     print("=" * 60)
     print("BROCKSTON STUDIO — TEAM BEINGS COMPUTE DEMO (low-lag)")
     print("=" * 60)
-    print(f"Fast model: {os.getenv('LLM_MODEL_GENERAL', 'llama3.2')}")
+    print(f"Agent model: {os.getenv('BEING_AGENT_MODEL', os.getenv('LLM_MODEL_CODER', 'qwen2.5-coder:32b'))}")
     print("The being will now use real tools (ls/read/run/write) to demonstrate.")
     print("Watch logs, the terminal, and the project explorer for changes.")
     print("-" * 60)
