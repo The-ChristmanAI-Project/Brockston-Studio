@@ -183,6 +183,7 @@ async def _run_project_review(
             context=full_context,
             mode="codelab",
             max_steps=max_steps,
+            scope_root=project_path,
         )
         prefix = "KIMI REVIEW"
     elif instructor == "nemo":
@@ -194,6 +195,7 @@ async def _run_project_review(
             context=full_context,
             mode="code",
             max_steps=max_steps,
+            scope_root=project_path,
         )
         prefix = "NEMO REVIEW"
     else:
@@ -201,12 +203,21 @@ async def _run_project_review(
             message=task,
             context=full_context,
             max_steps=max_steps,
+            scope_root=project_path,
         )
         prefix = "PROJECT REVIEW"
 
+    from backend.being_agent import strip_tool_blocks, _is_tool_leak, _fallback_summary_from_tools
+
     tool_count = result.get("tool_count", 0)
+    text = strip_tool_blocks(result.get("text", ""))
+    if _is_tool_leak(text) and result.get("tools_executed"):
+        text = _fallback_summary_from_tools(
+            result["tools_executed"],
+            user_message=user_message or task,
+        )
     return {
-        "response": f"[{prefix} — {tool_count} tool(s) on {project_path}]: {result.get('text', '')}",
+        "response": f"[{prefix} — {tool_count} tool(s) on {project_path}]: {text}",
         "project_path": project_path,
         "tool_count": tool_count,
         "tools_executed": result.get("tools_executed", []),
@@ -275,6 +286,7 @@ async def chat_endpoint(request: ChatRequest):
                 message=request.message,
                 context=full_context,
                 max_steps=review_agent_max_steps() if is_review else None,
+                scope_root=project_path if is_review else None,
             )
             text = result.get("text", "")
             tool_count = result.get("tool_count", 0)
@@ -364,6 +376,7 @@ async def kimi_endpoint(request: KimiRequest):
                 mode=agent_mode,
                 max_steps=review_agent_max_steps() if is_review else 6,
                 domain=request.domain,
+                scope_root=project_path if is_review else None,
             )
             from backend.being_agent import strip_tool_blocks, _is_tool_leak, _fallback_summary_from_tools
 
@@ -460,6 +473,7 @@ async def nemo_endpoint(request: NemoRequest):
                 context=full_context,
                 mode=mode,
                 max_steps=review_agent_max_steps() if is_review else 6,
+                scope_root=project_path if is_review else None,
             )
             text = result.get("text", "")
             tool_count = result.get("tool_count", 0)

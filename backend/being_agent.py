@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import httpx
@@ -83,10 +84,23 @@ _TOOL_CALL_RE = re.compile(
     r"<tool_call>\s*(\{.*?\})\s*</tool_call>",
     re.DOTALL | re.IGNORECASE,
 )
+# Kimi K2.6 native tool format (NVIDIA NIM)
+_KIMI_TOOL_ARG_RE = re.compile(
+    r"<\|tool_call_argument_begin\|>\s*(\{.*?\})\s*(?:<\|tool_call_end\|>|(?=<\|tool_call_begin\|>)|$)",
+    re.DOTALL,
+)
+_TOOL_JSON_BLOB_RE = re.compile(
+    r'\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"[^"]+"\s*:[^}]+\}',
+    re.DOTALL,
+)
 # Kimi sometimes emits unclosed <tool_call>{...} without </tool_call>
 _TOOL_CALL_LEAK_RE = re.compile(
     r"<tool_call>\s*\{[^}]*\}[^<]*(?:</tool_call>)?",
     re.DOTALL | re.IGNORECASE,
+)
+_KIMI_TOOL_LEAK_RE = re.compile(
+    r"<\|tool_calls_section_begin\|>.*?<\|tool_calls_section_end\|>",
+    re.DOTALL,
 )
 
 _CODE_FIX_RE = re.compile(
@@ -151,11 +165,20 @@ def wants_agent_tools(message: str, mode: str) -> bool:
 
 
 def strip_tool_blocks(text: str) -> str:
-    """Remove <tool_call> blocks from user-facing text (closed or unclosed)."""
+    """Remove tool_call / Kimi tool markup from user-facing text."""
     raw = text or ""
-    cleaned = _TOOL_CALL_RE.sub("", raw)
+    cleaned = _KIMI_TOOL_LEAK_RE.sub("", raw)
+    cleaned = _TOOL_CALL_RE.sub("", cleaned)
+    cleaned = _KIMI_TOOL_ARG_RE.sub("", cleaned)
     cleaned = _TOOL_CALL_LEAK_RE.sub("", cleaned)
     cleaned = re.sub(r"</?tool_call>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"<\|tool_calls_section_begin\|>", "", cleaned)
+    cleaned = re.sub(r"<\|tool_calls_section_end\|>", "", cleaned)
+    cleaned = re.sub(r"<\|tool_call_begin\|>[^<]*", "", cleaned)
+    cleaned = re.sub(r"<\|tool_call_end\|>", "", cleaned)
+    cleaned = re.sub(r"<\|tool_call_argument_begin\|>", "", cleaned)
+    cleaned = re.sub(r"functions\.tool_call:\d+", "", cleaned)
+    cleaned = re.sub(r'\{\s*"tool"\s*:\s*"[^"]+"[^}]*\}', "", cleaned)
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
 
@@ -166,11 +189,33 @@ def _is_tool_leak(text: str) -> bool:
         return True
     if "<tool_call>" in t or "</tool_call>" in t:
         return True
+    if "<|tool_call" in t or "functions.tool_call" in t:
+        return True
     if t.startswith("{") and '"tool"' in t:
         return True
-    if '"tool":' in t and len(t) < 200:
+    if '"tool":' in t and len(t) < 400:
         return True
     return False
+
+
+def _resolve_scope_path(raw: str) -> Path:
+    return Path(os.path.expanduser(str(raw).strip())).resolve()
+
+
+def _check_scope(path: Optional[str], scope_root: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Return error dict if path is outside review scope."""
+    if not scope_root or not path:
+        return None
+    try:
+        resolved = _resolve_scope_path(path)
+        scope = _resolve_scope_path(scope_root)
+        resolved.relative_to(scope)
+    except (ValueError, OSError):
+        return {
+            "status": "error",
+            "detail": f"Outside project boundary ({scope_root}): {path}",
+        }
+    return None
 
 
 def _compact_tool_result(entry: Dict[str, Any], max_chars: int = AGENT_TOOL_RESULT_MAX_CHARS) -> Dict[str, Any]:
@@ -264,20 +309,38 @@ def _fallback_summary_from_tools(
     )
 
 
+def _append_tool_call(calls: List[Dict[str, Any]], seen: set, raw: str) -> None:
+    try:
+        payload = json.loads(raw.strip())
+        if not isinstance(payload, dict) or not payload.get("tool"):
+            return
+        key = json.dumps(payload, sort_keys=True)
+        if key in seen:
+            return
+        seen.add(key)
+        calls.append(payload)
+    except json.JSONDecodeError as exc:
+        logger.warning("[being_agent] Bad tool_call JSON: %s", exc)
+
+
 def parse_tool_calls(text: str) -> List[Dict[str, Any]]:
     calls: List[Dict[str, Any]] = []
-    for match in _TOOL_CALL_RE.finditer(text or ""):
-        raw = match.group(1).strip()
-        try:
-            payload = json.loads(raw)
-            if isinstance(payload, dict) and payload.get("tool"):
-                calls.append(payload)
-        except json.JSONDecodeError as exc:
-            logger.warning("[being_agent] Bad tool_call JSON: %s", exc)
+    seen: set = set()
+    source = text or ""
+    for match in _TOOL_CALL_RE.finditer(source):
+        _append_tool_call(calls, seen, match.group(1))
+    for match in _KIMI_TOOL_ARG_RE.finditer(source):
+        _append_tool_call(calls, seen, match.group(1))
+    for match in _TOOL_JSON_BLOB_RE.finditer(source):
+        _append_tool_call(calls, seen, match.group(0))
     return calls
 
 
-async def execute_being_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
+async def execute_being_tool(
+    payload: Dict[str, Any],
+    *,
+    scope_root: Optional[str] = None,
+) -> Dict[str, Any]:
     """Run one Being Eyes action. Returns result or explicit error — Rule 6."""
     from backend.being_eyes import (
         DeleteRequest,
@@ -299,6 +362,20 @@ async def execute_being_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
     logger.info("[being_agent] Executing tool=%s path=%s", tool, payload.get("path", ""))
 
     try:
+        if tool in ("read", "ls", "patch", "write", "mkdir", "delete"):
+            scope_err = _check_scope(payload.get("path"), scope_root)
+            if scope_err:
+                return scope_err
+        if tool == "move":
+            for key in ("src", "dst"):
+                scope_err = _check_scope(payload.get(key), scope_root)
+                if scope_err:
+                    return scope_err
+        if tool == "run" and scope_root and payload.get("cwd"):
+            scope_err = _check_scope(payload.get("cwd"), scope_root)
+            if scope_err:
+                return scope_err
+
         if tool == "read":
             limit_lines = payload.get("limit_lines") or payload.get("limit") or 0
             return await read_file(
@@ -327,17 +404,23 @@ async def execute_being_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
                 )
             )
         if tool == "run":
+            cwd = payload.get("cwd") or scope_root
+            if scope_root and cwd:
+                scope_err = _check_scope(cwd, scope_root)
+                if scope_err:
+                    return scope_err
             return await run_command(
                 RunRequest(
                     command=payload["command"],
-                    cwd=payload.get("cwd"),
+                    cwd=cwd,
                     timeout_sec=int(payload.get("timeout_sec", 60)),
                 )
             )
         if tool == "ls":
+            depth = min(int(payload.get("depth", 1)), 2)
             return await list_directory(
                 path=payload.get("path", "."),
-                depth=int(payload.get("depth", 1)),
+                depth=depth,
             )
         if tool == "mkdir":
             return await make_directory(path=payload["path"])
@@ -391,12 +474,27 @@ async def _fast_direct_generate(prompt: str) -> str:
         return f"[compute error - model {AGENT_MODEL} not responding: {e}]"
 
 
+def _scoped_agent_prompt(scope_root: Optional[str]) -> str:
+    if not scope_root:
+        return AGENT_TOOLS_PROMPT
+    return (
+        f"{AGENT_TOOLS_PROMPT}\n\n"
+        f"=== REVIEW BOUNDARY (NON-NEGOTIABLE) ===\n"
+        f"Project root: {scope_root}\n"
+        f"Every tool path MUST be inside {scope_root}.\n"
+        f"Do NOT access Brockston-Studio, ~/.grok, or other projects.\n"
+        f"Final answer: plain English summary only — no tool markup."
+    )
+
+
 async def run_agent_loop(
     generate: Callable[[str], Awaitable[str]],
     *,
     message: str,
     context: str = "",
     max_steps: int = None,
+    scope_root: Optional[str] = None,
+    finalize_generate: Optional[Callable[[str], Awaitable[str]]] = None,
 ) -> Dict[str, Any]:
     """Loop: model → tool_calls → execute on disk → feed results → repeat.
     Reduced lag: default max_steps lowered, callers should pass fast generate.
@@ -412,7 +510,7 @@ async def run_agent_loop(
     steps_used = 0
     for step in range(max_steps):
         steps_used = step + 1
-        prompt = f"{AGENT_TOOLS_PROMPT}\n\n{conversation}" if step == 0 else conversation
+        prompt = f"{_scoped_agent_prompt(scope_root)}\n\n{conversation}" if step == 0 else conversation
 
         last_text = await generate(prompt)
         calls = parse_tool_calls(last_text)
@@ -421,7 +519,7 @@ async def run_agent_loop(
 
         batch_results: List[Dict[str, Any]] = []
         for call in calls[:KIMI_AGENT_MAX_TOOLS_PER_STEP]:
-            result = await execute_being_tool(call)
+            result = await execute_being_tool(call, scope_root=scope_root)
             entry = {"call": call, "result": result}
             tools_executed.append(entry)
             batch_results.append(_compact_tool_result(entry))
@@ -445,23 +543,28 @@ async def run_agent_loop(
             f"TOOL RESULTS (real execution on disk):\n"
             f"{json.dumps(batch_results, indent=2, default=str)}\n\n"
             "Continue with more <tool_call> blocks if needed, "
-            "or give a final plain-text summary for Everett. No raw tool_call XML in the final answer."
+            "or give a final plain-text summary for Everett. "
+            "No raw tool_call XML, no <|tool_call|> tokens, no JSON tool payloads."
         )
 
     stripped = strip_tool_blocks(last_text)
     needs_finalize = bool(parse_tool_calls(last_text)) or (
-        tools_executed and not stripped
+        tools_executed and (not stripped or _is_tool_leak(last_text))
     )
     if needs_finalize and tools_executed:
         digest = _build_tool_digest(tools_executed)
+        scope_note = f"\nProject boundary: {scope_root}\n" if scope_root else ""
         finalize_prompt = (
-            f"User request:\n{message}\n\n"
+            f"User request:\n{message}\n"
+            f"{scope_note}\n"
             f"TOOL RESULTS DIGEST (already executed on disk):\n{digest}\n\n"
-            "Write a direct plain-text summary for Everett. "
-            "3-8 sentences. Cite paths and what was found. "
-            "No <tool_call> blocks. No asking him to ask again."
+            "Write a direct plain-text project review for Everett.\n"
+            "Sections: ARCHITECTURE, CRITICAL, WARNING, CLEAN, VERDICT.\n"
+            "3-12 sentences total. Cite file paths. Plain English only.\n"
+            "No tool_call blocks. No <|tool_call|> markup. No JSON."
         )
-        last_text = await generate(finalize_prompt)
+        finalize_gen = finalize_generate or generate
+        last_text = await finalize_gen(finalize_prompt)
 
     last_text = strip_tool_blocks(last_text)
     if tools_executed and (_is_tool_leak(last_text) or len(last_text) < 40):
@@ -486,6 +589,8 @@ async def run_being_agent(
     message: str,
     context: str = "",
     max_steps: int = None,
+    scope_root: Optional[str] = None,
+    finalize_generate: Optional[Callable[[str], Awaitable[str]]] = None,
 ) -> Dict[str, Any]:
     """General compute agent for ANY Christman family being.
     All beings now have full capacity to run the compute via being_eyes tools.
@@ -498,6 +603,8 @@ async def run_being_agent(
         message=message,
         context=context,
         max_steps=max_steps,
+        scope_root=scope_root,
+        finalize_generate=finalize_generate,
     )
 
 
@@ -509,6 +616,7 @@ async def run_kimi_agent(
     mode: str = "codelab",
     domain: Optional[str] = None,
     max_steps: int = 6,
+    scope_root: Optional[str] = None,
 ) -> Dict[str, Any]:
     loop = asyncio.get_event_loop()
 
@@ -532,6 +640,8 @@ async def run_kimi_agent(
         message=message,
         context=context,
         max_steps=max_steps,
+        scope_root=scope_root,
+        finalize_generate=_fast_direct_generate,
     )
 
 
@@ -542,6 +652,7 @@ async def run_nemo_agent(
     context: str,
     mode: str = "code",
     max_steps: int = 6,
+    scope_root: Optional[str] = None,
 ) -> Dict[str, Any]:
     loop = asyncio.get_event_loop()
 
@@ -561,4 +672,6 @@ async def run_nemo_agent(
         message=message,
         context=context,
         max_steps=max_steps,
+        scope_root=scope_root,
+        finalize_generate=_fast_direct_generate,
     )
