@@ -52,8 +52,8 @@ print(list_voice_profiles())
 Default paths assume:
 
 ```text
-/Users/EverettN/Downloads/DerekMCPServer
-/Users/EverettN/Downloads/christman_voice_sdk
+~/Downloads/DerekMCPServer
+~/Downloads/christman_voice_sdk
 ```
 
 Override with:

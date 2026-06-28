@@ -1,3 +1,5 @@
+from pathlib import Path
+
 """
 Apple Music / iTunes Tunnel Service
 ===================================
@@ -125,7 +127,7 @@ class AppleMusicService:
         """
         Personal "tunnel" side for Everett's collection (incl. the album "53 Years in the Making" and Brockston.mp3).
 
-        Returns references from the IDE's Music & Voice Library (local MP3s like /Users/EverettN/Downloads/Brockston.mp3
+        Returns references from the IDE's Music & Voice Library (local MP3s in ~/Downloads
         or Apple Music share links generated from your Apple ID).
 
         In a full implementation:
@@ -137,7 +139,7 @@ class AppleMusicService:
         """
         logger.info("[AppleMusicService] Personal library references requested (53 Years in the Making / Brockston.mp3).")
         return [
-            {"title": "Brockston.mp3", "source": "/Users/EverettN/Downloads/Brockston.mp3", "type": "local_mp3", "album": "53 Years in the Making", "note": "Add/play via IDE explorer or Music Library 'Add Brockston.mp3' button."},
+            {"title": "Brockston.mp3", "source": str(Path.home() / "Downloads" / "Brockston.mp3"), "type": "local_mp3", "album": "53 Years in the Making", "note": "Add/play via IDE explorer or Music Library."},
             {"note": "Use the Music & Voice Library in the IDE (Lib button) to manage your full album MP3s and Apple Music share links from your Apple ID."},
             {"note": "Generate Apple Music links: music.apple.com > your album > ... > Share > Copy Link. Paste into the library for agents to reference."}
         ]

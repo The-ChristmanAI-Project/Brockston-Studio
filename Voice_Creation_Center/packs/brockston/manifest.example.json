@@ -1,0 +1,11 @@
+{
+  "pack_id": "brockston",
+  "being_name": "Brockston",
+  "language": "en-US",
+  "voicepack_path": "Voice_Creation_Center/packs/brockston/brockston.voicepack",
+  "version": "0.0.0",
+  "source": "ingest_being_wav.py",
+  "reference_wavs": [
+    "Voice_Creation_Center/incoming/brockston/reference.wav"
+  ]
+}

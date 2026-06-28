@@ -223,7 +223,7 @@ def main():
         epilog="""
 Examples:
   python remove_merge_markers.py
-  python remove_merge_markers.py --dir /Users/EverettN/AlphaVox
+  python remove_merge_markers.py --dir ~/Code/MyProject
   python remove_merge_markers.py --dry-run
   python remove_merge_markers.py --theirs
   python remove_merge_markers.py --ext py,ts,tsx,css

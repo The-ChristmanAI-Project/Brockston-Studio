@@ -1,0 +1,4 @@
+{
+  "note": "Copy to index.json after ingesting voice WAVs locally. Never commit index.json with machine paths.",
+  "packs": []
+}
