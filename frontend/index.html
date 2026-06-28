@@ -1948,18 +1948,32 @@
             showModal('GIT', bodyHtml);
         });
 
+        function renderInstructorWiringTable(instructors) {
+            if (!instructors || typeof instructors !== 'object') return '';
+            const rows = Object.entries(instructors).map(([key, info]) => {
+                const label = info.label || info.model || '—';
+                const backend = info.backend || '—';
+                return `<tr><td style="padding:3px 8px 3px 0;color:#888;">${escapeHtml(key)}</td><td style="padding:3px 0;color:#ccc;">${escapeHtml(label)}</td><td style="padding:3px 0 3px 8px;color:#666;font-size:10px;">${escapeHtml(backend)}</td></tr>`;
+            }).join('');
+            return `<table style="width:100%;font-size:11px;margin-top:6px;border-collapse:collapse;">${rows}</table>`;
+        }
+
         btnSettings.addEventListener('click', async () => {
             setActiveSidebar(btnSettings);
-            const modelName = document.getElementById('sb-model-name')?.textContent || 'unknown';
+            const instructorKey = MODEL_ORCHESTRATOR.currentInstructor || 'family';
+            const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
+            const instName = instructor.name || instructorKey;
+            const instModel = instructor.model || 'unknown';
             let healthHtml = '<p style="color:#888;">Loading health...</p>';
             showModal('SETTINGS', `
-                <p><b style="color:var(--neon-orange);">Active model:</b> ${escapeHtml(modelName)}</p>
+                <p><b style="color:var(--neon-orange);">Active instructor:</b> ${escapeHtml(instName)}</p>
+                <p><b style="color:var(--neon-orange);">Active model:</b> ${escapeHtml(instModel)}</p>
                 <p><b style="color:var(--neon-orange);">Explorer path:</b> ${escapeHtml(currentPath || workspaceRoot || '(loading)')}</p>
                 <p><b style="color:var(--neon-orange);">Terminal:</b> ${ws && ws.readyState === WebSocket.OPEN ? 'connected' : 'disconnected'}</p>
                 <p><b style="color:var(--neon-orange);">Voice mode:</b> ${isVoiceModeEnabled ? 'on' : 'off'}</p>
                 <div id="settings-health">${healthHtml}</div>
                 <hr style="border:0;border-top:1px solid #222;margin:14px 0;">
-                <p style="color:#888;font-size:0.78rem;">Edit <code style="color:var(--neon-orange);">.env</code> for workspace + models, then restart <code style="color:var(--neon-orange);">./start.sh</code>. Sidebar: Code expands editor, Terminal expands shell, Git shows status.</p>
+                <p style="color:#888;font-size:0.78rem;">Edit <code style="color:var(--neon-orange);">.env</code> for workspace + per-being NVIDIA/Ollama models, then restart <code style="color:var(--neon-orange);">./start.sh</code>.</p>
             `);
             try {
                 const hres = await fetch(`${API_BASE}/health`);
@@ -1967,11 +1981,16 @@
                 const el = document.getElementById('settings-health');
                 if (!el) return;
                 const beings = h.beings || {};
+                const activeFromHealth = (h.instructors && h.instructors[instructorKey]) || {};
+                const activeLine = activeFromHealth.label || instModel;
                 el.innerHTML = `
+                    <p><b style="color:var(--neon-orange);">Active wiring:</b> ${escapeHtml(activeLine)}</p>
                     <p><b style="color:var(--neon-orange);">Workspace:</b> ${escapeHtml(h.workspace || '')}</p>
-                    <p><b style="color:var(--neon-orange);">Chat model:</b> ${escapeHtml((h.models && h.models.general) || '')}</p>
-                    <p><b style="color:var(--neon-orange);">Code model:</b> ${escapeHtml((h.models && h.models.coder) || '')}</p>
-                    <p style="color:#666;font-size:0.75rem;">Family/Nemo chat → ${escapeHtml(beings.family_chat || '')} · tools → ${escapeHtml(beings.being_agent_tools || '')}</p>`;
+                    <p><b style="color:var(--neon-orange);">Ollama general:</b> ${escapeHtml((h.models && h.models.general) || '')}</p>
+                    <p><b style="color:var(--neon-orange);">Ollama coder:</b> ${escapeHtml((h.models && h.models.coder) || '')}</p>
+                    <p style="color:#888;font-size:10px;margin-top:8px;"><b style="color:var(--neon-orange);">Per-instructor models</b></p>
+                    ${renderInstructorWiringTable(h.instructors)}
+                    <p style="color:#666;font-size:0.75rem;margin-top:10px;">Nemo partner → ${escapeHtml(beings.nemo_partner || '')}<br>Kimi → ${escapeHtml(beings.kimi_chat || '')}<br>Agent tools → ${escapeHtml(beings.being_agent_tools || '')}</p>`;
             } catch (e) {
                 const el = document.getElementById('settings-health');
                 if (el) el.innerHTML = `<p style="color:#ff6b6b;">Could not load /api/health</p>`;
@@ -2500,18 +2519,36 @@
                 },
                 'nemo': {
                     name: 'Nemo',
-                    model: 'sovereign partner (Christman pipeline)',
+                    model: 'nvidia/nemotron-3-ultra-550b-a55b (NVIDIA NIM)',
                     endpoint: '/api/nemo',
                     color: '#40E0D0',
                     voice: 'Fred',
-                    ttsBeing: 'brockston',
-                    description: 'Everett\'s partner — watching the IDE live through the viewer WebSocket'
+                    ttsBeing: 'nemo',
+                    description: 'Everett\'s partner — Nemotron 3 Ultra on NVIDIA, or local Ollama fallback'
                 }
             },
 
             currentInstructor: 'kimi',
 
-            setInstructor: function(instructorKey) {
+            syncFromHealth: async function() {
+                try {
+                    const h = await fetch(`${API_BASE}/health`).then(r => r.json());
+                    const map = h.instructors || {};
+                    for (const key of Object.keys(this.instructors)) {
+                        const live = map[key];
+                        if (live && live.label) {
+                            this.instructors[key].model = live.label;
+                            this.instructors[key].backend = live.backend;
+                        }
+                    }
+                    this.setInstructor(this.currentInstructor, { announce: false });
+                } catch (e) {
+                    console.warn('[MODEL_ORCHESTRATOR] health sync failed', e);
+                }
+            },
+
+            setInstructor: function(instructorKey, opts = {}) {
+                const announce = opts.announce !== false;
                 const instructor = this.instructors[instructorKey] || this.instructors['family'];
                 this.currentInstructor = instructorKey;
                 
@@ -2560,8 +2597,9 @@
                     endpoint: instructor.endpoint
                 });
                 
-                // Announce
-                appendMessage('SYSTEM', `Switched to ${instructor.name} — ${instructor.model}. ${instructor.description}`, 'system');
+                if (announce) {
+                    appendMessage('SYSTEM', `Switched to ${instructor.name} — ${instructor.model}. ${instructor.description}`, 'system');
+                }
 
                 // Update mode switcher visibility for Kimi / Nemo
                 renderModeSwitcher();
@@ -2584,8 +2622,10 @@
             }
         };
 
-        // Initialize orchestrator — Kimi Code Lab is the primary compute operator
-        MODEL_ORCHESTRATOR.setInstructor('kimi');
+        // Initialize orchestrator — sync live model labels from /api/health, then apply instructor
+        MODEL_ORCHESTRATOR.syncFromHealth().finally(() => {
+            MODEL_ORCHESTRATOR.setInstructor(MODEL_ORCHESTRATOR.currentInstructor || 'kimi');
+        });
         renderModeSwitcher();
 
         // Wrap existing event handlers to also broadcast to viewer
