@@ -103,6 +103,20 @@ class ProjectReviewRequest(BaseModel):
 @app.get("/api/health")
 async def health_check():
     from backend.being_agent import AGENT_MODEL
+    from backend.kimi_service import NVIDIA_KIMI_MODEL, NVIDIA_API_KEY as _KIMI_NV_KEY
+
+    nemo_wiring = (
+        _nemo_svc.wiring_info("partner") if _nemo_svc else {"backend": "offline", "label": "unavailable"}
+    )
+    nemo_code_wiring = (
+        _nemo_svc.wiring_info("code") if _nemo_svc else nemo_wiring
+    )
+    kimi_label = (
+        f"{NVIDIA_KIMI_MODEL} (NVIDIA NIM)"
+        if _kimi_svc and _KIMI_NV_KEY
+        else ("brockston-kimi-proxy" if _kimi_svc else "unavailable")
+    )
+
     return {
         "status": "10 Toes Down",
         "system": "Online",
@@ -113,12 +127,40 @@ async def health_check():
             "coder": LLM_MODEL_CODER,
             "being_agent": AGENT_MODEL,
             "ultimateev": LLM_MODEL_CODER,
-            "kimi": "moonshotai/kimi-k2.6 (NVIDIA)",
+            "kimi": kimi_label,
+            "nemo": nemo_wiring.get("label", LLM_MODEL_GENERAL),
+        },
+        "instructors": {
+            "family": {
+                "name": "Brockston Family",
+                "backend": "ollama",
+                "model": LLM_MODEL_GENERAL,
+                "label": f"{LLM_MODEL_GENERAL} (local Ollama)",
+            },
+            "kimi": {
+                "name": "Kimi K2.6",
+                "backend": "nvidia" if _KIMI_NV_KEY else "proxy",
+                "model": NVIDIA_KIMI_MODEL if _KIMI_NV_KEY else "brockston-kimi-proxy",
+                "label": kimi_label,
+            },
+            "nemo": {
+                "name": "Nemo",
+                "backend": nemo_wiring.get("backend", "ollama"),
+                "model": nemo_wiring.get("model", LLM_MODEL_GENERAL),
+                "label": nemo_wiring.get("label", LLM_MODEL_GENERAL),
+            },
+            "claude": {
+                "name": "Claude",
+                "backend": "anthropic",
+                "model": "claude-sonnet-4",
+                "label": "claude-sonnet-4 (Anthropic API)",
+            },
         },
         "beings": {
             "family_chat": LLM_MODEL_GENERAL,
-            "nemo_partner": LLM_MODEL_GENERAL,
-            "nemo_code": LLM_MODEL_CODER,
+            "nemo_partner": nemo_wiring.get("label", LLM_MODEL_GENERAL),
+            "nemo_code": nemo_code_wiring.get("label", LLM_MODEL_CODER),
+            "kimi_chat": kimi_label,
             "being_agent_tools": AGENT_MODEL,
         },
         "features": {
@@ -478,10 +520,13 @@ async def nemo_endpoint(request: NemoRequest):
             text = result.get("text", "")
             tool_count = result.get("tool_count", 0)
             prefix = f"[NEMO — {tool_count} tool(s) executed on disk]: " if tool_count else "[NEMO]: "
+            wiring = _nemo_svc.wiring_info(mode)
             return {
                 "response": f"{prefix}{text}",
                 "source": "nemo",
                 "mode": mode,
+                "model": wiring.get("model"),
+                "wiring": wiring,
                 "tools_executed": result.get("tools_executed", []),
                 "tool_count": tool_count,
                 "agent": True,
@@ -494,7 +539,15 @@ async def nemo_endpoint(request: NemoRequest):
                 request.message, mode=mode, context=full_context
             ),
         )
-        return {"response": f"[NEMO]: {reply}", "source": "nemo", "mode": mode, "agent": False}
+        wiring = _nemo_svc.wiring_info(mode)
+        return {
+            "response": f"[NEMO]: {reply}",
+            "source": "nemo",
+            "mode": mode,
+            "model": wiring.get("model"),
+            "wiring": wiring,
+            "agent": False,
+        }
     except Exception as e:
         logger.error(f"Nemo error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))

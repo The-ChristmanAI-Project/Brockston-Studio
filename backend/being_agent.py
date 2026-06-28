@@ -770,7 +770,7 @@ async def run_nemo_agent(
                 prompt,
                 mode=mode,
                 context=None,
-                model=AGENT_MODEL,
+                model=None if getattr(nemo_svc, "uses_nvidia", False) else AGENT_MODEL,
             ),
         )
 
