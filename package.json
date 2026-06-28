@@ -8,16 +8,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/EverettNC/Brockston-Studio.git"
+    "url": "git+https://github.com/The-ChristmanAI-Project/Brockston-Studio.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/EverettNC/Brockston-Studio/issues"
+    "url": "https://github.com/The-ChristmanAI-Project/Brockston-Studio/issues"
   },
-  "homepage": "https://github.com/EverettNC/Brockston-Studio#readme",
+  "homepage": "https://github.com/The-ChristmanAI-Project/Brockston-Studio#readme",
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
