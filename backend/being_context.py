@@ -208,6 +208,23 @@ _OPEN_FILE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_PROJECT_ROOT_RE = re.compile(
+    r"\[(?:PROJECT ROOT|EXPLORER PATH):\s*([^\]]+)\]",
+    re.IGNORECASE,
+)
+
+CARDINAL_PROJECT_REVIEW_PROMPT = """=== WHOLE-PROJECT REVIEW (CARDINAL RULES) ===
+You are performing a full project review — not a single-file glance.
+
+Evaluate against:
+  RULE 1 — It actually works (no stubs, no fake success)
+  RULE 6 — Fail loud (no silent except/pass)
+  RULE 12 — No secrets in source (.env only)
+  RULE 13 — Absolute honesty in docs and behavior
+
+Use ls + read + run to explore the whole tree before judging.
+Never say "open another file" — you can read any path with tools."""
+
 
 def extract_open_file_path(text: str) -> Optional[str]:
     """Pull the active editor path from frontend chat payloads."""
@@ -217,17 +234,27 @@ def extract_open_file_path(text: str) -> Optional[str]:
     return match.group(1).strip() if match else None
 
 
+def extract_project_root_path(text: str) -> Optional[str]:
+    """Pull explorer/project root from chat payloads."""
+    if not text:
+        return None
+    match = _PROJECT_ROOT_RE.search(text)
+    return match.group(1).strip() if match else None
+
+
 async def build_being_context(
     *,
     message: str = "",
     extra_context: Optional[str] = None,
     open_file_path: Optional[str] = None,
+    project_path: Optional[str] = None,
     include_workspace: bool = True,
     read_open_file: bool = True,
     max_file_kb: int = 200,
     compact: bool = False,
     ollama_route: bool = False,
     for_kimi: bool = False,
+    for_review: bool = False,
 ) -> str:
     """Build workspace + file + abilities context for spotlight beings.
 
@@ -255,7 +282,7 @@ async def build_being_context(
                 )
             read_open_file = False
 
-    if ollama_route:
+    if ollama_route and not for_review:
         try:
             from backend.being_eyes import WORKSPACE_ROOT
             parts.append(f"Workspace: {WORKSPACE_ROOT}")
@@ -335,6 +362,12 @@ async def build_being_context(
         workspace_str = str(WORKSPACE_ROOT)
     except Exception:
         pass
+
+    review_root = project_path or extract_project_root_path(message) or workspace_str
+    if for_review:
+        parts.insert(0, CARDINAL_PROJECT_REVIEW_PROMPT)
+        parts.append(build_project_scan_guide(review_root))
+        parts.append(BROCKSTON_STUDIO_LAYOUT)
 
     if for_kimi:
         parts.insert(0, IDE_SOVEREIGNTY)

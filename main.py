@@ -93,6 +93,12 @@ class KimiRequest(BaseModel):
 class NemoRequest(BaseModel):
     message: str
     mode: str = "partner"
+    context: str | None = None
+
+class ProjectReviewRequest(BaseModel):
+    path: str | None = None
+    message: str | None = None
+    instructor: str = "family"  # family | kimi | nemo | claude
 
 @app.get("/api/health")
 async def health_check():
@@ -128,6 +134,102 @@ async def sound_status():
         logger.error(f"Sound status error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))
 
+async def _resolve_review_path(raw: str | None) -> str:
+    """Resolve project path for review — explorer path or workspace default."""
+    if raw and raw.strip():
+        return str(_resolve_user_path(raw.strip(), WORKSPACE_ROOT))
+    return str(WORKSPACE_ROOT)
+
+
+async def _run_project_review(
+    *,
+    project_path: str,
+    user_message: str,
+    instructor: str = "family",
+) -> dict:
+    from backend.being_agent import (
+        PROJECT_REVIEW_TASK,
+        review_agent_max_steps,
+        run_being_agent,
+        run_kimi_agent,
+        run_nemo_agent,
+    )
+    from backend.being_context import build_being_context
+
+    task = (
+        f"{PROJECT_REVIEW_TASK}\n\n[PROJECT ROOT: {project_path}]\n\n"
+        f"{user_message or 'Review this entire project.'}"
+    )
+    full_context = await build_being_context(
+        message=task,
+        project_path=project_path,
+        compact=False,
+        ollama_route=False,
+        for_review=True,
+        read_open_file=False,
+    )
+    max_steps = review_agent_max_steps()
+    instructor = (instructor or "family").lower()
+
+    if instructor == "kimi":
+        if not _kimi_svc:
+            raise fastapi.HTTPException(status_code=503, detail="Kimi not available")
+        result = await run_kimi_agent(
+            _kimi_svc,
+            message=task,
+            context=full_context,
+            mode="codelab",
+            max_steps=max_steps,
+        )
+        prefix = "KIMI REVIEW"
+    elif instructor == "nemo":
+        if not _nemo_svc:
+            raise fastapi.HTTPException(status_code=503, detail="Nemo not available")
+        result = await run_nemo_agent(
+            _nemo_svc,
+            message=task,
+            context=full_context,
+            mode="code",
+            max_steps=max_steps,
+        )
+        prefix = "NEMO REVIEW"
+    else:
+        result = await run_being_agent(
+            message=task,
+            context=full_context,
+            max_steps=max_steps,
+        )
+        prefix = "PROJECT REVIEW"
+
+    tool_count = result.get("tool_count", 0)
+    return {
+        "response": f"[{prefix} — {tool_count} tool(s) on {project_path}]: {result.get('text', '')}",
+        "project_path": project_path,
+        "tool_count": tool_count,
+        "tools_executed": result.get("tools_executed", []),
+        "agent": True,
+        "review": True,
+    }
+
+
+@app.post("/api/review/project")
+async def review_project_endpoint(request: ProjectReviewRequest):
+    """Scan and review the whole project at path (explorer folder or workspace root)."""
+    project_path = await _resolve_review_path(request.path)
+    logger.info("Project review: %s (instructor=%s)", project_path, request.instructor)
+    try:
+        return await _run_project_review(
+            project_path=project_path,
+            user_message=request.message or "",
+            instructor=request.instructor,
+        )
+    except fastapi.HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Project review error: %s", e)
+        raise fastapi.HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     """Christman Family — Brockston (and whole family) via local pipeline.
@@ -137,15 +239,21 @@ async def chat_endpoint(request: ChatRequest):
     if not get_ai_response:
         raise fastapi.HTTPException(status_code=503, detail="AI client not available")
     try:
-        from backend.being_agent import run_being_agent
-        from backend.being_context import build_being_context
+        from backend.being_agent import run_being_agent, wants_project_review, review_agent_max_steps
+        from backend.being_context import build_being_context, extract_project_root_path
+
+        is_review = wants_project_review(request.message)
+        project_path = extract_project_root_path(request.message)
 
         # Build rich context so beings see the full workspace + abilities for compute
         full_context = await build_being_context(
             message=request.message,
             extra_context=request.context,
-            compact=True,
-            ollama_route=True,
+            project_path=project_path,
+            compact=not is_review,
+            ollama_route=not is_review,
+            for_review=is_review,
+            read_open_file=not is_review,
         )
 
         # Special reduced-lag demo path so beings can quickly demonstrate abilities
@@ -163,6 +271,7 @@ async def chat_endpoint(request: ChatRequest):
             result = await run_being_agent(
                 message=request.message,
                 context=full_context,
+                max_steps=review_agent_max_steps() if is_review else None,
             )
             text = result.get("text", "")
             tool_count = result.get("tool_count", 0)
@@ -217,18 +326,31 @@ async def kimi_endpoint(request: KimiRequest):
     try:
         mode = request.mode if request.mode in ("tutor", "codelab", "learning", "coach") else "tutor"
 
-        from backend.being_agent import run_kimi_agent, wants_agent_tools
-        from backend.being_context import build_being_context
+        from backend.being_agent import (
+            run_kimi_agent,
+            wants_agent_tools,
+            wants_project_review,
+            review_agent_max_steps,
+        )
+        from backend.being_context import build_being_context, extract_project_root_path
         from backend.kimi_service import KimiRateLimitError
+
+        is_review = wants_project_review(request.message)
+        project_path = extract_project_root_path(request.message)
 
         full_context = await build_being_context(
             message=request.message,
             extra_context=request.context,
-            compact=True,
+            project_path=project_path,
+            compact=not is_review,
             for_kimi=True,
+            for_review=is_review,
+            read_open_file=not is_review,
         )
 
         agent_mode = mode if mode in ("tutor", "codelab", "learning", "coach") else "tutor"
+        if is_review:
+            agent_mode = "codelab"
         loop = asyncio.get_event_loop()
 
         if wants_agent_tools(request.message, agent_mode):
@@ -237,8 +359,8 @@ async def kimi_endpoint(request: KimiRequest):
                 message=request.message,
                 context=full_context,
                 mode=agent_mode,
+                max_steps=review_agent_max_steps() if is_review else 6,
                 domain=request.domain,
-                max_steps=6,
             )
             from backend.being_agent import strip_tool_blocks, _is_tool_leak, _fallback_summary_from_tools
 
@@ -305,12 +427,27 @@ async def nemo_endpoint(request: NemoRequest):
     try:
         mode = request.mode if request.mode in ("partner", "code") else "partner"
 
-        from backend.being_agent import run_nemo_agent, wants_agent_tools
-        from backend.being_context import build_being_context
+        from backend.being_agent import (
+            run_nemo_agent,
+            wants_agent_tools,
+            wants_project_review,
+            review_agent_max_steps,
+        )
+        from backend.being_context import build_being_context, extract_project_root_path
+
+        is_review = wants_project_review(request.message)
+        project_path = extract_project_root_path(request.message)
+        if is_review:
+            mode = "code"
 
         full_context = await build_being_context(
             message=request.message,
-            ollama_route=True,
+            extra_context=request.context,
+            project_path=project_path,
+            compact=not is_review,
+            ollama_route=not is_review,
+            for_review=is_review,
+            read_open_file=not is_review,
         )
 
         if wants_agent_tools(request.message, mode):
@@ -319,6 +456,7 @@ async def nemo_endpoint(request: NemoRequest):
                 message=request.message,
                 context=full_context,
                 mode=mode,
+                max_steps=review_agent_max_steps() if is_review else 6,
             )
             text = result.get("text", "")
             tool_count = result.get("tool_count", 0)
