@@ -2,7 +2,7 @@
 Nemo — Sovereign Partner & Live IDE Companion
 ==============================================
 Nemo is the being — not "Nemotron" as a product name, but he routes through
-NVIDIA Nemotron 3 Ultra on integrate.api.nvidia.com when NVIDIA_API_KEY is set.
+NVIDIA Nemotron 3 Ultra on integrate.api.nvidia.com when NVIDIA_NEMO_API_KEY is set.
 
 Falls back to local Ollama (LLM_MODEL_GENERAL / LLM_MODEL_CODER) when NVIDIA
 is unavailable — sovereign stack, no OpenRouter required.
@@ -19,13 +19,16 @@ from typing import Any, Dict, Optional
 import httpx
 
 from .ai_client import get_ai_response
+from .nvidia_keys import nemo_nvidia_key
 
 logger = logging.getLogger(__name__)
 
 LLM_MODEL_GENERAL = os.getenv("LLM_MODEL_GENERAL", "llama3.2")
 LLM_MODEL_CODER = os.getenv("LLM_MODEL_CODER", "qwen2.5-coder:32b")
 
-NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "").strip()
+
+def _nemo_key() -> str:
+    return nemo_nvidia_key()
 NVIDIA_CHAT_URL = os.getenv(
     "NVIDIA_CHAT_URL",
     "https://integrate.api.nvidia.com/v1/chat/completions",
@@ -94,7 +97,7 @@ class NemoService:
     """Nemo's direct line — NVIDIA Nemotron when keyed, else local Ollama."""
 
     def __init__(self):
-        if NVIDIA_API_KEY:
+        if _nemo_key():
             logger.info(
                 "[NemoService] Nemo online — NVIDIA %s (thinking enabled)",
                 NVIDIA_NEMO_MODEL,
@@ -112,7 +115,11 @@ class NemoService:
 
     @property
     def uses_nvidia(self) -> bool:
-        return bool(NVIDIA_API_KEY)
+        return bool(_nemo_key())
+
+    @property
+    def api_key_configured(self) -> bool:
+        return bool(_nemo_key())
 
     def wiring_info(self, mode: str = "partner") -> Dict[str, Any]:
         """Report which backend/model Nemo is actually using."""
@@ -171,8 +178,8 @@ class NemoService:
         return payload
 
     def _call_nvidia(self, *, system: str, user_content: str) -> str:
-        if not NVIDIA_API_KEY:
-            raise RuntimeError("NVIDIA_API_KEY not set")
+        if not _nemo_key():
+            raise RuntimeError("NVIDIA_NEMO_API_KEY not set")
 
         messages = [
             {"role": "system", "content": system},
@@ -180,7 +187,7 @@ class NemoService:
         ]
         payload = self._nvidia_payload(messages)
         headers = {
-            "Authorization": f"Bearer {NVIDIA_API_KEY}",
+            "Authorization": f"Bearer {_nemo_key()}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }

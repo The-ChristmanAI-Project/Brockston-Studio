@@ -73,7 +73,7 @@ try:
     _kimi_svc = get_kimi_service()
     if not _kimi_svc.is_available:
         _kimi_svc = None
-        logger.warning("Kimi linked but not available (NVIDIA_API_KEY or BROCKSTON :9003)")
+        logger.warning("Kimi linked but not available (NVIDIA_KIMI_API_KEY or BROCKSTON :9003)")
     else:
         logger.info("Kimi K2.6 linked — learning tutor available at /api/kimi")
 except Exception as e:
@@ -103,7 +103,11 @@ class ProjectReviewRequest(BaseModel):
 @app.get("/api/health")
 async def health_check():
     from backend.being_agent import AGENT_MODEL
-    from backend.kimi_service import NVIDIA_KIMI_MODEL, NVIDIA_API_KEY as _KIMI_NV_KEY
+    from backend.kimi_service import NVIDIA_KIMI_MODEL
+    from backend.nvidia_keys import kimi_nvidia_key, nemo_nvidia_key
+
+    _KIMI_NV_KEY = kimi_nvidia_key()
+    _NEMO_NV_KEY = nemo_nvidia_key()
 
     nemo_wiring = (
         _nemo_svc.wiring_info("partner") if _nemo_svc else {"backend": "offline", "label": "unavailable"}
@@ -136,24 +140,32 @@ async def health_check():
                 "backend": "ollama",
                 "model": LLM_MODEL_GENERAL,
                 "label": f"{LLM_MODEL_GENERAL} (local Ollama)",
+                "api_key_env": "OLLAMA (local)",
+                "api_key_set": True,
             },
             "kimi": {
                 "name": "Kimi K2.6",
                 "backend": "nvidia" if _KIMI_NV_KEY else "proxy",
                 "model": NVIDIA_KIMI_MODEL if _KIMI_NV_KEY else "brockston-kimi-proxy",
                 "label": kimi_label,
+                "api_key_env": "NVIDIA_KIMI_API_KEY",
+                "api_key_set": bool(_KIMI_NV_KEY),
             },
             "nemo": {
                 "name": "Nemo",
                 "backend": nemo_wiring.get("backend", "ollama"),
                 "model": nemo_wiring.get("model", LLM_MODEL_GENERAL),
                 "label": nemo_wiring.get("label", LLM_MODEL_GENERAL),
+                "api_key_env": "NVIDIA_NEMO_API_KEY",
+                "api_key_set": bool(_NEMO_NV_KEY),
             },
             "claude": {
                 "name": "Claude",
                 "backend": "anthropic",
                 "model": "claude-sonnet-4",
                 "label": "claude-sonnet-4 (Anthropic API)",
+                "api_key_env": "ANTHROPIC_API_KEY",
+                "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY", "").strip()),
             },
         },
         "beings": {
@@ -378,7 +390,7 @@ async def kimi_endpoint(request: KimiRequest):
     if not _kimi_svc:
         raise fastapi.HTTPException(
             status_code=503,
-            detail="Kimi not available — set NVIDIA_API_KEY in .env (optional; Nemo uses local Ollama)",
+            detail="Kimi not available — set NVIDIA_KIMI_API_KEY in .env (optional)",
         )
     try:
         mode = request.mode if request.mode in ("tutor", "codelab", "learning", "coach") else "tutor"
