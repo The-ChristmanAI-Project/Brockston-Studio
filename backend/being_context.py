@@ -179,28 +179,27 @@ def _discover_mcp_catalog() -> str:
 
 
 def build_project_scan_guide(workspace: str) -> str:
-    """Tell Kimi exactly how to explore the workspace with tool_call blocks."""
-    return f"""=== HOW TO SCAN THE ENTIRE PROJECT ===
-Workspace root: {workspace}
+    """Tell beings how to explore ONE project tree — all paths stay inside workspace."""
+    return f"""=== HOW TO SCAN THE ENTIRE PROJECT (BOUNDARY ENFORCED) ===
+Project root ONLY: {workspace}
 
-1. ORIENT — list top-level + one level deep:
+BOUNDARY: Every ls/read/patch/write/run path MUST be inside {workspace}.
+Do NOT read Brockston-Studio, ~/.grok/skills, or any path outside this project.
+
+1. ORIENT — list top-level + one level deep (depth max 2):
 <tool_call>{{"tool":"ls","path":"{workspace}","depth":2}}</tool_call>
 
-2. DRILL — ls key dirs before reading:
-   backend/, frontend/, scripts/, christman_sound/
+2. DRILL — ls subdirs you discover under {workspace} (backend/, client/, etc.):
 <tool_call>{{"tool":"ls","path":"{workspace}/backend","depth":1}}</tool_call>
 
-3. READ — pull any file by absolute path (scroll if truncated):
-<tool_call>{{"tool":"read","path":"{workspace}/backend/being_agent.py","offset_lines":1,"limit_lines":500}}</tool_call>
+3. READ — files under {workspace} only (scroll if truncated):
+<tool_call>{{"tool":"read","path":"{workspace}/README.md","offset_lines":1,"limit_lines":500}}</tool_call>
 If has_more:true → read again with offset_lines=next_offset_lines until has_more:false.
 
-4. SEARCH — rg/grep via run:
-<tool_call>{{"tool":"run","command":"rg -l 'pattern' backend/","cwd":"{workspace}"}}</tool_call>
+4. SEARCH — rg/grep with cwd locked to project root:
+<tool_call>{{"tool":"run","command":"rg -l 'TODO|FIXME|api_key|password' .","cwd":"{workspace}"}}</tool_call>
 
-5. SKILLS — read SKILL.md before specialized work (if present on this machine):
-<tool_call>{{"tool":"read","path":"{Path.home()}/.grok/skills/tcap-master/SKILL.md"}}</tool_call>
-
-Never ask Everett for paths you can discover with ls + run."""
+Never ask Everett for paths you can discover with ls + run inside {workspace}."""
 
 
 _OPEN_FILE_RE = re.compile(
@@ -223,7 +222,8 @@ Evaluate against:
   RULE 13 — Absolute honesty in docs and behavior
 
 Use ls + read + run to explore the whole tree before judging.
-Never say "open another file" — you can read any path with tools."""
+Stay INSIDE [PROJECT ROOT] only — tools outside the project boundary are rejected.
+Final answer: plain English only. No tool_call markup, no <|tool_call|> tokens."""
 
 
 def extract_open_file_path(text: str) -> Optional[str]:
