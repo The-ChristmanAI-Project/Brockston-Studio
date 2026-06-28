@@ -680,29 +680,29 @@
 
     <div id="app-container">
         <div id="sidebar">
-            <div class="icon-btn active" id="btn-code" title="Code Editor">
+            <div class="icon-btn active" id="btn-code" role="button" tabindex="0" title="Code Editor — expand editor">
                 <i class="fas fa-code"></i>
                 <span class="tooltip">Code Editor</span>
             </div>
-            <div class="icon-btn" id="btn-terminal" title="Terminal">
+            <div class="icon-btn" id="btn-terminal" role="button" tabindex="0" title="Terminal — expand shell">
                 <i class="fas fa-terminal"></i>
                 <span class="tooltip">Terminal</span>
             </div>
-            <div class="icon-btn" id="btn-git" title="Git">
+            <div class="icon-btn" id="btn-git" role="button" tabindex="0" title="Git — status + log">
                 <i class="fab fa-git-alt"></i>
-                <span class="tooltip">Git</span>
+                <span class="tooltip">Git Status</span>
             </div>
 
             <div class="sidebar-bottom">
-                <div class="icon-btn" id="btn-music" title="Background Music">
+                <div class="icon-btn" id="btn-music" role="button" tabindex="0" title="Focus music (double-click for library)">
                     <i class="fas fa-music"></i>
                     <span class="tooltip">Focus Music</span>
                 </div>
-                <div class="icon-btn" id="btn-voice" title="Voice Mode">
+                <div class="icon-btn" id="btn-voice" role="button" tabindex="0" title="Read aloud AI replies">
                     <i class="fas fa-volume-up"></i>
                     <span class="tooltip">Voice Mode (Off)</span>
                 </div>
-                <div class="icon-btn" id="btn-settings" title="Settings">
+                <div class="icon-btn" id="btn-settings" role="button" tabindex="0" title="Workspace and model settings">
                     <i class="fas fa-cog"></i>
                     <span class="tooltip">Settings</span>
                 </div>
@@ -826,13 +826,37 @@
             cursor: 'col-resize'
         });
 
-        Split(['#editor-wrapper', '#terminal-container'], {
+        const workspaceSplit = Split(['#editor-wrapper', '#terminal-container'], {
             direction: 'vertical',
             sizes: [65, 35],
-            minSize: [100, 100],
+            minSize: [80, 80],
             gutterSize: 4,
-            cursor: 'row-resize'
+            cursor: 'row-resize',
+            onDragEnd: () => {
+                try {
+                    if (typeof monacoEditor !== 'undefined' && monacoEditor) monacoEditor.layout();
+                    if (typeof fitTerminalAndNotify === 'function') fitTerminalAndNotify();
+                } catch (e) {}
+            }
         });
+
+        const WORKSPACE_LAYOUTS = {
+            code: [88, 12],
+            terminal: [12, 88],
+            git: [22, 78],
+            balanced: [65, 35],
+        };
+
+        function setWorkspaceView(mode) {
+            const sizes = WORKSPACE_LAYOUTS[mode] || WORKSPACE_LAYOUTS.balanced;
+            try { workspaceSplit.setSizes(sizes); } catch (e) {}
+            setTimeout(() => {
+                try {
+                    if (monacoEditor) monacoEditor.layout();
+                    if (typeof fitTerminalAndNotify === 'function') fitTerminalAndNotify();
+                } catch (e) {}
+            }, 90);
+        }
 
         const API_BASE = window.location.origin + "/api";
         const WS_URL = (window.location.protocol === 'https:' ? 'wss://' : 'ws://')
@@ -854,7 +878,8 @@
         const btnSettings = document.getElementById('btn-settings');
 
         let isMusicPlaying = false;
-        let isVoiceModeEnabled = true;
+        let isVoiceModeEnabled = false;
+        let bgMusicReady = false;
 
         // User music player for senior students' old school rock & Soul Train
         const userMusic = document.getElementById('user-music');
@@ -973,7 +998,7 @@
                         </div>
                         <div style="margin-bottom:12px;">
                             <button onclick="importAlbumFromFolder()" style="width:100%;padding:10px;background:#1a1a1a;border:2px solid var(--copper);color:#fff;border-radius:4px;cursor:pointer;font-size:13px;font-weight:700;box-shadow:0 0 8px var(--copper-glow);">🎵 Import My Album "53 Years in the Making" from Folder</button>
-                            <button onclick="addBrockstonTrack(); document.getElementById('music-lib-modal').remove();" style="width:100%;margin-top:6px;padding:8px;background:#2a2a1a;border:1px solid var(--copper);color:#fff;border-radius:4px;cursor:pointer;font-size:12px;">+ Add /Users/EverettN/Downloads/Brockston.mp3 (your track)</button>
+                            <button onclick="addBrockstonTrack(); document.getElementById('music-lib-modal').remove();" style="width:100%;margin-top:6px;padding:8px;background:#2a2a1a;border:1px solid var(--copper);color:#fff;border-radius:4px;cursor:pointer;font-size:12px;">+ Add Brockston.mp3 from Downloads</button>
                             <button onclick="playMyAlbum(); document.getElementById('music-lib-modal').remove();" style="width:100%;margin-top:6px;padding:8px;background:var(--copper);border:1px solid #fff;color:#000;border-radius:4px;cursor:pointer;font-size:12px;font-weight:700;">▶ Play Full Album Now (your player, clear as a bell)</button>
                             <div style="font-size:10px;color:#666;text-align:center;margin-top:4px;">Select the folder with your album MP3s – auto adds as playable tracks (like an Apple Music album import). Or add the specific Brockston.mp3 track.</div>
                         </div>
@@ -1044,7 +1069,7 @@
             let albumTracks = musicLibrary.filter(e => e.album === albumName);
             if (albumTracks.length === 0) {
                 // Auto-add the known Brockston track if not present (your local file)
-                const defaultPath = "/Users/EverettN/Downloads/Brockston.mp3";
+                const defaultPath = "~/Downloads/Brockston.mp3";
                 if (!musicLibrary.some(e => e.source === defaultPath)) {
                     addToLibrary("Brockston (from 53 Years in the Making)", defaultPath, 'music', albumName);
                 }
@@ -1076,7 +1101,8 @@
         }
 
         function addBrockstonTrack() {
-            const path = "/Users/EverettN/Downloads/Brockston.mp3";
+            const path = prompt('Path to Brockston.mp3 (or any MP3):', '~/Downloads/Brockston.mp3');
+            if (!path) return;
             const title = "Brockston (from 53 Years in the Making)";
             addToLibrary(title, path, 'music', "53 Years in the Making");
             appendMessage('SYSTEM', `✅ Added ${title} to your Music & Voice Library (tagged to the album).`, 'system');
@@ -1211,27 +1237,44 @@
             ws.send(JSON.stringify({type: 'input', data: cmd}));
         }
 
+        bgMusic.addEventListener('canplaythrough', () => { bgMusicReady = true; });
+        bgMusic.addEventListener('error', () => {
+            bgMusicReady = false;
+            console.warn('[MUSIC] focus_music.mp3 failed to load');
+        });
+        bgMusic.load();
+
         // ----- Music toggle (smart: stops user music too, for the old school tracks)
-        btnMusic.addEventListener('click', () => {
+        btnMusic.addEventListener('click', async () => {
             if (userMusic && !userMusic.paused && currentMusicTrack) {
                 userMusic.pause();
                 const musicSeg = document.getElementById('sb-music');
                 if (musicSeg) musicSeg.style.display = 'none';
                 currentMusicTrack = null;
-                appendMessage('SYSTEM', '⏹️ Stopped user track', 'system');
+                appendMessage('SYSTEM', 'Stopped user track', 'system');
                 return;
             }
             if (isMusicPlaying) {
                 bgMusic.pause();
                 btnMusic.classList.remove('active');
                 btnMusic.querySelector('i').className = 'fas fa-music';
-            } else {
+                isMusicPlaying = false;
+                return;
+            }
+            if (!bgMusicReady) {
+                appendMessage('SYSTEM', 'Focus track missing — open Music Library (double-click the music icon) or click an MP3 in the explorer.', 'system');
+                showMusicLibrary();
+                return;
+            }
+            try {
                 bgMusic.volume = 0.2;
-                bgMusic.play().catch(e => console.log("Audio blocked:", e));
+                await bgMusic.play();
                 btnMusic.classList.add('active');
                 btnMusic.querySelector('i').className = 'fas fa-pause-circle';
+                isMusicPlaying = true;
+            } catch (e) {
+                appendMessage('SYSTEM', 'Playback blocked by browser — click again after interacting with the page, or use Music Library.', 'system');
             }
-            isMusicPlaying = !isMusicPlaying;
         });
 
         // Double-click the music icon to open the Music & Voice Library (MP3 voice files + Apple Music links)
@@ -1603,37 +1646,78 @@
 
         btnCode.addEventListener('click', () => {
             setActiveSidebar(btnCode);
+            setWorkspaceView('code');
             if (monacoEditor) monacoEditor.focus();
         });
 
         btnTerminal.addEventListener('click', () => {
             setActiveSidebar(btnTerminal);
+            setWorkspaceView('terminal');
             term.focus();
-            try { fitAddon.fit(); } catch (e) {}
+            try { fitAddon.fit(); fitTerminalAndNotify(); } catch (e) {}
         });
 
         btnGit.addEventListener('click', async () => {
             setActiveSidebar(btnGit);
-            // Run `git status --short && git branch --show-current` via the terminal websocket-free path:
-            // simpler to just type it in the terminal so the user sees it
+            setWorkspaceView('git');
+            const cwd = currentPath || workspaceRoot || '';
+            const gitCmd = 'git status --short && echo "--- branch ---" && git branch --show-current 2>/dev/null && echo "--- recent ---" && git log --oneline -8 2>/dev/null';
+            let bodyHtml = '<p style="color:#888;">Running git in <code>' + escapeHtml(cwd || '(workspace)') + '</code>...</p>';
+
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({type:'input', data: 'git status --short && echo "---" && git log --oneline -5 2>/dev/null\n'}));
+                ws.send(JSON.stringify({type: 'input', data: gitCmd + '\n'}));
                 term.focus();
-            } else {
-                showModal('GIT', '<p>Terminal not connected.</p>');
             }
+
+            try {
+                const res = await fetch(`${API_BASE}/eyes/run`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({command: gitCmd, cwd: cwd, timeout_sec: 20}),
+                });
+                const data = await res.json();
+                const out = [data.stdout, data.stderr].filter(Boolean).join('\n').trim();
+                const exit = data.exit_code != null ? data.exit_code : '?';
+                bodyHtml = `
+                    <p><b style="color:var(--neon-orange);">Directory:</b> ${escapeHtml(cwd || workspaceRoot || '(workspace)')}</p>
+                    <p><b style="color:var(--neon-orange);">Exit code:</b> ${escapeHtml(String(exit))}</p>
+                    <pre style="background:#0a0a0a;border:1px solid #222;padding:12px;border-radius:4px;max-height:320px;overflow:auto;font-size:11px;color:#ccc;white-space:pre-wrap;">${escapeHtml(out || '(no git output — not a repo?)')}</pre>
+                    <p style="color:#666;font-size:0.75rem;margin-top:10px;">Also echoed in the terminal below.</p>`;
+            } catch (err) {
+                bodyHtml = `<p style="color:#ff6b6b;">Git check failed: ${escapeHtml(err.message)}</p>
+                    <p style="color:#888;">${ws && ws.readyState === WebSocket.OPEN ? 'Command was sent to the terminal.' : 'Terminal not connected — restart ./start.sh'}</p>`;
+            }
+            showModal('GIT', bodyHtml);
         });
 
-        btnSettings.addEventListener('click', () => {
+        btnSettings.addEventListener('click', async () => {
             setActiveSidebar(btnSettings);
             const modelName = document.getElementById('sb-model-name')?.textContent || 'unknown';
+            let healthHtml = '<p style="color:#888;">Loading health...</p>';
             showModal('SETTINGS', `
                 <p><b style="color:var(--neon-orange);">Active model:</b> ${escapeHtml(modelName)}</p>
-                <p><b style="color:var(--neon-orange);">Workspace:</b> ${escapeHtml(workspaceRoot || '(not yet announced)')}</p>
+                <p><b style="color:var(--neon-orange);">Explorer path:</b> ${escapeHtml(currentPath || workspaceRoot || '(loading)')}</p>
                 <p><b style="color:var(--neon-orange);">Terminal:</b> ${ws && ws.readyState === WebSocket.OPEN ? 'connected' : 'disconnected'}</p>
+                <p><b style="color:var(--neon-orange);">Voice mode:</b> ${isVoiceModeEnabled ? 'on' : 'off'}</p>
+                <div id="settings-health">${healthHtml}</div>
                 <hr style="border:0;border-top:1px solid #222;margin:14px 0;">
-                <p style="color:#888;font-size:0.78rem;">For the kids (6-8k students/month): this board must stay simple, voice-friendly, and reliable. CDNs (Monaco, xterm, fonts) are used — when bundling for Ollama/Ami distribution, vendor the assets or ensure the provided internet reaches every classroom. Change models/ports in <code style="color:var(--neon-orange);">.env</code> + <code style="color:var(--neon-orange);">./start.sh</code>.</p>
+                <p style="color:#888;font-size:0.78rem;">Edit <code style="color:var(--neon-orange);">.env</code> for workspace + models, then restart <code style="color:var(--neon-orange);">./start.sh</code>. Sidebar: Code expands editor, Terminal expands shell, Git shows status.</p>
             `);
+            try {
+                const hres = await fetch(`${API_BASE}/health`);
+                const h = await hres.json();
+                const el = document.getElementById('settings-health');
+                if (!el) return;
+                const beings = h.beings || {};
+                el.innerHTML = `
+                    <p><b style="color:var(--neon-orange);">Workspace:</b> ${escapeHtml(h.workspace || '')}</p>
+                    <p><b style="color:var(--neon-orange);">Chat model:</b> ${escapeHtml((h.models && h.models.general) || '')}</p>
+                    <p><b style="color:var(--neon-orange);">Code model:</b> ${escapeHtml((h.models && h.models.coder) || '')}</p>
+                    <p style="color:#666;font-size:0.75rem;">Family/Nemo chat → ${escapeHtml(beings.family_chat || '')} · tools → ${escapeHtml(beings.being_agent_tools || '')}</p>`;
+            } catch (e) {
+                const el = document.getElementById('settings-health');
+                if (el) el.innerHTML = `<p style="color:#ff6b6b;">Could not load /api/health</p>`;
+            }
         });
 
         // ----- File explorer
