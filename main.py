@@ -121,6 +121,9 @@ async def health_check():
             "nemo_code": LLM_MODEL_CODER,
             "being_agent_tools": AGENT_MODEL,
         },
+        "features": {
+            "review_project": True,
+        },
     }
 
 
