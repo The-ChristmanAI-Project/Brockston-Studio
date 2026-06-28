@@ -17,7 +17,7 @@ One command after clone. Three services. Open the board.
 ## 2. Clone and launch
 
 ```bash
-git clone https://github.com/EverettNC/Brockston-Studio.git
+git clone https://github.com/The-ChristmanAI-Project/Brockston-Studio.git
 cd Brockston-Studio
 chmod +x start.sh
 ```

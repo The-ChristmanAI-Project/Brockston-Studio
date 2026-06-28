@@ -2,7 +2,7 @@
 
 **Accessible IDE and learning environment for neurodivergent students, clinicians, and caregivers.**
 
-Browser-based code editor with voice input, live terminal, multiple AI instructors, and local Ollama inference. Part of [The Christman AI Project](https://github.com/EverettNC/Brockston-Studio).
+Browser-based code editor with voice input, live terminal, multiple AI instructors, and local Ollama inference. Part of [The Christman AI Project](https://github.com/The-ChristmanAI-Project/Brockston-Studio).
 
 ---
 
@@ -11,7 +11,7 @@ Browser-based code editor with voice input, live terminal, multiple AI instructo
 **Prerequisites:** macOS or Linux · Python 3.10+ · Node 18+ · [Ollama](https://ollama.com)
 
 ```bash
-git clone https://github.com/EverettNC/Brockston-Studio.git
+git clone https://github.com/The-ChristmanAI-Project/Brockston-Studio.git
 cd Brockston-Studio
 chmod +x start.sh
 
