@@ -98,6 +98,26 @@ Never commit `.env` — it is gitignored.
 
 ---
 
+## Who can commit (repository rules)
+
+The org repo enforces [branch rules](https://github.com/The-ChristmanAI-Project/Brockston-Studio/rules/18230254). Only these actors may push commits:
+
+| Actor | How |
+|-------|-----|
+| **Everett** | Repo maintainer (owner) |
+| **Claude** | Claude GitHub App (`@claude`) |
+| **Grok** | Commits through Everett's authenticated session on his machine |
+
+Everyone else can fork and open PRs, but direct pushes are blocked.
+
+**Commit author email** must match:
+- `202372859+EverettNC@users.noreply.github.com` (Everett / Grok)
+- `*@anthropic.com` (Claude)
+
+Do not commit as other identities — GitHub will reject the push.
+
+---
+
 ## Project layout
 
 ```
