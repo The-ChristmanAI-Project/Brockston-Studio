@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # BROCKSTON Studio — Single-command launcher
-# Starts: UltimateEV (5174) → Brockston educator (9001) → IDE Board (5055)
+# Starts: UltimateEV (5174) → Brockston educator (9003) → IDE Board (5055)
 # Requires: Ollama running on 11434 with llama3.2 and qwen2.5-coder:32b pulled
 # Stops cleanly on Ctrl+C.
 # =============================================================================
@@ -19,7 +19,14 @@ BROCKSTON_LOG="$LOG_DIR/brockston.log"
 IDE_LOG="$LOG_DIR/ide.log"
 
 # ----- defaults (overridable via .env or shell) ------------------------------
+if [ ! -f .env ] && [ -f .env.example ]; then
+    cp .env.example .env
+    info "First run: created .env from .env.example"
+fi
 [ -f .env ] && set -a && source .env && set +a
+
+VENV_DIR="$ROOT/backend/venv"
+VENV_PYTHON="$VENV_DIR/bin/python"
 
 export LLM_MODEL_GENERAL="${LLM_MODEL_GENERAL:-llama3.2}"
 export LLM_MODEL_CODER="${LLM_MODEL_CODER:-qwen2.5-coder:32b}"
@@ -60,32 +67,63 @@ ok()    { echo "${C_GREEN}[ ok ]${C_RESET} $*"; }
 warn()  { echo "${C_YELLOW}[warn]${C_RESET} $*"; }
 fail()  { echo "${C_RED}[fail]${C_RESET} $*"; }
 
+# ----- Python virtualenv (not shipped in git — created on first run) ----------
+ensure_venv() {
+    if [ ! -x "$VENV_PYTHON" ]; then
+        warn "Creating Python virtualenv at backend/venv ..."
+        python3 -m venv "$VENV_DIR" || { fail "python3 -m venv failed"; exit 1; }
+        "$VENV_DIR/bin/pip" install --upgrade pip -q
+        "$VENV_DIR/bin/pip" install -r "$ROOT/requirements.txt" \
+            || { fail "pip install -r requirements.txt failed"; exit 1; }
+        ok "Virtualenv created and dependencies installed"
+    elif ! "$VENV_PYTHON" -c "import fastapi, uvicorn" >/dev/null 2>&1; then
+        warn "Installing Python dependencies into backend/venv ..."
+        "$VENV_DIR/bin/pip" install -r "$ROOT/requirements.txt" \
+            || { fail "pip install -r requirements.txt failed"; exit 1; }
+        ok "Dependencies installed"
+    else
+        ok "Python venv ready (backend/venv)"
+    fi
+}
+
 # ----- preflight -------------------------------------------------------------
 preflight() {
     info "Preflight..."
 
-    command -v python3 >/dev/null 2>&1 || { fail "python3 not installed"; exit 1; }
-    command -v node    >/dev/null 2>&1 || { fail "node not installed";    exit 1; }
+    command -v python3 >/dev/null 2>&1 || { fail "python3 not installed (need 3.10+)"; exit 1; }
+    command -v node    >/dev/null 2>&1 || { fail "node not installed (need 18+)"; exit 1; }
     command -v curl    >/dev/null 2>&1 || warn "curl missing — health checks limited"
 
-    # FastAPI/uvicorn check
-    if ! python3 -c "import fastapi, uvicorn" >/dev/null 2>&1; then
-        warn "fastapi/uvicorn not installed — running 'pip install -r requirements.txt'"
-        pip install -r requirements.txt || { fail "pip install failed"; exit 1; }
-    fi
+    ensure_venv
 
     # node_modules check
     if [ ! -d "$ROOT/node_modules/express" ]; then
         warn "node_modules/express missing — running 'npm install'"
         ( cd "$ROOT" && npm install ) || { fail "npm install failed"; exit 1; }
+    else
+        ok "Node dependencies ready"
     fi
+
+    # Ensure workspace folder exists
+    mkdir -p "$(eval echo "$BROCKSTON_WORKSPACE")" 2>/dev/null || true
 
     # Ollama reachable?
     if curl -fsS "$OLLAMA_BASE_URL/api/tags" >/dev/null 2>&1; then
         ok "Ollama reachable at $OLLAMA_BASE_URL"
+        local tags
+        tags="$(curl -fsS "$OLLAMA_BASE_URL/api/tags" 2>/dev/null || echo '{}')"
+        if ! echo "$tags" | grep -q "$LLM_MODEL_GENERAL"; then
+            warn "Model '$LLM_MODEL_GENERAL' not pulled — run: ollama pull $LLM_MODEL_GENERAL"
+        fi
+        if ! echo "$tags" | grep -q "$LLM_MODEL_CODER"; then
+            warn "Model '$LLM_MODEL_CODER' not pulled — run: ollama pull $LLM_MODEL_CODER"
+            warn "On low-RAM machines set LLM_MODEL_CODER=qwen2.5-coder:7b in .env"
+        fi
     else
-        warn "Ollama not reachable at $OLLAMA_BASE_URL — start it with 'ollama serve' in another terminal"
-        warn "Brockston and UltimateEV will start but won't answer until Ollama is up"
+        warn "Ollama not reachable at $OLLAMA_BASE_URL"
+        warn "Install from https://ollama.com then run: ollama serve"
+        warn "Pull models: ollama pull $LLM_MODEL_GENERAL && ollama pull $LLM_MODEL_CODER"
+        warn "IDE will start but beings won't answer until Ollama is up"
     fi
 
     ok "Preflight complete"
@@ -143,7 +181,7 @@ start_ultimateev() {
 start_brockston() {
     info "Starting Brockston educator backend (port $BROCKSTON_PORT)..."
     BROCKSTON_HOST="$BROCKSTON_HOST" BROCKSTON_PORT="$BROCKSTON_PORT" \
-        python3 -m uvicorn backend.launcher:app \
+        "$VENV_PYTHON" -m uvicorn backend.launcher:app \
             --host "$BROCKSTON_HOST" --port "$BROCKSTON_PORT" \
             >"$BROCKSTON_LOG" 2>&1 &
     PIDS+=($!)
@@ -152,7 +190,7 @@ start_brockston() {
 
 start_ide() {
     info "Starting IDE Board (port $IDE_PORT)..."
-    ./backend/venv/bin/python -m uvicorn main:app --host "$BROCKSTON_HOST" --port "$IDE_PORT" \
+    "$VENV_PYTHON" -m uvicorn main:app --host "$BROCKSTON_HOST" --port "$IDE_PORT" \
         >"$IDE_LOG" 2>&1 &
     PIDS+=($!)
     sleep 1

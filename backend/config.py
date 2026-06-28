@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 # Base directory of the project
-# This resolves to /Users/EverettN/Brockston-Studio
+# Resolves to this repo unless BROCKSTON_WORKSPACE is set in .env
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Server configuration
@@ -31,12 +31,10 @@ LLM_MODEL_GENERAL = os.getenv("LLM_MODEL_GENERAL", "llama3.2")
 # CODER for heavy code work, suggest, analysis (can be large/slow)
 LLM_MODEL_CODER = os.getenv("LLM_MODEL_CODER", "qwen2.5-coder:32b")
 
-# Workspace Settings
-# Pointing directly to the project root for v1
-BROCKSTON_WORKSPACE = str(BASE_DIR.resolve())
-
-# Final resolution check
-BROCKSTON_WORKSPACE = str(Path(BROCKSTON_WORKSPACE).expanduser().resolve())
+# Workspace Settings — single source of truth for beings + IDE file ops
+BROCKSTON_WORKSPACE = str(
+    Path(os.getenv("BROCKSTON_WORKSPACE", str(BASE_DIR.resolve()))).expanduser().resolve()
+)
 
 print(f"--- BROCKSTON CONFIG LOADED ---")
 print(f"Workspace: {BROCKSTON_WORKSPACE}")
