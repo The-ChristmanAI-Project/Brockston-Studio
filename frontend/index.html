@@ -1953,7 +1953,10 @@
             const rows = Object.entries(instructors).map(([key, info]) => {
                 const label = info.label || info.model || '—';
                 const backend = info.backend || '—';
-                return `<tr><td style="padding:3px 8px 3px 0;color:#888;">${escapeHtml(key)}</td><td style="padding:3px 0;color:#ccc;">${escapeHtml(label)}</td><td style="padding:3px 0 3px 8px;color:#666;font-size:10px;">${escapeHtml(backend)}</td></tr>`;
+                const keyNote = info.api_key_env
+                    ? (info.api_key_set ? `${info.api_key_env} ✓` : `${info.api_key_env} (missing)`)
+                    : '—';
+                return `<tr><td style="padding:3px 8px 3px 0;color:#888;">${escapeHtml(key)}</td><td style="padding:3px 0;color:#ccc;">${escapeHtml(label)}</td><td style="padding:3px 0 3px 8px;color:#666;font-size:10px;">${escapeHtml(backend)}<br><span style="color:${info.api_key_set ? '#6a6' : '#a66'}">${escapeHtml(keyNote)}</span></td></tr>`;
             }).join('');
             return `<table style="width:100%;font-size:11px;margin-top:6px;border-collapse:collapse;">${rows}</table>`;
         }

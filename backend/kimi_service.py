@@ -17,10 +17,12 @@ from typing import Any, Dict, Optional, Union
 import httpx
 
 from backend.being_context import KIMI_IDENTITY
+from backend.nvidia_keys import kimi_nvidia_key
 
 logger = logging.getLogger(__name__)
 
-NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "").strip()
+def _kimi_key() -> str:
+    return kimi_nvidia_key()
 NVIDIA_CHAT_URL = os.getenv(
     "NVIDIA_CHAT_URL",
     "https://integrate.api.nvidia.com/v1/chat/completions",
@@ -101,7 +103,11 @@ class KimiService:
 
     @property
     def is_available(self) -> bool:
-        return bool(NVIDIA_API_KEY) or self._brockston_kimi_reachable()
+        return bool(_kimi_key()) or self._brockston_kimi_reachable()
+
+    @property
+    def api_key_configured(self) -> bool:
+        return bool(_kimi_key())
 
     def _brockston_kimi_reachable(self) -> bool:
         try:
@@ -141,7 +147,7 @@ class KimiService:
             {"role": "user", "content": user_content},
         ]
 
-        if NVIDIA_API_KEY:
+        if _kimi_key():
             try:
                 text = self._call_nvidia(messages, thinking=thinking, max_tokens=max_tokens)
                 return {"ok": True, "text": text, "model": NVIDIA_KIMI_MODEL, "mode": mode}
@@ -169,7 +175,7 @@ class KimiService:
     @staticmethod
     def _nvidia_headers(*, stream: bool = False) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {NVIDIA_API_KEY}",
+            "Authorization": f"Bearer {_kimi_key()}",
             "Accept": "text/event-stream" if stream else "application/json",
             "Content-Type": "application/json",
         }
@@ -202,8 +208,8 @@ class KimiService:
         thinking: bool,
         max_tokens: int,
     ) -> str:
-        if not NVIDIA_API_KEY:
-            raise RuntimeError("NVIDIA_API_KEY not set")
+        if not _kimi_key():
+            raise RuntimeError("NVIDIA_KIMI_API_KEY not set")
 
         backoff = [0, 3, 8, 15]
         last_exc: Optional[Exception] = None
