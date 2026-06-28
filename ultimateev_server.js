@@ -16,7 +16,8 @@ import fetch from 'node-fetch';
 const app = express();
 const PORT = process.env.PORT || 5174;
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-const MODEL = process.env.OLLAMA_MODEL || 'qwen2.5-coder:32b';
+// Use CODER for code mechanic (heavy); set LLM_MODEL_CODER or OLLAMA_MODEL
+const MODEL = process.env.LLM_MODEL_CODER || process.env.OLLAMA_MODEL || 'qwen2.5-coder:32b';
 
 app.use(cors());
 app.use(express.json());
@@ -150,7 +151,7 @@ app.listen(PORT, () => {
     console.log('🎯 ================================');
     console.log(`🎯  Port: ${PORT}`);
     console.log(`🎯  Ollama: ${OLLAMA_URL}`);
-    console.log(`🎯  Model: ${MODEL}`);
+    console.log(`🎯  Model (CODER for code): ${MODEL}`);
     console.log('🎯  OpenAI: GONE');
     console.log('🎯  Sovereignty: RESTORED');
     console.log('🎯 ================================');

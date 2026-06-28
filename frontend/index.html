@@ -791,7 +791,7 @@
         <span class="seg" id="sb-file"><i class="fas fa-file-code"></i> <span id="sb-file-name">no file open</span></span>
         <span class="seg" id="sb-lang"><i class="fas fa-code"></i> <span id="sb-lang-name">plaintext</span></span>
         <span class="seg" id="sb-cursor"><i class="fas fa-crosshairs"></i> <span id="sb-cursor-pos">Ln 1, Col 1</span></span>
-        <span class="seg" id="sb-instructor"><i class="fas fa-user-graduate"></i> <span id="sb-inst-name">Family</span></span>
+        <span class="seg" id="sb-instructor"><i class="fas fa-user-graduate"></i> <span id="sb-inst-name" style="color:#76B900">Kimi K2.6</span></span>
         <span class="seg" id="sb-music" style="display:none;"><i class="fas fa-music"></i> <span id="sb-music-track">Now Playing</span></span>
         <span class="spacer"></span>
         <span class="seg" id="sb-term"><i class="fas fa-terminal"></i> <span id="sb-term-state">terminal connecting...</span></span>
@@ -860,11 +860,12 @@
         const userMusic = document.getElementById('user-music');
         let currentMusicTrack = null;
         let currentPath = '';
+        let activeExplorerFile = null;  // so active tab/code is visibly selected in finder
         let monacoEditor = null;
         let workspaceRoot = null;
         let lastSyncedCwd = null;
-        let selectedInstructor = 'family'; // 'family' | 'claude' | 'kimi' | 'nemo'
-        let instructorMode = { nemo: 'partner', kimi: 'tutor' }; // per-instructor mode toggle
+        let selectedInstructor = 'kimi'; // 'family' | 'claude' | 'kimi' | 'nemo'
+        let instructorMode = { nemo: 'partner', kimi: 'codelab' }; // per-instructor mode toggle
 
         // Music & Voice Library - supports local MP3 voice files + Apple Music style links
         let musicLibrary = JSON.parse(localStorage.getItem('christmanMusicLibrary') || '[]');
@@ -886,6 +887,19 @@
             saveMusicLibrary();
             appendMessage('SYSTEM', `📚 Added ${type}${album ? ' from ' + album : ''} to library: ${entry.title}`, 'system');
             if (document.getElementById('music-lib-modal')) showMusicLibrary();
+        }
+
+        function playFromLibraryById(id) {
+            const entry = musicLibrary.find(e => e.id === id);
+            if (entry) playFromLibrary(entry);
+        }
+
+        function removeFromLibrary(id) {
+            const idx = musicLibrary.findIndex(e => e.id === id);
+            if (idx >= 0) {
+                musicLibrary.splice(idx, 1);
+                saveMusicLibrary();
+            }
         }
 
         function playFromLibrary(entry) {
@@ -919,19 +933,19 @@
             if (musicLibrary.length === 0) {
                 listHtml = `<div style="color:#666;text-align:center;padding:30px;">No items yet. Add voice ref MP3s or Apple Music links below.<br>Or use the big button to import your "53 Years in the Making" album. Click audio files in explorer to auto-add/play.</div>`;
             } else {
-                musicLibrary.forEach((entry, idx) => {
+                musicLibrary.forEach((entry) => {
                     const icon = entry.type === 'voice' ? '🎤' : '🎵';
-                    const playBtn = entry.source.includes('music.apple.com') ? '' : `<button onclick="playFromLibrary(musicLibrary[${idx}])" style="font-size:10px;padding:2px 8px;background:#222;border:1px solid #444;color:#aaa;border-radius:3px;cursor:pointer;">Play</button>`;
+                    const playBtn = entry.source.includes('music.apple.com') ? '' : `<button onclick="playFromLibraryById(${entry.id})" style="font-size:10px;padding:2px 8px;background:#222;border:1px solid #444;color:#aaa;border-radius:3px;cursor:pointer;">Play</button>`;
                     const itemBorder = entry.type === 'voice' ? 'var(--tiffany-blue)' : 'var(--copper)';
                     listHtml += `
                         <div style="display:flex;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid #222; transition: all 0.1s;">
-                            <div class="lib-item" style="flex:1;cursor:pointer;" onclick="playFromLibrary(musicLibrary[${idx}])" data-type="${entry.type}">
+                            <div class="lib-item" style="flex:1;cursor:pointer;" onclick="playFromLibraryById(${entry.id})" data-type="${entry.type}">
                                 ${icon} <span style="color:#ddd;">${entry.title}</span>
                                 <span style="font-size:9px;color:#555;margin-left:6px;">(${entry.type})</span>
                             </div>
                             ${playBtn}
                             <button onclick="window.open('${entry.source}', '_blank')" style="font-size:10px;padding:2px 6px;background:#222;border:1px solid ${itemBorder};color:#aaa;border-radius:3px;cursor:pointer;">Link</button>
-                            <button onclick="musicLibrary.splice(${idx},1);saveMusicLibrary();showMusicLibrary();" style="font-size:10px;padding:2px 6px;background:#422;border:1px solid #644;color:#f99;border-radius:3px;cursor:pointer;">×</button>
+                            <button onclick="removeFromLibrary(${entry.id}); showMusicLibrary();" style="font-size:10px;padding:2px 6px;background:#422;border:1px solid #644;color:#f99;border-radius:3px;cursor:pointer;">×</button>
                         </div>
                     `;
                 });
@@ -992,11 +1006,12 @@
                 const res = await fetch(`${API_BASE}/files?path=${encodeURIComponent(folderPath)}`);
                 if (!res.ok) throw new Error("Could not read folder");
                 const data = await res.json();
+                const basePath = data.path || folderPath;
                 const audioFiles = (data.files || [])
                     .filter(f => f.type === 'file' && isAudioFile(f.name))
                     .map(f => {
-                        const sep = folderPath.endsWith('/') || folderPath.endsWith('\\') ? '' : '/';
-                        return folderPath + sep + f.name;
+                        const sep = basePath.endsWith('/') || basePath.endsWith('\\') ? '' : '/';
+                        return basePath + sep + f.name;
                     });
 
                 if (audioFiles.length === 0) {
@@ -1017,9 +1032,17 @@
         }
 
         function playMyAlbum(albumName = "53 Years in the Making") {
-            const albumTracks = musicLibrary.filter(e => e.album === albumName);
+            let albumTracks = musicLibrary.filter(e => e.album === albumName);
             if (albumTracks.length === 0) {
-                appendMessage('SYSTEM', `No tracks for "${albumName}" in library yet. Use the "Import My Album" button or click MP3s in the explorer.`, 'system');
+                // Auto-add the known Brockston track if not present (your local file)
+                const defaultPath = "/Users/EverettN/Downloads/Brockston.mp3";
+                if (!musicLibrary.some(e => e.source === defaultPath)) {
+                    addToLibrary("Brockston (from 53 Years in the Making)", defaultPath, 'music', albumName);
+                }
+                albumTracks = musicLibrary.filter(e => e.album === albumName);
+            }
+            if (albumTracks.length === 0) {
+                appendMessage('SYSTEM', `No tracks for "${albumName}" in library yet. Use the "Import My Album" button or click MP3s in the explorer (or put Brockston.mp3 in Downloads).`, 'system');
                 return;
             }
             appendMessage('SYSTEM', `🎶 Playing full album: ${albumName} — your player, clear as a bell!`, 'system');
@@ -1027,6 +1050,9 @@
             function playNext() {
                 if (index >= albumTracks.length) {
                     appendMessage('SYSTEM', `Album "${albumName}" finished. Want to loop or play another?`, 'system');
+                    const seg = document.getElementById('sb-music');
+                    if (seg) seg.style.display = 'none';
+                    currentMusicTrack = null;
                     return;
                 }
                 const track = albumTracks[index];
@@ -1105,6 +1131,11 @@
                 monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
             } catch(e){}
             renderTabs();
+            // Make sure the active code shows as selected in the finder sidebar too
+            if (currentPath) {
+                // re-render current dir to pick up highlight via activeTabPath check
+                setTimeout(() => loadFiles(currentPath), 30);
+            }
             // status
             const fname = document.getElementById('sb-file-name');
             const lname = document.getElementById('sb-lang-name');
@@ -1163,6 +1194,13 @@
             loadFiles(absPath);
         }
 
+        function cdInTerminal(path) {
+            if (!path || !ws || ws.readyState !== WebSocket.OPEN) return;
+            // Use JSON.stringify for safe quoting (handles spaces, quotes, etc. in paths)
+            const cmd = `cd ${JSON.stringify(path)}\n`;
+            ws.send(JSON.stringify({type: 'input', data: cmd}));
+        }
+
         // ----- Music toggle (smart: stops user music too, for the old school tracks)
         btnMusic.addEventListener('click', () => {
             if (userMusic && !userMusic.paused && currentMusicTrack) {
@@ -1205,27 +1243,50 @@
             }
         });
 
+        function prepareSpeechText(raw) {
+            return String(raw || '')
+                .replace(/\[(?:KIMI|NEMO|FAMILY|BROCKSTON|CLAUDE|SYSTEM|DEMO)[^\]]*\]:?\s*/gi, '')
+                .replace(/\[.*?\]/g, '')
+                .replace(/`{1,3}[\s\S]*?`{1,3}/g, ' code block ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        let ttsQueue = Promise.resolve();
+
         async function speakText(text) {
             if (!isVoiceModeEnabled) return;
-            try {
-                const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
-                const being = MODEL_ORCHESTRATOR.currentInstructor || 'brockston';
-                const res = await fetch(`${API_BASE}/speech/synthesize`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        text,
-                        being: being === 'family' ? 'brockston' : being,
-                        voice: instructor.voice || being,
-                    })
-                });
-                if (!res.ok) throw new Error("Speech synth failed");
-                const blob = await res.blob();
-                ttsPlayer.src = URL.createObjectURL(blob);
-                ttsPlayer.play();
-            } catch (err) {
-                console.error("TTS error:", err);
-            }
+            const clean = prepareSpeechText(text);
+            if (!clean) return;
+
+            ttsQueue = ttsQueue.then(async () => {
+                if (!isVoiceModeEnabled) return;
+                try {
+                    const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
+                    const key = MODEL_ORCHESTRATOR.currentInstructor || 'brockston';
+                    const ttsBeing = instructor.ttsBeing || (key === 'family' ? 'brockston' : key);
+                    const res = await fetch(`${API_BASE}/speech/synthesize`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            text: clean,
+                            being: ttsBeing,
+                            voice: instructor.voice || ttsBeing,
+                        })
+                    });
+                    if (!res.ok) throw new Error('Speech synth failed');
+                    const blob = await res.blob();
+                    ttsPlayer.src = URL.createObjectURL(blob);
+                    await ttsPlayer.play();
+                    await new Promise((resolve) => {
+                        const done = () => { ttsPlayer.removeEventListener('ended', done); resolve(); };
+                        ttsPlayer.addEventListener('ended', done);
+                    });
+                } catch (err) {
+                    console.error('TTS error:', err);
+                }
+            });
+            return ttsQueue;
         }
 
         // ----- Chat (now sends editor context so the beings actually know what you're looking at)
@@ -1271,7 +1332,7 @@
                     const data = await res.json();
                     const who = (data.response || '').includes('ULTIMATE_EV') ? 'ULTIMATE_EV' : 'BROCKSTON';
                     appendMessage(who, data.response, 'ai');
-                    speakText(String(data.response).replace(/\[.*?\]/g, ''));
+                    speakText(data.response);
                 }
             } catch (err) {
                 console.error(err);
@@ -1313,7 +1374,7 @@
                 }).then(r => r.json()).then(data => {
                     const who = (data.response || '').includes('ULTIMATE_EV') ? 'ULTIMATE_EV' : 'BROCKSTON';
                     appendMessage(who, data.response, 'ai');
-                    speakText(String(data.response).replace(/\[.*?\]/g, ''));
+                    speakText(data.response);
                 }).catch(e => appendMessage('SYSTEM', '[ERROR] ' + e.message, 'error'));
             }
         }
@@ -1389,7 +1450,7 @@
                 if (!res.ok) throw new Error(`Server error: ${res.status}`);
                 const data = await res.json();
                 appendMessage(whoLabel, data.content || '', 'ai');
-                speakText(String(data.content || '').replace(/\[.*?\]/g, ''));
+                speakText(data.content);
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[CLAUDE ERROR]: ${err.message}`, 'error');
@@ -1407,7 +1468,7 @@
                 if (!res.ok) throw new Error(`Server error: ${res.status}`);
                 const data = await res.json();
                 appendMessage(whoLabel, data.response || '', 'ai');
-                speakText(String(data.response || '').replace(/\[.*?\]/g, ''));
+                speakText(data.response);
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[NEMO ERROR]: ${err.message}`, 'error');
@@ -1419,15 +1480,19 @@
             const kimiTimer = setTimeout(() => controller.abort(), 300000);
             try {
                 const effectiveMode = mode || detectKimiMode(text) || 'tutor';
+                const kimiPayload = {
+                    message: text,
+                    mode: effectiveMode,
+                };
+                // Teaching topic only — not a filesystem path. Skip in Code Lab scans.
+                if (effectiveMode === 'tutor' || effectiveMode === 'learning') {
+                    kimiPayload.domain = 'neurodivergency';
+                }
                 const res = await fetch(`${API_BASE}/kimi`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     signal: controller.signal,
-                    body: JSON.stringify({
-                        message: text,
-                        mode: effectiveMode,
-                        domain: 'neurodivergency',
-                    })
+                    body: JSON.stringify(kimiPayload)
                 });
                 if (!res.ok) {
                     const errBody = await res.text();
@@ -1441,12 +1506,15 @@
                 const data = await res.json();
                 const reply = data.response || '';
                 appendMessage(whoLabel, reply, 'ai');
-                speakText(String(reply).replace(/\[KIMI\]:?\s*/i, '').replace(/\[.*?\]/g, '').substring(0, 800));
+                speakText(reply);
             } catch (err) {
                 console.error(err);
-                const msg = err.name === 'AbortError'
-                    ? 'Kimi timed out after 5 minutes — retry or switch to Nemo.'
-                    : err.message;
+                let msg = err.message;
+                if (err.name === 'AbortError') {
+                    msg = 'Kimi timed out after 5 minutes — retry or switch to Nemo.';
+                } else if (msg.includes('500') || msg.includes('server error')) {
+                    msg = 'Kimi (NVIDIA) hit a server error (often on large agent prompts for broad tasks like "fix IDE"). Retried with local fallback if available. Try scoped requests or Nemo.';
+                }
                 appendMessage('SYSTEM', `[KIMI ERROR]: ${msg}`, 'error');
             } finally {
                 clearTimeout(kimiTimer);
@@ -1463,7 +1531,7 @@
                 if (!res.ok) throw new Error(`Server error: ${res.status}`);
                 const data = await res.json();
                 appendMessage(whoLabel, data.response || '', 'ai');
-                speakText(String(data.response || '').replace(/\[.*?\]/g, ''));
+                speakText(data.response);
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[GLM ERROR]: ${err.message}`, 'error');
@@ -1571,6 +1639,11 @@
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 currentPath = data.path || path;
+                const breadcrumb = document.getElementById('explorer-path');
+                if (breadcrumb) {
+                    breadcrumb.textContent = currentPath;
+                    breadcrumb.title = currentPath;
+                }
                 const homeRoot = data.home || '';
                 fileList.innerHTML = '';
 
@@ -1583,7 +1656,9 @@
                         const parts = currentPath.split('/').filter(p => p);
                         parts.pop();
                         const parent = '/' + parts.join('/');
+                        lastSyncedCwd = parent;
                         loadFiles(parent);
+                        cdInTerminal(parent);
                     };
                     fileList.appendChild(backBtn);
                 }
@@ -1594,7 +1669,11 @@
                     homeBtn.className = 'file-item';
                     homeBtn.style.color = 'var(--neon-orange)';
                     homeBtn.innerHTML = `<i class="fas fa-home" style="color:var(--neon-orange)"></i> Back to workspace`;
-                    homeBtn.onclick = () => loadFiles(workspaceRoot);
+                    homeBtn.onclick = () => {
+                        lastSyncedCwd = workspaceRoot;
+                        loadFiles(workspaceRoot);
+                        cdInTerminal(workspaceRoot);
+                    };
                     fileList.appendChild(homeBtn);
                 }
 
@@ -1614,14 +1693,57 @@
                         : file.name;
                     if (file.type === 'file') {
                         el.onclick = () => openFile(childPath);
+                        if (activeExplorerFile === childPath || activeTabPath === childPath) {
+                            el.style.background = '#1a1208';
+                            el.style.borderLeft = '3px solid var(--neon-orange)';
+                        }
                     } else {
-                        el.onclick = () => loadFiles(childPath);
+                        el.onclick = () => {
+                            lastSyncedCwd = childPath;
+                            loadFiles(childPath);
+                            cdInTerminal(childPath);
+                        };
                     }
                     fileList.appendChild(el);
                 });
             } catch (err) {
                 fileList.innerHTML = `<div style="color:#ff6b6b;padding:10px;">Failed to load files: ${escapeHtml(err.message)}</div>`;
             }
+        }
+
+        // Early definition so ide-control + run handlers can use it reliably
+        let _refreshTimer = null;
+        function scheduleExplorerRefresh() {
+            if (_refreshTimer) clearTimeout(_refreshTimer);
+            _refreshTimer = setTimeout(() => {
+                try { loadFiles(currentPath || workspaceRoot || ''); } catch(e) {}
+                try { reloadOpenFilesFromDisk(); } catch(e) {}
+            }, 650);
+        }
+
+        function reloadOpenFilesFromDisk() {
+            // When terminal edits (nano, vim, etc.) change files, update open tabs and explorer
+            if (!openTabs || !openTabs.length) return;
+            openTabs.forEach(async (tab) => {
+                if (!tab.path) return;
+                try {
+                    const res = await fetch(`${API_BASE}/read_file?filename=${encodeURIComponent(tab.path)}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        const newContent = data.content || '';
+                        if (newContent !== (tab.content || '')) {
+                            tab.content = newContent;
+                            if (activeTabPath === tab.path && monacoEditor) {
+                                monacoEditor.setValue(newContent);
+                            }
+                            // Mark clean since it came from disk
+                            tab.dirty = false;
+                            renderTabs();
+                            appendMessage('SYSTEM', `Updated from terminal: ${tab.path}`, 'system');
+                        }
+                    }
+                } catch (e) {}
+            });
         }
 
         function languageFromName(name) {
@@ -1772,8 +1894,23 @@
         term.loadAddon(fitAddon);
         term.open(document.getElementById('terminal'));
         fitAddon.fit();
-        new ResizeObserver(() => { try { fitAddon.fit(); } catch (e) {} })
+        function fitTerminalAndNotify() {
+            try {
+                fitAddon.fit();
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'resize',
+                        cols: term.cols,
+                        rows: term.rows
+                    }));
+                }
+            } catch (e) {}
+        }
+        new ResizeObserver(() => fitTerminalAndNotify())
             .observe(document.getElementById('terminal-container'));
+
+        // Initial size notify after connect
+        setTimeout(fitTerminalAndNotify, 300);
 
         let ws = null;
         let reconnectAttempts = 0;
@@ -1790,7 +1927,7 @@
                 const el = document.getElementById('sb-term-state');
                 if (el) el.textContent = 'terminal connected';
                 // Refit after layout settles
-                setTimeout(() => { try { fitAddon.fit(); } catch(e) {} }, 100);
+                setTimeout(fitTerminalAndNotify, 100);
             };
 
             ws.onerror = (error) => {
@@ -1837,6 +1974,7 @@
                             .replace(/\[\?2004h/g, '')
                             .replace(/\[\?2004l/g, '');
                         term.write(data);
+                        scheduleExplorerRefresh();  // catch file changes from nano/vim/etc in terminal
                     } else if (msg.type === 'cwd') {
                         // Initial cwd from backend on socket open
                         workspaceRoot = msg.workspace || msg.path;
@@ -1936,6 +2074,7 @@
                     if (params.command && ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({type: 'input', data: params.command + '\n'}));
                         term.focus();
+                        scheduleExplorerRefresh();
                     }
                     break;
                 case 'refresh_files':
@@ -1977,6 +2116,8 @@
                     model: 'qwen2.5-coder:32b (local)',
                     endpoint: '/api/chat',
                     color: '#FF5F1F',
+                    voice: 'Daniel',
+                    ttsBeing: 'brockston',
                     description: 'The whole family — AlphaVox, AlphaWolf, Derek, Inferno, etc.'
                 },
                 'claude': {
@@ -1984,6 +2125,8 @@
                     model: 'claude-sonnet-4 (via API)',
                     endpoint: '/api/claude',
                     color: '#40E0D0',
+                    voice: 'Daniel',
+                    ttsBeing: 'brockston',
                     description: 'Anthropic\'s Claude — additional instructor'
                 },
                 'kimi': {
@@ -1991,6 +2134,8 @@
                     model: 'moonshotai/kimi-k2.6 (NVIDIA NIM)',
                     endpoint: '/api/kimi',
                     color: '#76B900',
+                    voice: 'Alex',
+                    ttsBeing: 'brockston',
                     description: 'NVIDIA learning tutor — kids, retention, open-code mentor'
                 },
                 'nemo': {
@@ -1998,11 +2143,13 @@
                     model: 'sovereign partner (Christman pipeline)',
                     endpoint: '/api/nemo',
                     color: '#40E0D0',
+                    voice: 'Fred',
+                    ttsBeing: 'brockston',
                     description: 'Everett\'s partner — watching the IDE live through the viewer WebSocket'
                 }
             },
 
-            currentInstructor: 'family',
+            currentInstructor: 'kimi',
 
             setInstructor: function(instructorKey) {
                 const instructor = this.instructors[instructorKey] || this.instructors['family'];
@@ -2077,8 +2224,9 @@
             }
         };
 
-        // Initialize orchestrator
-        MODEL_ORCHESTRATOR.setInstructor('family');
+        // Initialize orchestrator — Kimi Code Lab is the primary compute operator
+        MODEL_ORCHESTRATOR.setInstructor('kimi');
+        renderModeSwitcher();
 
         // Wrap existing event handlers to also broadcast to viewer
         const originalOpenOrFocusFile = openOrFocusFile;
@@ -2184,6 +2332,11 @@
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({type: 'input', data}));
             }
+            // If user submitted a command (has newline), schedule a finder refresh
+            // so new files / written output files appear in the explorer.
+            if (data && (data.includes('\n') || data.includes('\r'))) {
+                scheduleExplorerRefresh();
+            }
         });
 
         // ----- Boot
@@ -2196,7 +2349,10 @@
                 }
             }, 80);
         }).catch(() => {});
-        window.addEventListener('focus', () => term.focus());
+        window.addEventListener('focus', () => {
+            term.focus();
+            scheduleExplorerRefresh();  // catch any external/terminal updates when returning to IDE
+        });
 
         // Highlight additional beings/instructors (orchestrator already set Family above)
         setTimeout(() => {
@@ -2345,6 +2501,8 @@
                 const st = document.getElementById('sb-term-state');
                 if (st) st.textContent = 'running...';
                 setTimeout(() => { if (st) st.textContent = 'terminal connected'; }, 4000);
+                // Auto-refresh finder so anything the run wrote (artifacts, outputs, new files) appears
+                setTimeout(() => { loadFiles(currentPath || workspaceRoot || ''); }, 650);
             };
         }
 
@@ -2403,6 +2561,10 @@
         let voiceRecognition = null;
         let isListening = false;
 
+        // ─── MIC TOGGLE MODE (STAYS ON UNTIL YOU TURN IT OFF) ───
+        let micToggleState = false;  // true = always listening
+        let micRecognition = null;
+
         function setupVoiceInput() {
             const micBtn = document.getElementById('mic-btn');
             if (!micBtn) return;
@@ -2415,12 +2577,12 @@
                 return;
             }
 
-            voiceRecognition = new SpeechRec();
-            voiceRecognition.continuous = false;
-            voiceRecognition.interimResults = true;
-            voiceRecognition.lang = 'en-US';
+            micRecognition = new SpeechRec();
+            micRecognition.continuous = true;        // ← STAY ON
+            micRecognition.interimResults = true;
+            micRecognition.lang = 'en-US';
 
-            voiceRecognition.onresult = (event) => {
+            micRecognition.onresult = (event) => {
                 let transcript = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     transcript += event.results[i][0].transcript;
@@ -2428,46 +2590,67 @@
                 const chatInput = document.getElementById('chat-input');
                 if (chatInput) {
                     chatInput.value = transcript.trim();
-                    // For nonverbal users: auto-send after final result if voice mode is enabled
-                    if (event.results[event.results.length-1].isFinal && isVoiceModeEnabled) {
+                    // Auto-send on final result when toggle is ON
+                    if (event.results[event.results.length-1].isFinal && micToggleState) {
                         setTimeout(() => {
                             const sendBtnEl = document.getElementById('send-btn');
                             if (sendBtnEl) sendBtnEl.click();
-                        }, 250);
+                        }, 400);  // slightly longer delay for natural pauses
                     }
                 }
             };
 
-            voiceRecognition.onerror = (e) => {
+            micRecognition.onerror = (e) => {
                 console.warn('Speech rec error', e);
-                stopListeningUI();
-                const chatHist = document.getElementById('chat-history');
-                if (chatHist) {
-                    appendMessage('SYSTEM', 'Voice input had trouble hearing. You can type or try again.', 'error');
+                // Don't stop on error — try to keep going unless it's fatal
+                if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+                    micToggleState = false;
+                    updateMicButtonUI();
+                    appendMessage('SYSTEM', 'Microphone access denied. Check browser permissions.', 'error');
                 }
             };
 
-            voiceRecognition.onend = () => {
-                stopListeningUI();
+            micRecognition.onend = () => {
+                // If toggle is still ON, restart immediately (keep listening)
+                if (micToggleState && micRecognition) {
+                    try { micRecognition.start(); } catch (err) {}
+                } else {
+                    updateMicButtonUI();
+                }
             };
 
             micBtn.onclick = () => {
-                if (isListening) {
-                    voiceRecognition.stop();
-                    return;
+                micToggleState = !micToggleState;
+                if (micToggleState) {
+                    try {
+                        micRecognition.start();
+                    } catch (err) {
+                        console.error(err);
+                        micToggleState = false;
+                    }
+                } else {
+                    try { micRecognition.stop(); } catch (err) {}
                 }
-                try {
-                    voiceRecognition.start();
-                    startListeningUI();
-                } catch (err) {
-                    console.error(err);
-                    stopListeningUI();
-                }
+                updateMicButtonUI();
             };
+        }
 
-            // Bonus: if voice mode is toggled on, make mic more obvious
-            const origVoiceToggle = btnVoice ? btnVoice.onclick : null;
-            // We don't override, just style hint on toggle (the existing voice listener already runs)
+        function updateMicButtonUI() {
+            const micBtn = document.getElementById('mic-btn');
+            if (!micBtn) return;
+            if (micToggleState) {
+                micBtn.style.background = 'var(--neon-orange)';
+                micBtn.style.color = '#000';
+                micBtn.style.borderColor = '#000';
+                micBtn.innerHTML = '●';
+                micBtn.title = 'MIC ON — click to stop listening';
+            } else {
+                micBtn.style.background = '#111';
+                micBtn.style.color = 'var(--neon-orange)';
+                micBtn.style.borderColor = 'var(--neon-orange)';
+                micBtn.innerHTML = '🎤';
+                micBtn.title = 'MIC OFF — click to start listening (stays on)';
+            }
         }
 
         function startListeningUI() {

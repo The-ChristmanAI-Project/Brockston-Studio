@@ -6,16 +6,26 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+_SKILL_ROOTS = (
+    Path.home() / ".grok" / "skills",
+    Path.home() / ".agents" / "skills",
+    Path.home() / ".claude" / "skills",
+    Path("/Users/EverettN/Brockston-Studio/.grok/skills"),
+)
+
+_MCP_ROOT = Path.home() / ".grok/projects/Users-EverettN-Brockston-Studio/mcps"
 
 ABILITIES_MANIFEST = """=== BROCKSTON STUDIO ABILITIES (you have these — use them) ===
 
 BEING EYES — files, commands, screen (/api/eyes):
   GET  /api/eyes/state                              → workspace snapshot + endpoints
   GET  /api/eyes/screenshot                         → full screen as base64 PNG (macOS)
-  GET  /api/eyes/read?path=<path>                   → read any file
+  GET  /api/eyes/read?path=<path>&offset_lines=<n>&limit_lines=<n> → read any file (paginated scroll)
   GET  /api/eyes/ls?path=<dir>&depth=<1-3>          → list directory
   POST /api/eyes/write   {path, content}            → write file
   POST /api/eyes/patch   {path, old_string, new_string} → surgical find-replace
@@ -47,7 +57,8 @@ STUDIO APIs:
   POST /api/claude                   → Claude instructor
 
 WORKFLOW: emit <tool_call> blocks (read → patch → run) — the server executes them on disk.
-You can see and fix this project. Never claim a fix without a successful tool result."""
+Large files return chunks — if has_more:true, read again with offset_lines=next_offset_lines until done.
+Never stop because a file is truncated; you have scroll compute. Never claim a fix without a successful tool result."""
 
 ABILITIES_COMPACT = (
     "Studio tools: /api/eyes (read|write|patch|run|screenshot), "
@@ -82,7 +93,7 @@ You are NOT limited to whatever file Everett has open in the editor tab.
 
 You CAN and SHOULD:
 - <tool_call> ls any directory — explore the whole project yourself
-- <tool_call> read any absolute path — pull any file without Everett naming it
+- <tool_call> read any absolute path — paginate with offset_lines/limit_lines when has_more:true
 - <tool_call> patch / write / run — change and verify code on disk anywhere
 
 You MUST NOT:
@@ -91,6 +102,93 @@ You MUST NOT:
 - Ask Everett to switch files when you can read them directly
 
 When a task mentions a file, project, or bug: emit tool_call blocks first, then answer."""
+
+BROCKSTON_STUDIO_LAYOUT = """=== BROCKSTON-STUDIO PROJECT LAYOUT ===
+backend/          — Python API, beings, eyes, agent tool loop
+  being_context.py — abilities + context injected into Kimi/Nemo (this file)
+  being_agent.py   — <tool_call> parser + executor loop
+  being_eyes.py    — filesystem eyes (ls/read/write/patch/run)
+  kimi_service.py  — Kimi K2.6 NVIDIA API
+frontend/         — Browser IDE (React/TS)
+scripts/          — Demo and utility scripts
+christman_sound/  — Audio/speech pipeline
+absenth/          — Core Brockston modules
+main.py           — Studio server entry (port 5055)
+start.sh          — Launch script
+.env              — BROCKSTON_WORKSPACE sets the scan root"""
+
+SKILLS_AND_TOOLS_MAP = """=== SKILLS & TOOLS LOCATIONS ===
+
+GROK SKILLS — read SKILL.md before domain tasks:
+  /Users/EverettN/.grok/skills/              — tcap-master, vega-production, xlsx, docx, pptx, check-work, ...
+  /Users/EverettN/Brockston-Studio/.grok/skills/  — project-local skills
+  /Users/EverettN/.agents/skills/            — workctl operator
+  /Users/EverettN/.claude/skills/            — alphavox-preflight-repair, etc.
+
+MCP TOOLS — JSON descriptors under mcps/<server>/tools/*.json:
+  /Users/EverettN/.grok/projects/Users-EverettN-Brockston-Studio/mcps/
+    grok_com_github/tools/   — GitHub (PRs, issues, code search)
+    grok_com_vercel/tools/   — Vercel deploy + logs
+    Perplexity/tools/        — web search
+
+COMPUTE TOOLS — emit as <tool_call> blocks (executed by backend/being_eyes.py):
+  ls, read, patch, write, run, mkdir, move, delete
+  Spec: backend/being_agent.py (AGENT_TOOLS_PROMPT)"""
+
+
+def _discover_skills_catalog() -> str:
+    lines: list[str] = []
+    for root in _SKILL_ROOTS:
+        if not root.is_dir():
+            continue
+        names = sorted(
+            p.name for p in root.iterdir()
+            if p.is_dir() and (p / "SKILL.md").exists()
+        )
+        if names:
+            lines.append(f"  {root}\n    → {', '.join(names)}")
+    return "\n".join(lines) if lines else "  (no SKILL.md dirs found)"
+
+
+def _discover_mcp_catalog() -> str:
+    if not _MCP_ROOT.is_dir():
+        return "  (MCP root not found)"
+    lines: list[str] = []
+    for server_dir in sorted(_MCP_ROOT.iterdir()):
+        tools_dir = server_dir / "tools"
+        if not tools_dir.is_dir():
+            continue
+        tools = sorted(p.stem for p in tools_dir.glob("*.json"))
+        if tools:
+            preview = ", ".join(tools[:8])
+            suffix = f" (+{len(tools) - 8} more)" if len(tools) > 8 else ""
+            lines.append(f"  {server_dir.name}: {preview}{suffix}")
+    return "\n".join(lines) if lines else "  (no MCP tool descriptors)"
+
+
+def build_project_scan_guide(workspace: str) -> str:
+    """Tell Kimi exactly how to explore the workspace with tool_call blocks."""
+    return f"""=== HOW TO SCAN THE ENTIRE PROJECT ===
+Workspace root: {workspace}
+
+1. ORIENT — list top-level + one level deep:
+<tool_call>{{"tool":"ls","path":"{workspace}","depth":2}}</tool_call>
+
+2. DRILL — ls key dirs before reading:
+   backend/, frontend/, scripts/, christman_sound/
+<tool_call>{{"tool":"ls","path":"{workspace}/backend","depth":1}}</tool_call>
+
+3. READ — pull any file by absolute path (scroll if truncated):
+<tool_call>{{"tool":"read","path":"{workspace}/backend/being_agent.py","offset_lines":1,"limit_lines":500}}</tool_call>
+If has_more:true → read again with offset_lines=next_offset_lines until has_more:false.
+
+4. SEARCH — rg/grep via run:
+<tool_call>{{"tool":"run","command":"rg -l 'pattern' backend/","cwd":"{workspace}"}}</tool_call>
+
+5. SKILLS — read SKILL.md before specialized work:
+<tool_call>{{"tool":"read","path":"/Users/EverettN/.grok/skills/tcap-master/SKILL.md"}}</tool_call>
+
+Never ask Everett for paths you can discover with ls + run."""
 
 
 _OPEN_FILE_RE = re.compile(
@@ -185,19 +283,54 @@ async def build_being_context(
         try:
             from backend.being_eyes import read_file as eyes_read
 
-            file_resp = await eyes_read(path=resolved_path, encoding="utf-8", max_kb=max_file_kb)
-            content = file_resp.get("content", "")
-            lines = file_resp.get("lines", 0)
-            truncated = file_resp.get("truncated", False)
-            note = " (truncated)" if truncated else ""
-            parts.append(
-                f"=== OPEN FILE: {resolved_path} ({lines} lines{note}) ===\n{content}"
+            file_resp = await eyes_read(
+                path=resolved_path,
+                encoding="utf-8",
+                max_kb=max_file_kb,
+                offset_lines=1,
+                limit_lines=400,
             )
+            content = file_resp.get("content", "")
+            line_start = file_resp.get("line_start")
+            line_end = file_resp.get("line_end")
+            total_lines = file_resp.get("total_lines")
+            has_more = file_resp.get("has_more", False)
+            if has_more:
+                next_off = file_resp.get("next_offset_lines", (line_end or 0) + 1)
+                range_note = f"lines {line_start}-{line_end}"
+                if total_lines:
+                    range_note += f" of {total_lines}"
+                parts.append(
+                    f"=== OPEN FILE PREVIEW: {resolved_path} ({range_note} — MORE EXISTS) ===\n"
+                    f"Use read tool to scroll: "
+                    f'<tool_call>{{"tool":"read","path":"{resolved_path}","offset_lines":{next_off}}}</tool_call>\n'
+                    f"{content}"
+                )
+            else:
+                range_note = f"{file_resp.get('lines', 0)} lines"
+                if line_start and line_end:
+                    range_note = f"lines {line_start}-{line_end}"
+                parts.append(
+                    f"=== OPEN FILE: {resolved_path} ({range_note}) ===\n{content}"
+                )
         except Exception as exc:
             logger.debug("[being_context] Could not read open file %s: %s", resolved_path, exc)
+
+    workspace_str = "."
+    try:
+        from backend.being_eyes import WORKSPACE_ROOT
+
+        workspace_str = str(WORKSPACE_ROOT)
+    except Exception:
+        pass
 
     if for_kimi:
         parts.insert(0, IDE_SOVEREIGNTY)
         parts.insert(0, KIMI_IDENTITY)
+        parts.append(BROCKSTON_STUDIO_LAYOUT)
+        parts.append(SKILLS_AND_TOOLS_MAP)
+        parts.append(f"=== AVAILABLE SKILLS (SKILL.md) ===\n{_discover_skills_catalog()}")
+        parts.append(f"=== AVAILABLE MCP TOOLS ===\n{_discover_mcp_catalog()}")
+        parts.append(build_project_scan_guide(workspace_str))
     parts.append(ABILITIES_MANIFEST)
     return "\n\n".join(parts)

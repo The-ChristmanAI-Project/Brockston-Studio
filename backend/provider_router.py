@@ -522,10 +522,11 @@ class ProviderRouter:
                 logger.warning(f"[ProviderRouter] TTS via {p.value} failed: {e}")
                 continue
 
-        # Christman Sound fallback
-        logger.info("[ProviderRouter] TTS falling back to Christman Sound")
+        # Christman Sound fallback (now per-being aware via find_reference_wav improvements)
+        logger.info("[ProviderRouter] TTS falling back to Christman Sound for being-aware synthesis")
         from christman_sound import speak
-        speak(text)
+        # Try to pass a being if we can infer, but default is fine
+        speak(text, being="brockston")
         return b"", Provider.AWS_POLLY
 
     def _elevenlabs_synthesize(self, text: str) -> bytes:

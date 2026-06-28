@@ -82,6 +82,7 @@ except Exception as e:
 
 class ChatRequest(BaseModel):
     message: str
+    context: str | None = None
 
 class KimiRequest(BaseModel):
     message: str
@@ -110,15 +111,78 @@ async def sound_status():
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    """Christman Family — Brockston via local pipeline, Ollama fallback."""
+    """Christman Family — Brockston (and whole family) via local pipeline.
+    Now with full compute capacity: all beings can ls/read/write/patch/run via tools.
+    """
     logger.info(f"Chat request: {request.message[:120]}")
     if not get_ai_response:
         raise fastapi.HTTPException(status_code=503, detail="AI client not available")
     try:
-        # Run in thread pool — ai_client uses sync httpx, must not block the event loop
-        loop = asyncio.get_event_loop()
-        response_text = await loop.run_in_executor(None, get_ai_response, request.message)
-        return {"response": response_text}
+        from backend.being_agent import run_being_agent
+        from backend.being_context import build_being_context
+
+        # Build rich context so beings see the full workspace + abilities for compute
+        full_context = await build_being_context(
+            message=request.message,
+            extra_context=request.context,
+            compact=True,
+            ollama_route=True,
+        )
+
+        # Special reduced-lag demo path so beings can quickly demonstrate abilities
+        demo_trigger = any(w in (request.message or "").lower() for w in ("demonstrate", "demo abilities", "show your abilities", "run compute demo"))
+        if demo_trigger:
+            from backend.being_agent import run_being_agent as _demo_run
+            demo_task = "Demonstrate your compute abilities: ls a dir, read a small file, run 'echo DEMO SUCCESS', write+run a tiny temp python script that prints a success message, then summarize the tools used."
+            result = await _demo_run(message=demo_task, context=full_context)
+            return {"response": f"[DEMO — {result.get('tool_count',0)} tools]: {result.get('text','')}", "agent": True, "demo": True}
+
+        # Normal fast path for chat (reduced lag). 
+        # Only use the full agent tool loop (compute) when the query needs it (code, fix, demo, ls/run etc).
+        from backend.being_agent import wants_agent_tools
+        if wants_agent_tools(request.message, "code") or any(k in (request.message or "").lower() for k in ("tool", "run command", "execute", "patch", "write file", "demonstrate")):
+            result = await run_being_agent(
+                message=request.message,
+                context=full_context,
+            )
+            text = result.get("text", "")
+            tool_count = result.get("tool_count", 0)
+            prefix = f"[FAMILY/BROCKSTON — {tool_count} compute tool(s) executed]: " if tool_count else "[FAMILY]: "
+            return {
+                "response": f"{prefix}{text}",
+                "source": "family",
+                "tools_executed": result.get("tools_executed", []),
+                "tool_count": tool_count,
+                "agent": True,
+            }
+
+        # Fast direct low-lag chat path for normal questions (no agent overhead)
+        import os
+        import httpx
+        fast_model = os.getenv("LLM_MODEL_GENERAL", "llama3.2")
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(
+                    "http://127.0.0.1:11434/api/chat",
+                    json={
+                        "model": fast_model,
+                        "messages": [
+                            {"role": "system", "content": full_context[:1500] if full_context else "You are BROCKSTON, helpful and direct."},
+                            {"role": "user", "content": request.message}
+                        ],
+                        "stream": False,
+                        "options": {"num_predict": 256, "num_ctx": 4096, "temperature": 0.7}
+                    }
+                )
+                r.raise_for_status()
+                reply = r.json().get("message", {}).get("content", "No response")
+                return {"response": f"[FAMILY]: {reply}", "source": "family", "agent": False}
+        except Exception as e:
+            logger.warning(f"Fast chat failed, falling back: {e}")
+            # ultimate fallback
+            loop = asyncio.get_event_loop()
+            response_text = await loop.run_in_executor(None, get_ai_response, request.message)
+            return {"response": response_text}
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))
@@ -157,9 +221,16 @@ async def kimi_endpoint(request: KimiRequest):
                 context=full_context,
                 mode=agent_mode,
                 domain=request.domain,
-                max_steps=4,
+                max_steps=6,
             )
-            text = result.get("text", "")
+            from backend.being_agent import strip_tool_blocks, _is_tool_leak, _fallback_summary_from_tools
+
+            text = strip_tool_blocks(result.get("text", ""))
+            if _is_tool_leak(text) and result.get("tools_executed"):
+                text = _fallback_summary_from_tools(
+                    result["tools_executed"],
+                    user_message=request.message,
+                )
             tool_count = result.get("tool_count", 0)
             prefix = f"[KIMI — {tool_count} tool(s) executed on disk]: " if tool_count else "[KIMI]: "
             return {
@@ -169,6 +240,7 @@ async def kimi_endpoint(request: KimiRequest):
                 "tools_executed": result.get("tools_executed", []),
                 "tool_count": tool_count,
                 "agent": True,
+                "agent_steps": result.get("agent_steps", 0),
             }
 
         result = await loop.run_in_executor(
@@ -198,6 +270,11 @@ async def kimi_endpoint(request: KimiRequest):
             raise fastapi.HTTPException(
                 status_code=504,
                 detail="Kimi timed out — NVIDIA NIM was slow. Retry in 30s, or switch to Nemo for local inference.",
+            )
+        if "500" in err or "server error" in err.lower():
+            raise fastapi.HTTPException(
+                status_code=502,
+                detail="NVIDIA Kimi returned 500 (internal server error). This can happen with very large prompts in agent mode (e.g. broad 'fix IDE weaknesses'). Retry in 30s, use smaller scope, or switch to Nemo/local for IDE fixes.",
             )
         raise fastapi.HTTPException(status_code=500, detail=err)
 
@@ -315,7 +392,9 @@ async def get_audio(filename: str):
 # like /etc/passwd while keeping every real project reachable.
 # ----------------------------------------------------------------------------
 USER_HOME = Path(os.path.expanduser("~")).resolve()
-WORKSPACE_ROOT = Path(".").resolve()
+WORKSPACE_ROOT = Path(
+    os.path.expanduser(os.environ.get("BROCKSTON_WORKSPACE", "."))
+).resolve()
 
 def _resolve_user_path(raw: str, default: Path) -> Path:
     """Resolve a path argument from the client.
@@ -333,7 +412,8 @@ def _resolve_user_path(raw: str, default: Path) -> Path:
     parts = raw.replace("\\", "/").split("/")
     if any(p == ".." for p in parts):
         raise fastapi.HTTPException(status_code=400, detail="Path contains '..'")
-    candidate = Path(raw)
+    # Support ~ for home
+    candidate = Path(os.path.expanduser(raw))
     if not candidate.is_absolute():
         candidate = WORKSPACE_ROOT / candidate
     resolved = candidate.resolve()
@@ -408,7 +488,14 @@ async def write_file(request: WriteFileRequest):
         target.parent.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
             f.write(request.content)
+        # Nudge FS so macOS Finder sees new/changed files promptly (no manual refresh needed)
+        try:
+            os.utime(target.parent, None)
+        except Exception:
+            pass
         logger.info(f"Saved {target} ({len(request.content)} bytes)")
+        # Push refresh to any connected IDE clients / beings so explorer stays in sync
+        await broadcast_ide_control("refresh_files", {})
         return {"ok": True, "filename": str(target), "bytes": len(request.content)}
     except fastapi.HTTPException:
         raise
@@ -426,13 +513,26 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
     await websocket.accept()
     master_fd, slave_fd = pty.openpty()
     shell = os.environ.get("SHELL", "/bin/bash")
-    workspace_root = str(Path(".").resolve())
+    workspace_root = str(WORKSPACE_ROOT)
+
+    # Set initial terminal size from env or defaults (will be updated by frontend fit)
+    try:
+        import fcntl
+        import termios
+        import struct
+        rows = int(os.environ.get("LINES", 24))
+        cols = int(os.environ.get("COLUMNS", 80))
+        winsize = struct.pack("HHHH", rows, cols, 0, 0)
+        fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+    except Exception:
+        pass
 
     # Inject OSC 7 emission into the shell so every prompt reports its cwd.
     # Works for bash, zsh, fish-style POSIX shells via PROMPT_COMMAND / precmd.
     shell_name = os.path.basename(shell)
     env = os.environ.copy()
     env["BROCKSTON_WORKSPACE"] = workspace_root
+    env.setdefault("TERM", "xterm-256color")  # better support for nano, vim, etc. TUIs
 
     # OSC 7 sequence: ESC ] 7 ; file://hostname/path ESC \
     # We install the hook via shell init files so the user never sees the
@@ -523,6 +623,18 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
                 payload = json.loads(data)
                 if payload.get("type") == "input":
                     os.write(master_fd, payload.get("data", "").encode())
+                elif payload.get("type") == "resize":
+                    # Support TUI apps like nano/vim by updating PTY window size
+                    try:
+                        import fcntl
+                        import termios
+                        import struct
+                        cols = int(payload.get("cols", 80))
+                        rows = int(payload.get("rows", 24))
+                        winsize = struct.pack("HHHH", rows, cols, 0, 0)
+                        fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+                    except Exception:
+                        pass  # best effort
         except Exception:
             pass
 
