@@ -75,7 +75,19 @@ async def root():
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "port": PORT, "mode": BROCKSTON_MODE}
+    from backend.being_agent import AGENT_MODEL
+    return {
+        "status": "ok",
+        "port": PORT,
+        "mode": BROCKSTON_MODE,
+        "workspace": BROCKSTON_WORKSPACE,
+        "ollama": OLLAMA_BASE_URL,
+        "models": {
+            "chat": LLM_MODEL_GENERAL,
+            "coder": LLM_MODEL_CODER,
+            "being_agent": AGENT_MODEL,
+        },
+    }
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):

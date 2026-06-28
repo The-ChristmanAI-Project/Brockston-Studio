@@ -1,114 +1,138 @@
 # BROCKSTON Studio — Quick Start
 
-One command. Three elements. Get to work.
+One command after clone. Three services. Open the board.
 
 ---
 
-## Prerequisites
+## 1. Prerequisites
 
-You need **Ollama** running with two models pulled:
+| Requirement | Notes |
+|-------------|-------|
+| **Python 3.10+** | `python3 --version` |
+| **Node 18+** | `node --version` |
+| **Ollama** | [ollama.com](https://ollama.com) — local LLM host |
+
+---
+
+## 2. Clone and launch
 
 ```bash
-ollama serve                          # in its own terminal
-ollama pull llama3.2                  # for UltimateEV (default)
-ollama pull qwen2.5-coder:32b         # for Brockston code questions
+git clone https://github.com/EverettNC/Brockston-Studio.git
+cd Brockston-Studio
+chmod +x start.sh
 ```
 
-You also need **Python 3.10+** and **Node 18+**.
-
----
-
-## Install
-
+**Terminal A — Ollama (keep running):**
 ```bash
-pip install -r requirements.txt
-npm install
+ollama serve
 ```
 
-`start.sh` will also auto-install on first run if anything is missing.
+**Terminal B — models (once per machine):**
+```bash
+ollama pull llama3.2                  # chat / vocal / fast path
+ollama pull qwen2.5-coder:32b         # code / tools / UltimateEV
+```
 
----
+**Low-RAM machine?** Use a smaller coder model in `.env` after first run:
+```bash
+LLM_MODEL_CODER=qwen2.5-coder:7b
+BEING_AGENT_MODEL=qwen2.5-coder:7b
+```
+Then `ollama pull qwen2.5-coder:7b`
 
-## Launch (one command)
-
+**Terminal B — start the stack:**
 ```bash
 ./start.sh
 ```
 
-That single command brings up all three elements:
+First run automatically:
+1. Creates `.env` from `.env.example` (if missing)
+2. Creates `backend/venv` and `pip install -r requirements.txt`
+3. Runs `npm install` only if `node_modules` is missing
 
-| Element        | Port  | What it does                                |
-|----------------|-------|---------------------------------------------|
-| IDE Board      | 5055  | Monaco editor, chat panel, terminal         |
-| Brockston      | 9003  | Educator backend (chat, file ops, suggest)  |
-| UltimateEV     | 5174  | Code Mechanic (handles code questions first)|
-| Ollama         | 11434 | Local LLM host                              |
+When you see `BROCKSTON Studio is up`, open **http://localhost:5055**.
 
-When health checks pass, open **http://localhost:5055** in your browser.
-
-Press **Ctrl+C** to stop everything cleanly.
-
-Logs land in `./logs/` — `ultimateev.log`, `brockston.log`, `ide.log`.
+**Ctrl+C** stops all three services cleanly.
 
 ---
 
-## Run individual elements (advanced)
+## 3. What runs
 
-If you want each one in its own terminal:
+| Element | Port | Role |
+|---------|------|------|
+| **IDE Board** | 5055 | Browser IDE — editor, terminal, beings panel |
+| **Brockston** | 9003 | Educator backend — chat, suggest-fix |
+| **UltimateEV** | 5174 | Code mechanic — heavy code questions |
+| **Ollama** | 11434 | Local models (you run separately) |
 
+Logs: `./logs/ultimateev.log`, `./logs/brockston.log`, `./logs/ide.log`
+
+---
+
+## 4. Configure (optional)
+
+Edit `.env` at the repo root:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `BROCKSTON_WORKSPACE` | `~/Code` | Folder IDE opens to (last path remembered in browser) |
+| `LLM_MODEL_GENERAL` | `llama3.2` | Fast chat / Nemo partner |
+| `LLM_MODEL_CODER` | `qwen2.5-coder:32b` | Code / tools / UltimateEV |
+| `BROCKSTON_PORT` | `9003` | Educator backend port |
+| `IDE_PORT` | `5055` | IDE port |
+| `NVIDIA_API_KEY` | *(empty)* | Enables Kimi tutor (optional) |
+| `ANTHROPIC_API_KEY` | *(empty)* | Enables Claude instructor (optional) |
+
+Restart `./start.sh` after changing `.env`.
+
+Verify wiring:
 ```bash
-# Terminal 1
-node ultimateev_server.js                                     # port 5174
-
-# Terminal 2
-python -m uvicorn backend.launcher:app --port 9003            # port 9003
-
-# Terminal 3
-python -m uvicorn main:app --host 127.0.0.1 --port 5055       # port 5055
+curl -s http://localhost:5055/api/health | python3 -m json.tool
 ```
 
 ---
 
-## Environment (optional)
+## 5. First-run sanity check
 
-`.env` at the repo root, or export inline. The launcher reads these:
-
-| Variable             | Default                       | Purpose                                |
-|----------------------|-------------------------------|----------------------------------------|
-| `BROCKSTON_HOST`     | `127.0.0.1`                   | bind address                           |
-| `BROCKSTON_PORT`     | `9003`                        | Brockston educator port                |
-| `IDE_PORT`           | `5055`                        | IDE Board port                         |
-| `ULTIMATEEV_PORT`    | `5174`                        | UltimateEV port                        |
-| `OLLAMA_BASE_URL`    | `http://127.0.0.1:11434`      | where Ollama lives                     |
-| `OLLAMA_MODEL`       | `llama3.2`                    | UltimateEV's default model             |
-| `LLM_MODEL_CODER`    | `qwen2.5-coder:32b`           | Brockston's coder model                |
-| `ANTHROPIC_API_KEY`  | —                             | enables Claude features                |
-| `BROCKSTON_WORKSPACE`| repo root                     | where your code lives                  |
+1. Open **http://localhost:5055** — explorer should show `~/Code` (or your `BROCKSTON_WORKSPACE`).
+2. Click a folder or file — terminal `cd` should follow.
+3. Ask **Family** or **Nemo**: "What is a variable?" — should answer via local Ollama.
+4. Ask a code question — may route to tool loop or coder model (slower on first hit).
+5. **Cmd+S** saves the open file.
 
 ---
 
-## First-run sanity check
+## 6. Run services individually (advanced)
 
-1. Open **http://localhost:5055**.
-2. Type a file path in the top bar (e.g. `README.md`) → **Open**.
-3. Ask Brockston a question: "Explain what this code does."
-4. Switch to the **UltimateEV** tab for code-mechanic questions.
-5. Save with **Ctrl+S** / **Cmd+S**.
+```bash
+source backend/venv/bin/activate
 
----
+# Terminal 1
+node ultimateev_server.js
 
-## Troubleshooting
+# Terminal 2
+python -m uvicorn backend.launcher:app --host 127.0.0.1 --port 9003
 
-**"Port already in use"** — Something is holding 5055, 7777, or 5174. Free it (or change the port via env var) and run `./start.sh` again.
-
-**"Ollama not reachable"** — Start it in another terminal: `ollama serve`. Brockston and UltimateEV will start but won't answer until Ollama is up.
-
-**"Failed to communicate with BROCKSTON"** — Check `logs/brockston.log` for the real error.
-
-**Monaco editor blank** — The CDN can be blocked on some networks. Check the browser console.
-
-**Path is outside workspace root** — Set `BROCKSTON_WORKSPACE` to a directory that contains the file, or use a path inside the repo.
+# Terminal 3
+python -m uvicorn main:app --host 127.0.0.1 --port 5055
+```
 
 ---
 
-Full architecture, voice pipeline, and being roster live in [README.md](README.md).
+## 7. Troubleshooting
+
+**`Port already in use`** — Something holds 5055, 9003, or 5174. `lsof -iTCP:5055 -sTCP:LISTEN` then kill, or change ports in `.env`.
+
+**`python3 -m venv failed`** — Install Python 3.10+ from python.org or Homebrew.
+
+**`Ollama not reachable`** — Run `ollama serve`. IDE starts but beings stay silent until Ollama is up.
+
+**`Model X not pulled`** — `ollama pull <model>` for each name in `.env`.
+
+**Monaco editor blank** — CDN blocked on your network; check browser console.
+
+**Beings reference skills paths that don't exist** — Normal on a fresh install. Beings still work; optional Grok/Cursor skill folders are Everett's local tooling, not required for the IDE.
+
+---
+
+Architecture and feature list: [README.md](README.md)
