@@ -864,6 +864,15 @@
         let monacoEditor = null;
         let workspaceRoot = null;
         let lastSyncedCwd = null;
+        const LAST_PATH_KEY = 'brockston_last_explorer_path';
+        const savedStartPath = localStorage.getItem(LAST_PATH_KEY) || '';
+        let restoredLastPath = false;
+
+        function saveLastPath(absPath) {
+            if (absPath && absPath.startsWith('/')) {
+                localStorage.setItem(LAST_PATH_KEY, absPath);
+            }
+        }
         let selectedInstructor = 'kimi'; // 'family' | 'claude' | 'kimi' | 'nemo'
         let instructorMode = { nemo: 'partner', kimi: 'codelab' }; // per-instructor mode toggle
 
@@ -1183,6 +1192,7 @@
         function handleTerminalCwd(absPath) {
             if (!absPath || absPath === lastSyncedCwd) return;
             lastSyncedCwd = absPath;
+            saveLastPath(absPath);
 
             const breadcrumb = document.getElementById('explorer-path');
             if (breadcrumb) {
@@ -1978,7 +1988,14 @@
                     } else if (msg.type === 'cwd') {
                         // Initial cwd from backend on socket open
                         workspaceRoot = msg.workspace || msg.path;
-                        handleTerminalCwd(msg.path);
+                        if (savedStartPath && savedStartPath !== msg.path) {
+                            restoredLastPath = true;
+                            lastSyncedCwd = savedStartPath;
+                            loadFiles(savedStartPath);
+                            cdInTerminal(savedStartPath);
+                        } else {
+                            handleTerminalCwd(msg.path);
+                        }
                     }
                 } catch (err) {
                     console.error('[TERMINAL] Parse error:', err);
@@ -2299,6 +2316,7 @@
         const originalLoadFiles = loadFiles;
         loadFiles = async function(path) {
             const result = await originalLoadFiles(path);
+            if (currentPath) saveLastPath(currentPath);
             broadcastToViewer('file_tree_changed', {path: currentPath || path || workspaceRoot});
             return result;
         };
@@ -2339,8 +2357,8 @@
             }
         });
 
-        // ----- Boot
-        loadFiles().then(() => {
+        // ----- Boot — reopen last folder if remembered, else workspace default from .env
+        loadFiles(savedStartPath || '').then(() => {
             // Apply any filter that might have been typed early + initial friendly state
             setTimeout(() => {
                 const fi = document.getElementById('explorer-filter');

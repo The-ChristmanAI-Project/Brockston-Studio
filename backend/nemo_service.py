@@ -10,11 +10,15 @@ Nemo runs on the sovereign stack only.
 """
 
 import logging
+import os
 from typing import Optional
 
 from .ai_client import get_ai_response
 
 logger = logging.getLogger(__name__)
+
+LLM_MODEL_GENERAL = os.getenv("LLM_MODEL_GENERAL", "llama3.2")
+LLM_MODEL_CODER = os.getenv("LLM_MODEL_CODER", "qwen2.5-coder:32b")
 
 _ABILITIES_HINT = (
     "You have real file access in Brockston Studio. "
@@ -66,7 +70,8 @@ class NemoService:
         system = NEMO_SYSTEM_CODE if mode == "code" else NEMO_SYSTEM_PARTNER
         if context:
             system = f"{system}\n\n{context}"
-        return get_ai_response(prompt, system=system, target="ollama", model=model)
+        ollama_model = model or (LLM_MODEL_CODER if mode == "code" else LLM_MODEL_GENERAL)
+        return get_ai_response(prompt, system=system, target="ollama", model=ollama_model)
 
 
 _nemo_instance: Optional[NemoService] = None

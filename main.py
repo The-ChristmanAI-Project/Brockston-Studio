@@ -73,7 +73,7 @@ try:
     _kimi_svc = get_kimi_service()
     if not _kimi_svc.is_available:
         _kimi_svc = None
-        logger.warning("Kimi linked but not available (NVIDIA_API_KEY or BROCKSTON :9001)")
+        logger.warning("Kimi linked but not available (NVIDIA_API_KEY or BROCKSTON :9003)")
     else:
         logger.info("Kimi K2.6 linked — learning tutor available at /api/kimi")
 except Exception as e:
@@ -96,7 +96,26 @@ class NemoRequest(BaseModel):
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "10 Toes Down", "system": "Online"}
+    from backend.being_agent import AGENT_MODEL
+    return {
+        "status": "10 Toes Down",
+        "system": "Online",
+        "workspace": str(WORKSPACE_ROOT),
+        "ollama": OLLAMA_BASE_URL,
+        "models": {
+            "general": LLM_MODEL_GENERAL,
+            "coder": LLM_MODEL_CODER,
+            "being_agent": AGENT_MODEL,
+            "ultimateev": LLM_MODEL_CODER,
+            "kimi": "moonshotai/kimi-k2.6 (NVIDIA)",
+        },
+        "beings": {
+            "family_chat": LLM_MODEL_GENERAL,
+            "nemo_partner": LLM_MODEL_GENERAL,
+            "nemo_code": LLM_MODEL_CODER,
+            "being_agent_tools": AGENT_MODEL,
+        },
+    }
 
 
 @app.get("/api/sound/status")
@@ -157,15 +176,13 @@ async def chat_endpoint(request: ChatRequest):
             }
 
         # Fast direct low-lag chat path for normal questions (no agent overhead)
-        import os
         import httpx
-        fast_model = os.getenv("LLM_MODEL_GENERAL", "llama3.2")
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 r = await client.post(
-                    "http://127.0.0.1:11434/api/chat",
+                    f"{OLLAMA_BASE_URL}/api/chat",
                     json={
-                        "model": fast_model,
+                        "model": LLM_MODEL_GENERAL,
                         "messages": [
                             {"role": "system", "content": full_context[:1500] if full_context else "You are BROCKSTON, helpful and direct."},
                             {"role": "user", "content": request.message}
@@ -195,7 +212,7 @@ async def kimi_endpoint(request: KimiRequest):
     if not _kimi_svc:
         raise fastapi.HTTPException(
             status_code=503,
-            detail="Kimi not available — set NVIDIA_API_KEY or start BROCKSTON on :9001",
+            detail="Kimi not available — set NVIDIA_API_KEY in .env (optional; Nemo uses local Ollama)",
         )
     try:
         mode = request.mode if request.mode in ("tutor", "codelab", "learning", "coach") else "tutor"
@@ -391,10 +408,15 @@ async def get_audio(filename: str):
 # follow them there. The HOME guard prevents path traversal into system files
 # like /etc/passwd while keeping every real project reachable.
 # ----------------------------------------------------------------------------
+from backend.config import (
+    BROCKSTON_WORKSPACE,
+    LLM_MODEL_GENERAL,
+    LLM_MODEL_CODER,
+    OLLAMA_BASE_URL,
+)
+
 USER_HOME = Path(os.path.expanduser("~")).resolve()
-WORKSPACE_ROOT = Path(
-    os.path.expanduser(os.environ.get("BROCKSTON_WORKSPACE", "."))
-).resolve()
+WORKSPACE_ROOT = Path(BROCKSTON_WORKSPACE).resolve()
 
 def _resolve_user_path(raw: str, default: Path) -> Path:
     """Resolve a path argument from the client.
