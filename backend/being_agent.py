@@ -102,13 +102,52 @@ _SCAN_RE = re.compile(
     re.IGNORECASE,
 )
 
+_REVIEW_RE = re.compile(
+    r"\b(review|audit|compliance|cardinal\s+rule|code\s+review|"
+    r"look\s+over|go\s+through|assess|evaluate)\b.*\b(project|repo|codebase|whole|entire)\b|"
+    r"\b(review|audit)\s+(this\s+)?(project|repo|codebase)\b|"
+    r"\[PROJECT\s+ROOT:",
+    re.IGNORECASE,
+)
+
+AGENT_REVIEW_MAX_STEPS = int(os.getenv("BEING_AGENT_REVIEW_MAX_STEPS", "12"))
+
+PROJECT_REVIEW_TASK = """Review the ENTIRE project at [PROJECT ROOT].
+
+Workflow (use <tool_call> — do not skip exploration):
+1. ls project root depth=2 — map structure
+2. ls backend/, frontend/, scripts/ (or equivalent dirs you find)
+3. read README, main entry points, and 3-8 key source files
+4. run rg for: TODO|FIXME|hardcoded.*key|password|api_key|except:|pass
+5. Summarize architecture, risks, and Cardinal Rule compliance
+
+Deliver:
+  ARCHITECTURE — what this project is and how pieces connect
+  CRITICAL — must fix (with file paths)
+  WARNING — should fix soon
+  CLEAN — what passes review
+  VERDICT — PASS / FAIL with one honest sentence"""
+
+
+def wants_project_review(message: str) -> bool:
+    """True when the user wants a whole-project review (not a single open file)."""
+    return bool(_REVIEW_RE.search(message or ""))
+
+
+def review_agent_max_steps() -> int:
+    return AGENT_REVIEW_MAX_STEPS
+
 
 def wants_agent_tools(message: str, mode: str) -> bool:
     """Enable the tool loop for code work and project exploration — not creative tutor chat."""
     if mode in ("codelab", "code"):
         return True
     text = message or ""
-    return bool(_CODE_FIX_RE.search(text) or _SCAN_RE.search(text))
+    return bool(
+        _CODE_FIX_RE.search(text)
+        or _SCAN_RE.search(text)
+        or wants_project_review(text)
+    )
 
 
 def strip_tool_blocks(text: str) -> str:

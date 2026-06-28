@@ -772,6 +772,7 @@
                 <button class="quick-action" onclick="quickAsk('Suggest a better version of')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Refactor</button>
                 <button class="quick-action" onclick="quickAsk('Find bugs or issues in')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Find bugs</button>
                 <button class="quick-action" onclick="quickAsk('Write tests for')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Write tests</button>
+                <button class="quick-action" onclick="reviewProject()" style="font-size:10px;background:#1a1208;border:1px solid var(--neon-orange);color:var(--neon-orange);padding:2px 7px;border-radius:3px;cursor:pointer;" title="Review entire explorer folder">Review project</button>
             </div>
 
             <div id="chat-history">
@@ -1343,19 +1344,26 @@
         }
 
         // ----- Chat (now sends editor context so the beings actually know what you're looking at)
+        function explorerContextBlock() {
+            const root = currentPath || workspaceRoot || '';
+            if (!root) return '';
+            return `[EXPLORER PATH: ${root}]\n`;
+        }
+
         async function sendChat(extraContext = '') {
             let text = chatInput.value.trim();
             if (!text) return;
             if (extraContext) text = extraContext + '\n\n' + text;
 
             // build rich context for the AI
-            let payloadMessage = text;
+            let payloadMessage = explorerContextBlock() + text;
             if (activeTabPath) {
                 const tab = findTab(activeTabPath);
                 const snippet = tab ? (tab.content || '').slice(0, 2400) : '';
                 const sel = monacoEditor ? monacoEditor.getModel().getValueInRange(monacoEditor.getSelection()) : '';
                 const ctx = sel ? sel.slice(0, 1800) : snippet;
-                payloadMessage = `[CURRENT FILE: ${activeTabPath}]\n` +
+                payloadMessage = explorerContextBlock() +
+                    `[CURRENT FILE: ${activeTabPath}]\n` +
                     (sel ? '```selection\n' + sel + '\n```\n' : '') +
                     (sel ? '' : '```' + (activeTabPath.split('.').pop()) + '\n' + ctx + '\n```\n') +
                     text;
@@ -1486,10 +1494,63 @@
 
         function detectKimiMode(text) {
             const lower = String(text || '').toLowerCase();
+            if (/\b(review|audit|whole\s+project|entire\s+project|codebase|scan\s+project)\b/.test(lower)) {
+                return 'codelab';
+            }
             if (/\b(code|fix|bug|implement|refactor|python|typescript|module|import|function|class)\b/.test(lower)) {
                 return 'codelab';
             }
             return 'tutor';
+        }
+
+        async function reviewProject(extraNotes = '') {
+            const root = currentPath || workspaceRoot || '';
+            if (!root) {
+                appendMessage('SYSTEM', 'Explorer path not ready — wait for files to load or pick a folder.', 'system');
+                return;
+            }
+            const instructorKey = MODEL_ORCHESTRATOR.currentInstructor || 'family';
+            const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
+            const label = instructor.name || 'BROCKSTON';
+            const userLine = extraNotes || 'Review this entire project for architecture, bugs, and Cardinal Rule compliance.';
+            appendMessage('YOU', `Review project: ${root}`, 'user');
+            appendMessage('SYSTEM', `Scanning ${root} — beings will ls/read/rg the whole tree (may take a minute).`, 'system');
+
+            const controller = new AbortController();
+            const reviewTimer = setTimeout(() => controller.abort(), 600000);
+            try {
+                const res = await fetch(`${API_BASE}/review/project`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        path: root,
+                        message: userLine,
+                        instructor: instructorKey === 'claude' ? 'family' : instructorKey,
+                    }),
+                });
+                if (!res.ok) {
+                    const errBody = await res.text();
+                    let detail = errBody;
+                    try {
+                        const parsed = JSON.parse(errBody);
+                        detail = parsed.detail || errBody;
+                    } catch (_) {}
+                    throw new Error(detail || `Server error: ${res.status}`);
+                }
+                const data = await res.json();
+                appendMessage(label, data.response || '', 'ai');
+                speakText(data.response);
+            } catch (err) {
+                console.error(err);
+                let msg = err.message;
+                if (err.name === 'AbortError') {
+                    msg = 'Project review timed out after 10 minutes — try a smaller folder or Nemo locally.';
+                }
+                appendMessage('SYSTEM', `[REVIEW ERROR]: ${msg}`, 'error');
+            } finally {
+                clearTimeout(reviewTimer);
+            }
         }
 
         async function sendToClaude(text, whoLabel = 'CLAUDE') {
