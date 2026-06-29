@@ -131,7 +131,7 @@ async def call_claude(req: ClaudeRequest):
                 parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
                 return "\n".join(parts).strip()
 
-            # Use the unified agent runner so Claude has same compute power as family/kimi/nemo
+            # Use the unified agent runner so Claude has same compute power as The Family
             agent_result = await run_being_agent(
                 claude_generate,
                 message=user_message_for_check or (req.messages[-1].get("content", "") if req.messages else ""),

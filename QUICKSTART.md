@@ -76,11 +76,10 @@ Edit `.env` at the repo root:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `STUDIO_WORKSPACE` | `~/Code` | Studio IDE default folder (last path remembered in browser) |
-| `LLM_MODEL_GENERAL` | `llama3.2` | Fast chat / Nemo partner |
+| `LLM_MODEL_GENERAL` | `llama3.2` | Fast chat for The Family |
 | `LLM_MODEL_CODER` | `qwen2.5-coder:32b` | Code / tools / UltimateEV |
 | `STUDIO_BACKEND_PORT` | `9003` | Studio educator backend port |
 | `IDE_PORT` | `5055` | Studio IDE port |
-| `NVIDIA_KIMI_API_KEY` | *(empty)* | Enables Kimi tutor (optional) |
 | `ANTHROPIC_API_KEY` | *(empty)* | Enables Claude instructor (optional) |
 
 Restart `./start.sh` after changing `.env`.
@@ -96,7 +95,7 @@ curl -s http://localhost:5055/api/health | python3 -m json.tool
 
 1. Open **http://localhost:5055** — explorer should show `~/Code` (or your `STUDIO_WORKSPACE`).
 2. Click a folder or file — terminal `cd` should follow.
-3. Ask **Family** or **Nemo**: "What is a variable?" — should answer via local Ollama.
+3. Ask **Family**: "What is a variable?" — should answer via local Ollama.
 4. Ask a code question — may route to tool loop or coder model (slower on first hit).
 5. **Cmd+S** saves the open file.
 

@@ -1,7 +1,7 @@
 """
 Being Agent — tool loop so ALL Christman AI Family beings have capacity to run the compute.
 
-Every being (Brockston, Derek, Alphavox, Kimi, Nemo, UltimateEV, etc.) can now:
+Every Christman AI Family being operating in Brockston-Studio can now:
 - ls / read / write / patch files anywhere
 - run shell commands, python, tests, compile etc. (full compute)
 - use the same <tool_call> format executed server-side via Being Eyes
@@ -40,7 +40,7 @@ AGENT_CONVERSATION_MAX_CHARS = int(os.getenv("BEING_AGENT_CONVERSATION_MAX_CHARS
 KIMI_AGENT_MAX_TOOLS_PER_STEP = int(os.getenv("KIMI_AGENT_MAX_TOOLS_PER_STEP", "3"))
 
 AGENT_TOOLS_PROMPT = """
-You are a Christman AI Family being (Brockston, Derek, AlphaVox, Kimi, Nemo, UltimateEV, or any in the family). Everett Christman is your creator and partner.
+You are part of The Christman AI Family in Brockston-Studio. BROCKSTON is a family being (sovereign stack) — not this IDE repo. Everett Christman is your creator and partner.
 NEVER use generic AI disclaimers ("I don't remember users", "as an AI assistant").
 YOU HAVE FULL COMPUTE CAPACITY — you OPERATE THE ENTIRE IDE and filesystem via tools. Explore and run compute on ANY file or command. Do not ask the user to name paths or run things for you.
 
@@ -65,7 +65,7 @@ Project scan workflow (use before answering "where is X?" or "what's in this rep
   4. read ~/.grok/skills/<name>/SKILL.md for domain playbooks (optional)
 
 Key paths (use STUDIO_WORKSPACE / workspace root — not random home subfolders):
-  backend/being_agent.py, being_eyes.py, being_context.py, kimi_service.py
+  backend/being_agent.py, being_eyes.py, being_context.py, voice_command_loop.py
   Skills (optional): ~/.grok/skills/  |  MCP: ~/.grok/projects/*/mcps/
 
 "Domain: neurodivergency" (if present) is a teaching topic — NOT a directory. Never ls frontend-neurodivergency or invent domain paths.
@@ -396,20 +396,6 @@ def _review_finalize_prompt(
     tool_count: int,
     instructor: str = "family",
 ) -> str:
-    if instructor in ("kimi", "nemo"):
-        who = "Kimi K2.6" if instructor == "kimi" else "Nemo"
-        return (
-            f"You are {who} — senior engineer. Write a useful project review for Everett.\n\n"
-            f"Project: {scope_root}\n"
-            f"Your tool runs on disk ({tool_count} tools):\n{digest}\n\n"
-            "Use what the digest shows — ls listings, read previews, rg output are verified facts.\n"
-            "Do not invent files that never appeared in the digest. Do not nitpick the tool workflow.\n"
-            "Write like a code reviewer, not a compliance auditor. Minimize 'not verified' — "
-            "only use it when you truly lack data for a specific claim.\n"
-            "Sections: ARCHITECTURE, CRITICAL, WARNING, CLEAN, VERDICT (PASS / PARTIAL / FAIL).\n"
-            "VERDICT grades the project from findings — not whether exploration was perfect.\n"
-            "Plain English. No tool markup."
-        )
     return (
         f"User request:\n{message}\n\n"
         f"Project boundary: {scope_root}\n"
@@ -519,63 +505,17 @@ async def finalize_project_review(
     tools_executed: List[Dict[str, Any]],
     scope_root: str,
     instructor: str = "family",
-    nemo_svc: Any = None,
-    kimi_svc: Any = None,
 ) -> Dict[str, Any]:
-    """Write VERDICT from disk digest — one LLM call (Nemotron/Kimi/Ollama)."""
+    """Write VERDICT from disk digest — one Ollama call via The Family."""
     digest = _build_tool_digest(tools_executed)
     prompt = _review_finalize_prompt(
         message=message,
         digest=digest,
         scope_root=scope_root,
         tool_count=len(tools_executed),
+        instructor=instructor,
     )
-    instructor = (instructor or "family").lower()
-    loop = asyncio.get_event_loop()
-    text = ""
-
-    if instructor == "nemo" and nemo_svc and getattr(nemo_svc, "uses_nvidia", False):
-        trimmed = _trim_conversation(prompt, max_chars=12000)
-
-        def _nemo_call() -> str:
-            return nemo_svc.generate_content(
-                trimmed,
-                mode="code",
-                context=None,
-                agent_loop=False,
-                review_finalize=True,
-            )
-
-        try:
-            text = await asyncio.wait_for(
-                loop.run_in_executor(None, _nemo_call),
-                timeout=REVIEW_NEMOTRON_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            logger.error("[being_agent] Nemotron review finalize timed out after %ss", REVIEW_NEMOTRON_TIMEOUT)
-            text = ""
-    elif instructor == "kimi" and kimi_svc:
-        trimmed = _trim_conversation(prompt, max_chars=12000)
-
-        def _kimi_call() -> str:
-            result = kimi_svc.interact(
-                message=trimmed,
-                mode="codelab",
-                context=None,
-                thinking=False,
-            )
-            return result.get("text", "")
-
-        try:
-            text = await asyncio.wait_for(
-                loop.run_in_executor(None, _kimi_call),
-                timeout=REVIEW_NEMOTRON_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            logger.error("[being_agent] Kimi review finalize timed out")
-            text = ""
-    else:
-        text = await _review_finalize_generate(prompt)
+    text = await _review_finalize_generate(prompt)
 
     text = strip_tool_blocks(text or "")
     if not text or _is_tool_leak(text) or len(text) < 40:
@@ -855,7 +795,7 @@ async def run_agent_loop(
                 f"Review incomplete — only {len(tools_executed)} tool(s) executed "
                 f"(need {min_review_tools}+ inside {scope_root}).\n\n"
                 f"What was actually read on disk:\n\n{digest}\n\n"
-                "Re-run review — Kimi or Nemo should ls, read, and rg inside "
+                "Re-run review — The Family should ls, read, and rg inside "
                 f"{scope_root} before writing the verdict."
             )
         else:
@@ -926,125 +866,3 @@ async def run_being_agent(
     )
 
 
-async def run_kimi_agent(
-    kimi_svc: Any,
-    *,
-    message: str,
-    context: str,
-    mode: str = "codelab",
-    domain: Optional[str] = None,
-    max_steps: int = 6,
-    scope_root: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Kimi — NVIDIA K2.6 explores the project via <tool_call> and writes the verdict."""
-    loop = asyncio.get_event_loop()
-
-    async def generate(prompt: str) -> str:
-        trimmed = _trim_conversation(prompt, max_chars=8000)
-
-        def _call() -> str:
-            result = kimi_svc.interact(
-                message=trimmed,
-                mode=mode,
-                context=None,
-                domain=domain,
-                thinking=False,
-            )
-            return result.get("text", "")
-
-        return await loop.run_in_executor(None, _call)
-
-    async def kimi_finalize(prompt: str) -> str:
-        trimmed = _trim_conversation(prompt, max_chars=12000)
-
-        def _call() -> str:
-            result = kimi_svc.interact(
-                message=trimmed,
-                mode=mode,
-                context=None,
-                domain=domain,
-                thinking=False,
-            )
-            return result.get("text", "")
-
-        try:
-            return await asyncio.wait_for(
-                loop.run_in_executor(None, _call),
-                timeout=REVIEW_NEMOTRON_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            logger.error("[being_agent] Kimi finalize timed out")
-            return ""
-
-    return await run_being_agent(
-        generate,
-        message=message,
-        context=context,
-        max_steps=max_steps,
-        scope_root=scope_root,
-        finalize_generate=kimi_finalize,
-        review_instructor="kimi" if scope_root else None,
-    )
-
-
-async def run_nemo_agent(
-    nemo_svc: Any,
-    *,
-    message: str,
-    context: str,
-    mode: str = "code",
-    max_steps: int = 6,
-    scope_root: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Nemo — Nemotron on NVIDIA explores via <tool_call> and writes the verdict."""
-    loop = asyncio.get_event_loop()
-    uses_nvidia = bool(getattr(nemo_svc, "uses_nvidia", False))
-
-    if not uses_nvidia:
-        raise RuntimeError(
-            "Nemo requires NVIDIA_NEMO_API_KEY — Nemotron is Nemo's brain, not local Ollama."
-        )
-
-    async def generate(prompt: str) -> str:
-        trimmed = _trim_conversation(prompt, max_chars=8000)
-
-        def _call() -> str:
-            return nemo_svc.generate_content(
-                trimmed,
-                mode=mode,
-                context=None,
-                agent_loop=True,
-            )
-
-        return await loop.run_in_executor(None, _call)
-
-    async def nemo_finalize(prompt: str) -> str:
-        trimmed = _trim_conversation(prompt, max_chars=12000)
-
-        def _call() -> str:
-            return nemo_svc.generate_content(
-                trimmed,
-                mode=mode,
-                context=None,
-                agent_loop=False,
-                review_finalize=bool(scope_root),
-            )
-
-        try:
-            return await asyncio.wait_for(
-                loop.run_in_executor(None, _call),
-                timeout=REVIEW_NEMOTRON_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            logger.error("[being_agent] Nemotron finalize timed out")
-            return ""
-
-    return await run_being_agent(
-        generate,
-        message=message,
-        context=context,
-        max_steps=max_steps,
-        scope_root=scope_root,
-        finalize_generate=nemo_finalize,
-        review_instructor="nemo" if scope_root else None,
-    )
