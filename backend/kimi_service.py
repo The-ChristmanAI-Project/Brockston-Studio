@@ -28,7 +28,10 @@ NVIDIA_CHAT_URL = os.getenv(
     "https://integrate.api.nvidia.com/v1/chat/completions",
 )
 NVIDIA_KIMI_MODEL = os.getenv("NVIDIA_KIMI_MODEL", "moonshotai/kimi-k2.6")
-BROCKSTON_KIMI_URL = os.getenv("BROCKSTON_KIMI_URL", "http://localhost:9003/kimi/interact")
+STUDIO_KIMI_URL = os.getenv(
+    "STUDIO_KIMI_URL",
+    os.getenv("BROCKSTON_KIMI_URL", "http://localhost:9003/kimi/interact"),
+)
 NVIDIA_KIMI_MAX_TOKENS = int(os.getenv("NVIDIA_KIMI_MAX_TOKENS", "16384"))
 NVIDIA_KIMI_TEMPERATURE = float(os.getenv("NVIDIA_KIMI_TEMPERATURE", "1.0"))
 NVIDIA_KIMI_TOP_P = float(os.getenv("NVIDIA_KIMI_TOP_P", "1.0"))
@@ -111,7 +114,7 @@ class KimiService:
 
     def _brockston_kimi_reachable(self) -> bool:
         try:
-            base = BROCKSTON_KIMI_URL.rsplit("/kimi/", 1)[0]
+            base = STUDIO_KIMI_URL.rsplit("/kimi/", 1)[0]
             for path in ("/health", "/api/health"):
                 r = httpx.get(f"{base}{path}", timeout=2.0)
                 if r.status_code == 200:
@@ -281,7 +284,7 @@ class KimiService:
             "max_tokens": max_tokens,
         }
         try:
-            r = httpx.post(BROCKSTON_KIMI_URL, json=payload, timeout=300.0)
+            r = httpx.post(STUDIO_KIMI_URL, json=payload, timeout=300.0)
             if r.status_code == 200:
                 data = r.json()
                 if data.get("ok") and data.get("text"):

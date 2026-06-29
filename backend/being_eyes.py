@@ -44,9 +44,9 @@ router = APIRouter(prefix="/api/eyes", tags=["being_eyes"])
 
 # ── Workspace root — same as Studio's WORKSPACE_ROOT (backend/config.py) ─────
 try:
-    from backend.config import BROCKSTON_WORKSPACE as _CFG_WORKSPACE
+    from backend.config import STUDIO_WORKSPACE as _CFG_WORKSPACE
 except ImportError:
-    from config import BROCKSTON_WORKSPACE as _CFG_WORKSPACE
+    from config import STUDIO_WORKSPACE as _CFG_WORKSPACE
 
 WORKSPACE_ROOT = Path(_CFG_WORKSPACE).resolve()
 USER_HOME = Path(os.path.expanduser("~")).resolve()

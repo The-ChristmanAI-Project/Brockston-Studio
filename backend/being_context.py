@@ -129,7 +129,7 @@ christman_sound/  — Audio/speech pipeline
 absenth/          — Core Brockston modules
 main.py           — Studio server entry (port 5055)
 start.sh          — Launch script
-.env              — BROCKSTON_WORKSPACE sets the scan root"""
+.env              — STUDIO_WORKSPACE sets the IDE default folder"""
 
 def _skills_and_tools_map() -> str:
     return f"""=== SKILLS & TOOLS LOCATIONS ===
