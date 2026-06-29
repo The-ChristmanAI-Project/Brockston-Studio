@@ -90,7 +90,7 @@ class XTTSEngine(BaseSynthesizer):
 
     def load_voice(
         self,
-        reference_audio: Path,
+        reference_audio: Path | str,
         speaker_embedding: Optional[np.ndarray] = None
     ):
         """Load voice from reference audio.
@@ -102,6 +102,7 @@ class XTTSEngine(BaseSynthesizer):
             speaker_embedding: Ignored for XTTS (uses audio directly)
         """
         self._load_model()
+        reference_audio = Path(reference_audio)
 
         if not reference_audio.exists():
             raise FileNotFoundError(f"Reference audio not found: {reference_audio}")

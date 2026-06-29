@@ -7,8 +7,8 @@ This file is WHO HE IS. The JS server (ultimateev_server.js) is his runtime home
 """
 
 # ── Voice Identity ────────────────────────────────────────────────────────────
-VOICE_ID        = "Joey"             # AWS Polly — firm, direct male voice
-VOICE_ENGINE    = "neural"
+VOICE_BEING     = "ultimateev"       # Christman Sound reference WAV + ear canal
+VOICE_ENGINE    = "christman_sound"  # XTTS → EAR_CANAL.SPEAK → macOS say
 VOICE_FALLBACK  = "macos_say"
 
 # ── Who He Is ─────────────────────────────────────────────────────────────────

@@ -38,9 +38,9 @@ def speak(
 
         # Pull synthesis params from the Config tiers
         params = resolve_voice_params(
-            temperature=config.get("synthesis.temperature", 0.7),
-            emotion=emotion,
-            top_p=config.get("synthesis.top_p", 0.9)
+            tone_score=50.0,
+            dominant_emotion=emotion or "neutral",
+            exaggeration=float(config.get("synthesis.exaggeration", 0.0)),
         )
         
         wav = synthesize_speech(text, params, str(ref))

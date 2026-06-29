@@ -1,36 +1,31 @@
 """
-Christman-Sound + Media Installer paths for Brockston Studio.
+christman_sound paths for Brockston Studio.
 
-Canonical cold-storage roots live on LIFE2. Override via env when needed.
+This repo only: ./christman_sound and ./Voice_Creation_Center.
+Override with CHRISTMAN_SOUND_ROOT in .env if you must — no other default.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+logger = logging.getLogger(__name__)
 
-# Prefer local christman_sound present in this Brockston-Studio project
-# (user confirmed it is here). Fall back to cold storage volume only if no local.
-_local_sound = BASE_DIR / "christman_sound"
-if _local_sound.exists() and (_local_sound / "CHRISTMAN_EAR_CANAL").exists():
-    _default_sound = str(_local_sound)
-else:
-    _default_sound = "/Volumes/LIFE2/Christman-Sound"
+BASE_DIR = Path(__file__).resolve().parent.parent
+LOCAL_CHRISTMAN_SOUND = BASE_DIR / "christman_sound"
 
 CHRISTMAN_SOUND_ROOT = Path(
-    os.getenv("CHRISTMAN_SOUND_ROOT", _default_sound)
+    os.getenv("CHRISTMAN_SOUND_ROOT", str(LOCAL_CHRISTMAN_SOUND))
 ).expanduser()
 
-CHRISTMAN_MEDIA_INSTALLER_ROOT = Path(
-    os.getenv(
-        "CHRISTMAN_MEDIA_INSTALLER_ROOT",
-        "/Volumes/LIFE2/ChristmanMediaInstallerV4",
-    )
-).expanduser()
+_media_installer_env = os.getenv("CHRISTMAN_MEDIA_INSTALLER_ROOT", "").strip()
+CHRISTMAN_MEDIA_INSTALLER_ROOT: Optional[Path] = (
+    Path(_media_installer_env).expanduser() if _media_installer_env else None
+)
 
 VOICE_CENTER = Path(
     os.getenv("CHRISTMAN_VOICE_CENTER", str(BASE_DIR / "Voice_Creation_Center"))
@@ -40,8 +35,7 @@ VOICEPACK_DIR = Path(
     os.getenv("CHRISTMAN_VOICEPACK_DIR", str(BASE_DIR / "data" / "voicepacks"))
 ).expanduser()
 
-# Trailing space is real on LIFE2 — do not strip.
-_SDK_FOLDER_NAMES = ("christman_voice_sdk ", "christman_voice_sdk")
+_SDK_FOLDER_NAMES = ("christman_voice_sdk", "christman_voice_sdk ")
 
 
 def sdk_root() -> Path:
@@ -55,8 +49,6 @@ def sdk_root() -> Path:
 # Read-aloud: map chat beings to male Christman reference WAVs (Brockston uvclass, etc.)
 TTS_BEING_ALIASES: dict[str, str] = {
     "family": "brockston",
-    "kimi": "brockston",
-    "nemo": "brockston",
     "claude": "brockston",
     "default": "brockston",
 }
@@ -100,7 +92,7 @@ def resolve_tts_being(being: str) -> str:
 
 
 def macos_voice_for_being(being: str) -> str:
-    """Male macOS voice when Christman-Sound XTTS is unavailable."""
+    """Male macOS voice when christman_sound XTTS is unavailable."""
     key = resolve_tts_being(being)
     return MACOS_MALE_VOICES.get(key, MACOS_MALE_VOICES["default"])
 
@@ -126,10 +118,12 @@ def ensure_voice_folders() -> list[Path]:
 
 
 def ensure_sound_paths() -> list[str]:
-    """Add Christman-Sound + SDK to sys.path. Returns paths added.
-    When using the local copy in this project, also add the voice_sdk subdir
-    so "import christman_voice_sdk" succeeds for per-being XTTS (Kimi etc).
-    """
+    """Add christman_sound + SDK to sys.path. Returns paths added."""
+    if not CHRISTMAN_SOUND_ROOT.is_dir():
+        logger.error(
+            "[christman_sound] Missing at %s — expected Brockston-Studio/christman_sound",
+            CHRISTMAN_SOUND_ROOT,
+        )
     added: list[str] = []
     for path in (CHRISTMAN_SOUND_ROOT, sdk_root(), VOICE_CENTER):
         s = str(path)
@@ -176,7 +170,7 @@ def load_being_manifest(being: str) -> Optional[dict]:
 def find_reference_wav(being: str) -> Optional[Path]:
     """Resolve reference WAV through Voice_Creation_Center manifest, then incoming/.
     If the specific being has none, fall back to a default (brockston or first available)
-    so every being gets proper Christman-Sound XTTS instead of raw macOS say.
+    so every being gets christman_sound XTTS instead of raw macOS say.
     """
     key = being.lower().strip()
     if not key or key in ("default", "daniel"):
@@ -197,9 +191,15 @@ def find_reference_wav(being: str) -> Optional[Path]:
     for directory in search_dirs:
         if not directory.is_dir():
             continue
-        wavs = sorted(directory.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if wavs:
-            return wavs[0]
+        audio_files = sorted(
+            list(directory.glob("*.wav"))
+            + list(directory.glob("*.mp3"))
+            + list(directory.glob("*.m4a")),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if audio_files:
+            return audio_files[0]
 
     # Fallback so NO being is stuck on macOS say TTS
     if key != "brockston":
@@ -243,7 +243,11 @@ def sound_stack_status() -> dict:
     """Truth report for wiring — Rule 13."""
     sdk = sdk_root()
     ear_paths = CHRISTMAN_SOUND_ROOT / "CHRISTMAN_EAR_CANAL" / "_paths.py"
-    installer_cli = CHRISTMAN_MEDIA_INSTALLER_ROOT / "christman_media_installer" / "cli.py"
+    installer_cli = (
+        CHRISTMAN_MEDIA_INSTALLER_ROOT / "christman_media_installer" / "cli.py"
+        if CHRISTMAN_MEDIA_INSTALLER_ROOT
+        else None
+    )
     beings_ready = {}
     for name in BEINGS:
         inc = incoming_dir(name)
@@ -260,8 +264,8 @@ def sound_stack_status() -> dict:
         "sdk_root": str(sdk),
         "sdk_exists": sdk.is_dir(),
         "ear_canal_paths_shim": ear_paths.exists(),
-        "media_installer": str(CHRISTMAN_MEDIA_INSTALLER_ROOT),
-        "media_installer_exists": installer_cli.exists(),
+        "media_installer": str(CHRISTMAN_MEDIA_INSTALLER_ROOT or ""),
+        "media_installer_exists": bool(installer_cli and installer_cli.exists()),
         "voice_center": str(VOICE_CENTER),
         "voice_creation_center_active": True,
         "registered_packs": _inventory_pack_ids(),

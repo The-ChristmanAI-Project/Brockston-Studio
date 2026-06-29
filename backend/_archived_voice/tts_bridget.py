@@ -2,7 +2,7 @@
 BROCKSTON TTS Bridge — routes through unified VoiceService.
 
 Previously: imported speech.py directly (unreliable path, wrong voice ID).
-Now: routes through voice_service.py which handles ElevenLabs → Polly → gTTS
+Now: routes through voice_service.py → Christman Sound (ear canal + SDK)
 with the correct Matthew voice and proper fallback chain.
 
 Cardinal Rule 1: It has to actually work.
@@ -34,7 +34,7 @@ except ImportError as e:
 def synthesize_speech(text: str, being: str = "brockston"):
     """
     Synthesize speech for a Christman AI family member.
-    Routes to ElevenLabs → AWS Polly → gTTS in priority order.
+    Routes to Christman Sound (XTTS / ear canal) → macOS say fallback.
 
     Args:
         text: Text to speak

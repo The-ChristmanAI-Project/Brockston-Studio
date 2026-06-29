@@ -32,7 +32,7 @@ On first run, `start.sh` will:
 - Copy `.env.example` → `.env` if you don't have one
 - Create `backend/venv` and install Python deps (not shipped in git)
 - Run `npm install` only if Node deps are missing
-- Start IDE (5055), Brockston educator (9003), and UltimateEV (5174)
+- Start Studio IDE (5055), Studio backend (9003), and UltimateEV (5174)
 
 Press **Ctrl+C** to stop all three services.
 
@@ -51,7 +51,7 @@ Full details: **[QUICKSTART.md](QUICKSTART.md)**
 | Being Eyes | Beings can `ls` / `read` / `patch` / `run` on your machine |
 | IDE control | `/ws/ide-control` — remote agent can open files, run terminal commands |
 
-**Default folder:** `~/Code` (set `BROCKSTON_WORKSPACE` in `.env`). The browser remembers your last-opened folder.
+**Default folder:** `~/Code` (set `STUDIO_WORKSPACE` in `.env`). The browser remembers your last-opened folder.
 
 **Model split (local Ollama):**
 - `llama3.2` — fast chat, vocal, Nemo partner mode
@@ -63,8 +63,8 @@ Full details: **[QUICKSTART.md](QUICKSTART.md)**
 
 | Service | Port | URL |
 |---------|------|-----|
-| IDE Board | 5055 | http://localhost:5055 |
-| Brockston educator | 9003 | http://localhost:9003 |
+| Studio IDE | 5055 | http://localhost:5055 |
+| Studio backend | 9003 | http://localhost:9003 |
 | UltimateEV | 5174 | http://localhost:5174 |
 | Ollama | 11434 | http://127.0.0.1:11434 |
 
@@ -92,7 +92,7 @@ Never commit `.env` — it is gitignored.
 - `backend/venv/`, `logs/`, or personal voice WAVs in `Voice_Creation_Center/incoming/`
 - Machine-specific indexes (`inventory/index.json`, `express_index.json`, voice `manifest.json`)
 
-**They bring their own keys** by copying `.env.example` → `.env`. Optional services (Kimi, Claude, ElevenLabs) stay empty until they fill them in.
+**They bring their own keys** by copying `.env.example` → `.env`. Optional services (Kimi, Claude) stay empty until they fill them in.
 
 **Never put real API keys in source files** — only in `.env` on your machine.
 
@@ -141,9 +141,9 @@ Brockston-Studio/
 | Port already in use | Free 5055 / 9003 / 5174 or change ports in `.env` |
 | Ollama not reachable | `ollama serve` in another terminal |
 | Beings don't answer | `ollama pull llama3.2` (and coder model in `.env`) |
-| Opens wrong folder | Set `BROCKSTON_WORKSPACE=~/Code` in `.env`, restart |
+| Opens wrong folder | Set `STUDIO_WORKSPACE=~/Code` in `.env`, restart |
 
-Logs: `./logs/ide.log`, `./logs/brockston.log`, `./logs/ultimateev.log`
+Logs: `./logs/ide.log`, `./logs/studio-backend.log`, `./logs/ultimateev.log`
 
 ---
 
