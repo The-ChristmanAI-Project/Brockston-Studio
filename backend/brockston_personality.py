@@ -7,8 +7,8 @@ Audio pipeline lives in Christman Sound — this file is WHO HE IS.
 """
 
 # ── Voice Identity ────────────────────────────────────────────────────────────
-VOICE_ID        = "Stephen"          # AWS Polly Neural — Brockston's permanent voice
-VOICE_ENGINE    = "neural"
+VOICE_BEING     = "brockston"        # Christman Sound reference WAV + ear canal
+VOICE_ENGINE    = "christman_sound"  # XTTS → EAR_CANAL.SPEAK → macOS say
 VOICE_FALLBACK  = "macos_say"
 
 # ── Who He Is ─────────────────────────────────────────────────────────────────
