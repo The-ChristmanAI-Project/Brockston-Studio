@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
-# BROCKSTON Studio — Single-command launcher
-# Starts: UltimateEV (5174) → Brockston educator (9003) → IDE Board (5055)
+# Brockston-Studio — Single-command launcher (this repo only; not ~/BROCKSTON)
+# Starts: UltimateEV (5174) → Studio educator backend (9003) → Studio IDE (5055)
 # Requires: Ollama running on 11434 with llama3.2 and qwen2.5-coder:32b pulled
 # Stops cleanly on Ctrl+C.
 # =============================================================================
@@ -15,7 +15,7 @@ LOG_DIR="$ROOT/logs"
 mkdir -p "$LOG_DIR"
 
 ULTIMATEEV_LOG="$LOG_DIR/ultimateev.log"
-BROCKSTON_LOG="$LOG_DIR/brockston.log"
+STUDIO_BACKEND_LOG="$LOG_DIR/studio-backend.log"
 IDE_LOG="$LOG_DIR/ide.log"
 
 # ----- defaults (overridable via .env or shell) ------------------------------
@@ -32,15 +32,15 @@ export LLM_MODEL_GENERAL="${LLM_MODEL_GENERAL:-llama3.2}"
 export LLM_MODEL_CODER="${LLM_MODEL_CODER:-qwen2.5-coder:32b}"
 export LLM_MODEL="${LLM_MODEL:-$LLM_MODEL_GENERAL}"
 
-export BROCKSTON_HOST="${BROCKSTON_HOST:-127.0.0.1}"
-export BROCKSTON_PORT="${BROCKSTON_PORT:-9003}"          # Educator backend (current: 9003)
-export IDE_PORT="${IDE_PORT:-5055}"                       # IDE Board frontend (main.py)
+export STUDIO_HOST="${STUDIO_HOST:-${BROCKSTON_HOST:-127.0.0.1}}"
+export STUDIO_BACKEND_PORT="${STUDIO_BACKEND_PORT:-${BROCKSTON_PORT:-9003}}"
+export IDE_PORT="${IDE_PORT:-5055}"                       # Studio IDE frontend (main.py)
 export ULTIMATEEV_PORT="${ULTIMATEEV_PORT:-5174}"         # UltimateEV node server
 export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
 export OLLAMA_MODEL="${OLLAMA_MODEL:-$LLM_MODEL_GENERAL}"
 
-# Ensure all parts (IDE main.py, Being Eyes, terminal) agree on workspace root
-export BROCKSTON_WORKSPACE="${BROCKSTON_WORKSPACE:-$ROOT}"
+# Studio IDE default project folder (explorer + terminal). Not the educator backend.
+export STUDIO_WORKSPACE="${STUDIO_WORKSPACE:-${BROCKSTON_WORKSPACE:-$ROOT}}"
 
 PIDS=()
 
@@ -56,7 +56,7 @@ C_CYAN=$'\033[36m'
 banner() {
     echo ""
     echo "${C_BOLD}=========================================${C_RESET}"
-    echo "${C_BOLD}  BROCKSTON Studio${C_RESET}"
+    echo "${C_BOLD}  Brockston-Studio${C_RESET}"
     echo "${C_DIM}  The Christman AI Project${C_RESET}"
     echo "${C_BOLD}=========================================${C_RESET}"
     echo ""
@@ -105,7 +105,7 @@ preflight() {
     fi
 
     # Ensure workspace folder exists
-    mkdir -p "$(eval echo "$BROCKSTON_WORKSPACE")" 2>/dev/null || true
+    mkdir -p "$(eval echo "$STUDIO_WORKSPACE")" 2>/dev/null || true
 
     # Ollama reachable?
     if curl -fsS "$OLLAMA_BASE_URL/api/tags" >/dev/null 2>&1; then
@@ -142,14 +142,14 @@ port_in_use() {
 
 check_ports() {
     local conflict=0
-    for p in "$ULTIMATEEV_PORT" "$BROCKSTON_PORT" "$IDE_PORT"; do
+    for p in "$ULTIMATEEV_PORT" "$STUDIO_BACKEND_PORT" "$IDE_PORT"; do
         if port_in_use "$p"; then
             fail "Port $p already in use"
             conflict=1
         fi
     done
     [ "$conflict" = "1" ] && { fail "Free the ports above and try again."; exit 1; }
-    ok "Ports $ULTIMATEEV_PORT, $BROCKSTON_PORT, $IDE_PORT are free"
+    ok "Ports $ULTIMATEEV_PORT, $STUDIO_BACKEND_PORT, $IDE_PORT are free"
 }
 
 # ----- shutdown handler ------------------------------------------------------
@@ -178,19 +178,19 @@ start_ultimateev() {
     sleep 1
 }
 
-start_brockston() {
-    info "Starting Brockston educator backend (port $BROCKSTON_PORT)..."
-    BROCKSTON_HOST="$BROCKSTON_HOST" BROCKSTON_PORT="$BROCKSTON_PORT" \
+start_studio_backend() {
+    info "Starting Studio educator backend (port $STUDIO_BACKEND_PORT)..."
+    STUDIO_HOST="$STUDIO_HOST" STUDIO_BACKEND_PORT="$STUDIO_BACKEND_PORT" \
         "$VENV_PYTHON" -m uvicorn backend.launcher:app \
-            --host "$BROCKSTON_HOST" --port "$BROCKSTON_PORT" \
-            >"$BROCKSTON_LOG" 2>&1 &
+            --host "$STUDIO_HOST" --port "$STUDIO_BACKEND_PORT" \
+            >"$STUDIO_BACKEND_LOG" 2>&1 &
     PIDS+=($!)
     sleep 1
 }
 
 start_ide() {
-    info "Starting IDE Board (port $IDE_PORT)..."
-    "$VENV_PYTHON" -m uvicorn main:app --host "$BROCKSTON_HOST" --port "$IDE_PORT" \
+    info "Starting Studio IDE (port $IDE_PORT)..."
+    "$VENV_PYTHON" -m uvicorn main:app --host "$STUDIO_HOST" --port "$IDE_PORT" \
         >"$IDE_LOG" 2>&1 &
     PIDS+=($!)
     sleep 1
@@ -220,16 +220,16 @@ banner
 preflight
 check_ports
 start_ultimateev
-start_brockston
+start_studio_backend
 start_ide
 
 echo ""
 info "Health checks..."
 wait_ready "http://127.0.0.1:$ULTIMATEEV_PORT/health" "UltimateEV"  || true
-wait_ready "http://127.0.0.1:$BROCKSTON_PORT/api/health" "Brockston" || \
-wait_ready "http://127.0.0.1:$BROCKSTON_PORT/health" "Brockston"     || true
-wait_ready "http://127.0.0.1:$IDE_PORT/api/health" "IDE"             || \
-wait_ready "http://127.0.0.1:$IDE_PORT/" "IDE"                       || true
+wait_ready "http://127.0.0.1:$STUDIO_BACKEND_PORT/api/health" "Studio backend" || \
+wait_ready "http://127.0.0.1:$STUDIO_BACKEND_PORT/health" "Studio backend"     || true
+wait_ready "http://127.0.0.1:$IDE_PORT/api/health" "Studio IDE"      || \
+wait_ready "http://127.0.0.1:$IDE_PORT/" "Studio IDE"                || true
 
 # ----- Prewarm Ollama (load fast GENERAL for vocal/chat first; CODER is heavy, loads on demand)
 if curl -fsS "$OLLAMA_BASE_URL/api/tags" >/dev/null 2>&1; then
@@ -243,10 +243,10 @@ fi
 
 echo ""
 echo "${C_BOLD}=========================================${C_RESET}"
-ok "BROCKSTON Studio is up."
+ok "Brockston-Studio is up."
 echo ""
-echo "  IDE Board     ${C_CYAN}http://localhost:$IDE_PORT${C_RESET}"
-echo "  Brockston     ${C_DIM}http://localhost:$BROCKSTON_PORT${C_RESET}"
+echo "  Studio IDE      ${C_CYAN}http://localhost:$IDE_PORT${C_RESET}"
+echo "  Studio backend  ${C_DIM}http://localhost:$STUDIO_BACKEND_PORT${C_RESET}"
 echo "  UltimateEV    ${C_DIM}http://localhost:$ULTIMATEEV_PORT${C_RESET}"
 echo "  Ollama        ${C_DIM}$OLLAMA_BASE_URL${C_RESET}"
 echo ""
@@ -258,7 +258,7 @@ info "Tailing all three logs (Ctrl+C to stop everything)..."
 echo ""
 
 # Tail all logs together until shutdown (portable: works on macOS bash 3.2)
-tail -F "$ULTIMATEEV_LOG" "$BROCKSTON_LOG" "$IDE_LOG" 2>/dev/null &
+tail -F "$ULTIMATEEV_LOG" "$STUDIO_BACKEND_LOG" "$IDE_LOG" 2>/dev/null &
 TAIL_PID=$!
 
 # Wait for any backend to exit unexpectedly

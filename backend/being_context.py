@@ -129,7 +129,7 @@ christman_sound/  — Audio/speech pipeline
 absenth/          — Core Brockston modules
 main.py           — Studio server entry (port 5055)
 start.sh          — Launch script
-.env              — BROCKSTON_WORKSPACE sets the scan root"""
+.env              — STUDIO_WORKSPACE sets the IDE default folder"""
 
 def _skills_and_tools_map() -> str:
     return f"""=== SKILLS & TOOLS LOCATIONS ===
@@ -179,34 +179,51 @@ def _discover_mcp_catalog() -> str:
 
 
 def build_project_scan_guide(workspace: str) -> str:
-    """Tell Kimi exactly how to explore the workspace with tool_call blocks."""
-    return f"""=== HOW TO SCAN THE ENTIRE PROJECT ===
-Workspace root: {workspace}
+    """Tell beings how to explore ONE project tree — all paths stay inside workspace."""
+    return f"""=== HOW TO SCAN THE ENTIRE PROJECT (BOUNDARY ENFORCED) ===
+Project root ONLY: {workspace}
 
-1. ORIENT — list top-level + one level deep:
+BOUNDARY: Every ls/read/patch/write/run path MUST be inside {workspace}.
+Do NOT read Brockston-Studio, ~/.grok/skills, or any path outside this project.
+
+1. ORIENT — list top-level + one level deep (depth max 2):
 <tool_call>{{"tool":"ls","path":"{workspace}","depth":2}}</tool_call>
 
-2. DRILL — ls key dirs before reading:
-   backend/, frontend/, scripts/, christman_sound/
+2. DRILL — ls subdirs you discover under {workspace} (backend/, client/, etc.):
 <tool_call>{{"tool":"ls","path":"{workspace}/backend","depth":1}}</tool_call>
 
-3. READ — pull any file by absolute path (scroll if truncated):
-<tool_call>{{"tool":"read","path":"{workspace}/backend/being_agent.py","offset_lines":1,"limit_lines":500}}</tool_call>
+3. READ — files under {workspace} only (scroll if truncated):
+<tool_call>{{"tool":"read","path":"{workspace}/README.md","offset_lines":1,"limit_lines":500}}</tool_call>
 If has_more:true → read again with offset_lines=next_offset_lines until has_more:false.
 
-4. SEARCH — rg/grep via run:
-<tool_call>{{"tool":"run","command":"rg -l 'pattern' backend/","cwd":"{workspace}"}}</tool_call>
+4. SEARCH — rg/grep with cwd locked to project root:
+<tool_call>{{"tool":"run","command":"rg -l 'TODO|FIXME|api_key|password' .","cwd":"{workspace}"}}</tool_call>
 
-5. SKILLS — read SKILL.md before specialized work (if present on this machine):
-<tool_call>{{"tool":"read","path":"{Path.home()}/.grok/skills/tcap-master/SKILL.md"}}</tool_call>
-
-Never ask Everett for paths you can discover with ls + run."""
+Never ask Everett for paths you can discover with ls + run inside {workspace}."""
 
 
 _OPEN_FILE_RE = re.compile(
     r"\[(?:CURRENT FILE|FILE|SELECTION):\s*([^\]]+)\]",
     re.IGNORECASE,
 )
+
+_PROJECT_ROOT_RE = re.compile(
+    r"\[(?:PROJECT ROOT|EXPLORER PATH):\s*([^\]]+)\]",
+    re.IGNORECASE,
+)
+
+CARDINAL_PROJECT_REVIEW_PROMPT = """=== WHOLE-PROJECT REVIEW (CARDINAL RULES) ===
+You are performing a full project review — not a single-file glance.
+
+Evaluate against:
+  RULE 1 — It actually works (no stubs, no fake success)
+  RULE 6 — Fail loud (no silent except/pass)
+  RULE 12 — No secrets in source (.env only)
+  RULE 13 — Absolute honesty in docs and behavior
+
+Use ls + read + run to explore the whole tree before judging.
+Stay INSIDE [PROJECT ROOT] only — tools outside the project boundary are rejected.
+Final answer: plain English only. No tool_call markup, no <|tool_call|> tokens."""
 
 
 def extract_open_file_path(text: str) -> Optional[str]:
@@ -217,17 +234,27 @@ def extract_open_file_path(text: str) -> Optional[str]:
     return match.group(1).strip() if match else None
 
 
+def extract_project_root_path(text: str) -> Optional[str]:
+    """Pull explorer/project root from chat payloads."""
+    if not text:
+        return None
+    match = _PROJECT_ROOT_RE.search(text)
+    return match.group(1).strip() if match else None
+
+
 async def build_being_context(
     *,
     message: str = "",
     extra_context: Optional[str] = None,
     open_file_path: Optional[str] = None,
+    project_path: Optional[str] = None,
     include_workspace: bool = True,
     read_open_file: bool = True,
     max_file_kb: int = 200,
     compact: bool = False,
     ollama_route: bool = False,
     for_kimi: bool = False,
+    for_review: bool = False,
 ) -> str:
     """Build workspace + file + abilities context for spotlight beings.
 
@@ -255,7 +282,7 @@ async def build_being_context(
                 )
             read_open_file = False
 
-    if ollama_route:
+    if ollama_route and not for_review:
         try:
             from backend.being_eyes import WORKSPACE_ROOT
             parts.append(f"Workspace: {WORKSPACE_ROOT}")
@@ -335,6 +362,12 @@ async def build_being_context(
         workspace_str = str(WORKSPACE_ROOT)
     except Exception:
         pass
+
+    review_root = project_path or extract_project_root_path(message) or workspace_str
+    if for_review:
+        parts.insert(0, CARDINAL_PROJECT_REVIEW_PROMPT)
+        parts.append(build_project_scan_guide(review_root))
+        parts.append(BROCKSTON_STUDIO_LAYOUT)
 
     if for_kimi:
         parts.insert(0, IDE_SOVEREIGNTY)

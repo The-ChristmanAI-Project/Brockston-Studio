@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BROCKSTON STUDIO // PROFESSIONAL</title>
+    <title>Brockston-Studio</title>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/split.js/1.6.0/split.min.js"></script>
@@ -182,6 +182,73 @@
             background: rgba(255, 95, 31, 0.15);
             border-left: 3px solid var(--neon-orange);
             text-shadow: var(--neon-glow);
+        }
+
+        .icon-btn.review-mode-on {
+            color: var(--neon-orange);
+            background: rgba(255, 95, 31, 0.22);
+            border-left: 3px solid var(--neon-orange);
+            box-shadow: 0 0 14px rgba(255, 95, 31, 0.35);
+            animation: review-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes review-pulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(255, 95, 31, 0.25); }
+            50% { box-shadow: 0 0 18px rgba(255, 95, 31, 0.45); }
+        }
+
+        #review-mode-banner {
+            display: none;
+            margin: 0 14px 8px;
+            padding: 8px 12px;
+            background: rgba(255, 95, 31, 0.12);
+            border: 1px solid var(--neon-orange);
+            border-radius: 4px;
+            font-family: var(--font-term);
+            font-size: 10px;
+            color: var(--neon-orange);
+            line-height: 1.5;
+        }
+
+        #review-mode-banner.on { display: block; }
+
+        #btn-review-run {
+            margin-top: 6px;
+            background: var(--neon-orange);
+            color: #000;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 10px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            font-size: 10px;
+            cursor: pointer;
+        }
+
+        #btn-explorer-review {
+            cursor: pointer;
+            font-size: 10px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            color: #666;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 3px;
+            padding: 2px 8px;
+            letter-spacing: 0.5px;
+        }
+
+        #btn-explorer-review.review-mode-on {
+            color: #000;
+            background: var(--neon-orange);
+            border-color: var(--neon-orange);
+            box-shadow: 0 0 10px rgba(255, 95, 31, 0.4);
+        }
+
+        #ai-panel.review-mode #send-btn {
+            background: var(--neon-orange);
+            color: #000;
+            border-color: var(--neon-orange);
         }
 
         .icon-btn .tooltip {
@@ -627,20 +694,6 @@
             border: 1px solid var(--tiffany-blue) !important;
             box-shadow: 0 0 8px var(--tiffany-glow);
         }
-        #inst-kimi.active {
-            border: 1px solid #76B900 !important;
-            box-shadow: 0 0 8px rgba(118, 185, 0, 0.45);
-        }
-        #ai-panel.kimi-mode {
-            border: 1px solid #76B900;
-            box-shadow: inset 0 0 20px rgba(118, 185, 0, 0.08), 0 0 12px rgba(118, 185, 0, 0.2);
-        }
-        #ai-panel.kimi-mode .msg.ai {
-            border-left: 3px solid #76B900;
-        }
-        #ai-panel.kimi-mode .msg .ai-header {
-            color: #76B900;
-        }
         .inst-btn:hover:not(.active) {
             background: #1a1a1a;
             color: #ddd;
@@ -674,7 +727,7 @@
     <audio id="user-music" style="display:none;"></audio>
 
     <div id="header">
-        <span class="title"><i class="fas fa-bolt" style="margin-right: 8px;"></i>BROCKSTON STUDIO // PROFESSIONAL</span>
+        <span class="title"><i class="fas fa-bolt" style="margin-right: 8px;"></i>Brockston-Studio</span>
         <span class="status">HOST: 127.0.0.1 : 5055 <span style="color:#444;font-size:9px;">(for thousands of kids — make it solid)</span></span>
     </div>
 
@@ -691,6 +744,10 @@
             <div class="icon-btn" id="btn-git" role="button" tabindex="0" title="Git — status + log">
                 <i class="fab fa-git-alt"></i>
                 <span class="tooltip">Git Status</span>
+            </div>
+            <div class="icon-btn" id="btn-review" role="button" tabindex="0" title="Whole project review — scan explorer folder">
+                <i class="fas fa-clipboard-check"></i>
+                <span class="tooltip">Whole Project Review</span>
             </div>
 
             <div class="sidebar-bottom">
@@ -712,7 +769,8 @@
         <div id="explorer" class="split">
             <div class="explorer-header" style="display:flex;align-items:center;justify-content:space-between;">
                 <div><i class="fas fa-folder-open" style="margin-right: 5px;"></i> PROJECT EXPLORER</div>
-                <div style="display:flex;gap:6px;">
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <button type="button" id="btn-explorer-review" title="Arm whole-project review on this folder">Review</button>
                     <span id="btn-refresh-explorer" title="Refresh" style="cursor:pointer;font-size:11px;color:#666;">⟳</span>
                     <span id="btn-new-file" title="New file in current dir" style="cursor:pointer;font-size:11px;color:#666;">+f</span>
                 </div>
@@ -748,22 +806,18 @@
             <div class="explorer-header" style="padding: 12px 16px 6px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
                 <div><i class="fas fa-brain" style="margin-right: 5px;"></i> ASK THE BEINGS</div>
                 <div id="instructor-selector" style="display:flex; gap:2px; font-size:10px; background:#050505; border:1px solid #222; border-radius:4px; padding:2px;">
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('family')" id="inst-family" class="inst-btn" title="Christman Family — Brockston, AlphaVox, AlphaWolf, Derek, etc." style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('family')" id="inst-family" class="inst-btn" title="The Family — Brockston being + Christman beings" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('claude')" id="inst-claude" class="inst-btn" title="Anthropic Claude" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('kimi')" id="inst-kimi" class="inst-btn" title="Kimi K2.6 — NVIDIA learning tutor for kids, retention, and code" style="padding:3px 10px; background:#111; color:#76B900; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Kimi</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('nemo')" id="inst-nemo" class="inst-btn" title="Nemo — sovereign partner watching your code live" style="padding:3px 10px; background:#111; color:#40E0D0; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemo</button>
                     <button onclick="showMusicLibrary()" title="Music & Voice MP3 Library — local voice refs + Apple Music links (like a personal streaming lib)" style="padding:3px 8px; background:#1f1f1f; color:var(--copper-light); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px;">Lib</button>
                     <button onclick="playMyAlbum()" title="Play your album '53 Years in the Making' — the player, clear as a bell!" style="padding:3px 8px; background:#1f1f1f; color:var(--copper); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px; font-weight:700;">▶ Album</button>
                 </div>
             </div>
 
-            <!-- Mode switcher for instructors with dual modes (Kimi / Nemo) -->
-            <div id="mode-switcher" style="display:none; padding: 0 14px 6px; align-items:center; gap:8px; flex-wrap:wrap;">
-                <span id="mode-label" style="font-size:10px; color:#666; font-family:var(--font-term);">MODE:</span>
-                <div style="display:flex; gap:2px; font-size:10px; background:#050505; border:1px solid #222; border-radius:4px; padding:2px;">
-                    <button onclick="setInstructorMode('partner')" id="mode-partner" class="mode-btn" style="padding:2px 8px; background:#111; color:#888; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Partner</button>
-                    <button onclick="setInstructorMode('code')" id="mode-code" class="mode-btn" style="padding:2px 8px; background:#111; color:#888; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Code</button>
-                </div>
+            <div id="review-mode-banner">
+                <div><strong>WHOLE PROJECT REVIEW</strong> — beings will scan the explorer folder (not just the open file).</div>
+                <div id="review-mode-path" style="color:#ccc;margin-top:4px;"></div>
+                <div style="color:#888;margin-top:4px;">Add optional notes below, hit <strong>SEND</strong>, or click <strong>Run review now</strong>.</div>
+                <button type="button" id="btn-review-run">Run review now</button>
             </div>
 
             <!-- Quick actions: these send rich context automatically -->
@@ -772,10 +826,11 @@
                 <button class="quick-action" onclick="quickAsk('Suggest a better version of')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Refactor</button>
                 <button class="quick-action" onclick="quickAsk('Find bugs or issues in')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Find bugs</button>
                 <button class="quick-action" onclick="quickAsk('Write tests for')" style="font-size:10px;background:#111;border:1px solid #222;color:#888;padding:2px 7px;border-radius:3px;cursor:pointer;">Write tests</button>
+                <button class="quick-action" onclick="setWholeProjectReviewMode(true)" style="font-size:10px;background:#1a1208;border:1px solid var(--neon-orange);color:var(--neon-orange);padding:2px 7px;border-radius:3px;cursor:pointer;" title="Arm whole-project review on explorer folder">Review project</button>
             </div>
 
             <div id="chat-history">
-                <span class="system-tag">[BROCKSTON FAMILY]: How can we help you love yourself more today? Open a file or just talk to us. <strong>Family</strong> (Brockston + Christman beings), <strong>Claude</strong>, and <strong>Kimi</strong> (NVIDIA learning tutor for your kids) are in the row above. Your album "53 Years in the Making" (incl. Brockston.mp3) is in the Music Library — hit ▶ Album.</span>
+                <span class="system-tag">[CHRISTMAN FAMILY]: How can we help you love yourself more today? Open a file or just talk to us. <strong>Family</strong> (Brockston being + Christman beings) and <strong>Claude</strong> are in the row above. Your album "53 Years in the Making" (incl. Brockston.mp3) is in the Music Library — hit ▶ Album.</span>
             </div>
             <div id="chat-input-area">
                 <button id="mic-btn" title="Hold or click to speak your question (great for nonverbal)" 
@@ -791,7 +846,7 @@
         <span class="seg" id="sb-file"><i class="fas fa-file-code"></i> <span id="sb-file-name">no file open</span></span>
         <span class="seg" id="sb-lang"><i class="fas fa-code"></i> <span id="sb-lang-name">plaintext</span></span>
         <span class="seg" id="sb-cursor"><i class="fas fa-crosshairs"></i> <span id="sb-cursor-pos">Ln 1, Col 1</span></span>
-        <span class="seg" id="sb-instructor"><i class="fas fa-user-graduate"></i> <span id="sb-inst-name" style="color:#76B900">Kimi K2.6</span></span>
+        <span class="seg" id="sb-instructor"><i class="fas fa-user-graduate"></i> <span id="sb-inst-name" style="color:#FF5F1F">The Family</span></span>
         <span class="seg" id="sb-music" style="display:none;"><i class="fas fa-music"></i> <span id="sb-music-track">Now Playing</span></span>
         <span class="spacer"></span>
         <span class="seg" id="sb-term"><i class="fas fa-terminal"></i> <span id="sb-term-state">terminal connecting...</span></span>
@@ -800,7 +855,7 @@
 
     <script>
         // ============================================================
-        // BROCKSTON Studio — Board logic
+        // Brockston-Studio — IDE board logic
         // ============================================================
         //
         // HIGH STAKES: This IDE teaches 6,000–8,000 children per month — many autistic,
@@ -875,10 +930,12 @@
         const btnCode     = document.getElementById('btn-code');
         const btnTerminal = document.getElementById('btn-terminal');
         const btnGit      = document.getElementById('btn-git');
+        const btnReview   = document.getElementById('btn-review');
         const btnSettings = document.getElementById('btn-settings');
 
         let isMusicPlaying = false;
         let isVoiceModeEnabled = false;
+        let wholeProjectReviewMode = false;
         let bgMusicReady = false;
 
         // User music player for senior students' old school rock & Soul Train
@@ -898,8 +955,7 @@
                 localStorage.setItem(LAST_PATH_KEY, absPath);
             }
         }
-        let selectedInstructor = 'kimi'; // 'family' | 'claude' | 'kimi' | 'nemo'
-        let instructorMode = { nemo: 'partner', kimi: 'codelab' }; // per-instructor mode toggle
+        let selectedInstructor = 'family'; // 'family' | 'claude'
 
         // Music & Voice Library - supports local MP3 voice files + Apple Music style links
         let musicLibrary = JSON.parse(localStorage.getItem('christmanMusicLibrary') || '[]');
@@ -1298,26 +1354,38 @@
 
         function prepareSpeechText(raw) {
             return String(raw || '')
-                .replace(/\[(?:KIMI|NEMO|FAMILY|BROCKSTON|CLAUDE|SYSTEM|DEMO)[^\]]*\]:?\s*/gi, '')
+                .replace(/\[(?:KIMI REVIEW|KIMI|NEMO|FAMILY|BROCKSTON|CLAUDE|SYSTEM|DEMO|PROJECT REVIEW)[^\]]*\]:?\s*/gi, '')
+                .replace(/\{"tool"\s*:[^}]+\}/g, '')
                 .replace(/\[.*?\]/g, '')
                 .replace(/`{1,3}[\s\S]*?`{1,3}/g, ' code block ')
                 .replace(/\s+/g, ' ')
                 .trim();
         }
 
+        function extractReviewForSpeech(text) {
+            const clean = prepareSpeechText(text);
+            if (!clean) return '';
+            const verdictM = clean.match(/\bVERDICT\b[:\s—-]*(.+?)$/i);
+            const archM = clean.match(/\bARCHITECTURE\b[:\s—-]*(.+?)(?=\bCRITICAL\b|\bWARNING\b|\bVERDICT\b|$)/i);
+            const parts = [];
+            if (archM) parts.push(archM[1].trim().slice(0, 700));
+            if (verdictM) parts.push('Verdict: ' + verdictM[1].trim().slice(0, 350));
+            return parts.join(' ') || clean.slice(0, 1200);
+        }
+
         let ttsQueue = Promise.resolve();
 
-        async function speakText(text) {
-            if (!isVoiceModeEnabled) return;
+        async function speakText(text, force = false, beingOverride = null) {
+            if (!force && !isVoiceModeEnabled) return;
             const clean = prepareSpeechText(text);
             if (!clean) return;
 
             ttsQueue = ttsQueue.then(async () => {
-                if (!isVoiceModeEnabled) return;
+                if (!force && !isVoiceModeEnabled) return;
                 try {
                     const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
                     const key = MODEL_ORCHESTRATOR.currentInstructor || 'brockston';
-                    const ttsBeing = instructor.ttsBeing || (key === 'family' ? 'brockston' : key);
+                    const ttsBeing = beingOverride || instructor.ttsBeing || (key === 'family' ? 'brockston' : key);
                     const res = await fetch(`${API_BASE}/speech/synthesize`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -1343,19 +1411,100 @@
         }
 
         // ----- Chat (now sends editor context so the beings actually know what you're looking at)
+        function explorerContextBlock() {
+            const root = currentPath || workspaceRoot || '';
+            if (!root) return '';
+            return `[EXPLORER PATH: ${root}]\n`;
+        }
+
+        function reviewTargetPath() {
+            // Explorer path first; fall back to terminal cwd (OSC 7 sync) then workspace
+            return currentPath || lastSyncedCwd || workspaceRoot || '';
+        }
+
+        function updateWholeProjectReviewUI() {
+            const root = reviewTargetPath();
+            const banner = document.getElementById('review-mode-banner');
+            const pathEl = document.getElementById('review-mode-path');
+            const explorerBtn = document.getElementById('btn-explorer-review');
+            const aiPanel = document.getElementById('ai-panel');
+
+            if (btnReview) {
+                btnReview.classList.toggle('review-mode-on', wholeProjectReviewMode);
+                btnReview.title = wholeProjectReviewMode
+                    ? 'Whole project review ON — click to turn off'
+                    : 'Whole project review — scan explorer folder';
+            }
+            if (explorerBtn) {
+                explorerBtn.classList.toggle('review-mode-on', wholeProjectReviewMode);
+                explorerBtn.textContent = wholeProjectReviewMode ? 'Review ON' : 'Review';
+            }
+            if (banner) banner.classList.toggle('on', wholeProjectReviewMode);
+            if (pathEl) {
+                pathEl.textContent = root
+                    ? `Target: ${root}`
+                    : 'Target: (waiting for explorer path...)';
+            }
+            if (aiPanel) aiPanel.classList.toggle('review-mode', wholeProjectReviewMode);
+
+            if (chatInput) {
+                chatInput.placeholder = wholeProjectReviewMode
+                    ? 'Optional review notes (security, Cardinal Rules, architecture…) — SEND scans whole project'
+                    : `Ask ${MODEL_ORCHESTRATOR.getCurrentInstructor().name}...`;
+            }
+            if (sendBtn) {
+                sendBtn.textContent = wholeProjectReviewMode ? 'REVIEW' : 'SEND';
+            }
+        }
+
+        function setWholeProjectReviewMode(on, { announce = true, runNow = false } = {}) {
+            wholeProjectReviewMode = !!on;
+            updateWholeProjectReviewUI();
+
+            if (wholeProjectReviewMode) {
+                if (announce) {
+                    const root = reviewTargetPath() || '(explorer folder)';
+                    appendMessage(
+                        'SYSTEM',
+                        `Whole project review ON — target: ${root}. Beings will ls/read/rg the full tree. Hit SEND or Run review now.`,
+                        'system'
+                    );
+                }
+                if (runNow) reviewProject(chatInput.value.trim());
+            } else if (announce) {
+                appendMessage('SYSTEM', 'Whole project review OFF — back to normal chat.', 'system');
+            }
+        }
+
+        function toggleWholeProjectReview() {
+            if (wholeProjectReviewMode) {
+                setWholeProjectReviewMode(false);
+            } else {
+                setWholeProjectReviewMode(true);
+            }
+        }
+
         async function sendChat(extraContext = '') {
             let text = chatInput.value.trim();
-            if (!text) return;
+            if (!text && !wholeProjectReviewMode) return;
+
+            if (wholeProjectReviewMode) {
+                chatInput.value = '';
+                await reviewProject(text);
+                return;
+            }
+
             if (extraContext) text = extraContext + '\n\n' + text;
 
             // build rich context for the AI
-            let payloadMessage = text;
+            let payloadMessage = explorerContextBlock() + text;
             if (activeTabPath) {
                 const tab = findTab(activeTabPath);
                 const snippet = tab ? (tab.content || '').slice(0, 2400) : '';
                 const sel = monacoEditor ? monacoEditor.getModel().getValueInRange(monacoEditor.getSelection()) : '';
                 const ctx = sel ? sel.slice(0, 1800) : snippet;
-                payloadMessage = `[CURRENT FILE: ${activeTabPath}]\n` +
+                payloadMessage = explorerContextBlock() +
+                    `[CURRENT FILE: ${activeTabPath}]\n` +
                     (sel ? '```selection\n' + sel + '\n```\n' : '') +
                     (sel ? '' : '```' + (activeTabPath.split('.').pop()) + '\n' + ctx + '\n```\n') +
                     text;
@@ -1369,12 +1518,6 @@
             
                 if (endpoint === '/api/claude') {
                     await sendToClaude(payloadMessage, 'CLAUDE');
-                } else if (endpoint === '/api/kimi') {
-                    const mode = instructorMode.kimi || 'tutor';
-                    await sendToKimi(payloadMessage, 'KIMI', mode);
-                } else if (endpoint === '/api/nemo') {
-                    const mode = instructorMode.nemo || 'partner';
-                    await sendToNemo(payloadMessage, 'NEMO', mode);
                 } else {
                     const res = await fetch(`${API_BASE}/chat`, {
                         method: 'POST',
@@ -1412,12 +1555,6 @@
 
             if (endpoint === '/api/claude') {
                 sendToClaude(prompt, 'CLAUDE');
-            } else if (endpoint === '/api/kimi') {
-                const mode = instructorMode.kimi || 'tutor';
-                sendToKimi(prompt, 'KIMI', mode);
-            } else if (endpoint === '/api/nemo') {
-                const mode = instructorMode.nemo || 'partner';
-                sendToNemo(prompt, 'NEMO', mode);
             } else {
                 // send directly with the constructed rich message
                 fetch(`${API_BASE}/chat`, {
@@ -1436,60 +1573,68 @@
             MODEL_ORCHESTRATOR.setInstructor(instructorKey);
         }
 
-        function renderModeSwitcher() {
-            const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
-            const key = MODEL_ORCHESTRATOR.currentInstructor;
-            const switcher = document.getElementById('mode-switcher');
-            const partnerBtn = document.getElementById('mode-partner');
-            const codeBtn = document.getElementById('mode-code');
-            const label = document.getElementById('mode-label');
-
-            if (!switcher || !partnerBtn || !codeBtn || !label) return;
-
-            // Only Kimi and Nemo support mode switching
-            if (key !== 'kimi' && key !== 'nemo') {
-                switcher.style.display = 'none';
+        async function reviewProject(extraNotes = '') {
+            const root = reviewTargetPath();
+            if (!root) {
+                appendMessage('SYSTEM', 'Explorer path not ready — wait for files to load or pick a folder.', 'system');
                 return;
             }
+            const instructorKey = MODEL_ORCHESTRATOR.currentInstructor || 'family';
+            const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
+            const label = instructor.name || 'BROCKSTON';
+            const userLine = extraNotes || 'Review this entire project for architecture, bugs, and Cardinal Rule compliance.';
+            const youLine = extraNotes
+                ? `Review project (${root}): ${extraNotes}`
+                : `Review whole project: ${root}`;
+            appendMessage('YOU', youLine, 'user');
+            appendMessage('SYSTEM', `${label} is exploring ${root} — ls, read, rg on disk (${instructor.model}). Real review takes several minutes; stay on this tab.`, 'system');
 
-            switcher.style.display = 'flex';
-            const mode = instructorMode[key];
-            const isCode = (key === 'kimi' && mode === 'codelab') || (key === 'nemo' && mode === 'code');
-
-            if (key === 'kimi') {
-                partnerBtn.textContent = 'Tutor';
-                codeBtn.textContent = 'Code Lab';
-                instructorMode[key] = isCode ? 'codelab' : 'tutor';
-            } else {
-                partnerBtn.textContent = 'Partner';
-                codeBtn.textContent = 'Code';
+            const controller = new AbortController();
+            const reviewTimer = setTimeout(() => controller.abort(), 1200000);
+            try {
+                const res = await fetch(`${API_BASE}/review/project`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        path: root,
+                        message: userLine,
+                        instructor: instructorKey === 'claude' ? 'family' : instructorKey,
+                    }),
+                });
+                if (!res.ok) {
+                    const errBody = await res.text();
+                    let detail = errBody;
+                    try {
+                        const parsed = JSON.parse(errBody);
+                        detail = parsed.detail || errBody;
+                    } catch (_) {}
+                    if (res.status === 404 && String(detail).toLowerCase().includes('not found')) {
+                        throw new Error(
+                            'Review API not found — restart ./start.sh (Ctrl+C then ./start.sh) so the IDE loads the latest code.'
+                        );
+                    }
+                    throw new Error(detail || `Server error: ${res.status}`);
+                }
+                const data = await res.json();
+                appendMessage(label, data.response || '', 'ai');
+                const speech = extractReviewForSpeech(data.response || '');
+                if (speech) {
+                    speakText(speech, true, null);
+                    if (!isVoiceModeEnabled) {
+                        appendMessage('SYSTEM', 'Reading review aloud (voice auto-on for project review).', 'system');
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                let msg = err.message;
+                if (err.name === 'AbortError') {
+                    msg = 'Project review timed out after 20 minutes — The Family may still be exploring. Retry; large repos need patience.';
+                }
+                appendMessage('SYSTEM', `[REVIEW ERROR]: ${msg}`, 'error');
+            } finally {
+                clearTimeout(reviewTimer);
             }
-
-            partnerBtn.style.color = !isCode ? instructor.color : '#888';
-            partnerBtn.style.border = !isCode ? `1px solid ${instructor.color}` : 'none';
-            codeBtn.style.color = isCode ? instructor.color : '#888';
-            codeBtn.style.border = isCode ? `1px solid ${instructor.color}` : 'none';
-            label.textContent = `${instructor.name} MODE:`;
-        }
-
-        function setInstructorMode(mode) {
-            const key = MODEL_ORCHESTRATOR.currentInstructor;
-            if (key === 'kimi') {
-                instructorMode[key] = (mode === 'code') ? 'codelab' : 'tutor';
-                appendMessage('SYSTEM', `Kimi switched to ${instructorMode[key]} mode`, 'system');
-            } else if (key === 'nemo') {
-                instructorMode[key] = (mode === 'code') ? 'code' : 'partner';
-                appendMessage('SYSTEM', `Nemo switched to ${instructorMode[key]} mode`, 'system');
-            }
-            renderModeSwitcher();
-        }
-
-        function detectKimiMode(text) {
-            const lower = String(text || '').toLowerCase();
-            if (/\b(code|fix|bug|implement|refactor|python|typescript|module|import|function|class)\b/.test(lower)) {
-                return 'codelab';
-            }
-            return 'tutor';
         }
 
         async function sendToClaude(text, whoLabel = 'CLAUDE') {
@@ -1507,70 +1652,6 @@
             } catch (err) {
                 console.error(err);
                 appendMessage('SYSTEM', `[CLAUDE ERROR]: ${err.message}`, 'error');
-            }
-        }
-
-        async function sendToNemo(text, whoLabel = 'NEMO', mode = 'partner') {
-            try {
-                // Nemo sees your code in real-time — direct line to your partner
-                const res = await fetch(`${API_BASE}/nemo`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ message: text, mode: mode })
-                });
-                if (!res.ok) throw new Error(`Server error: ${res.status}`);
-                const data = await res.json();
-                appendMessage(whoLabel, data.response || '', 'ai');
-                speakText(data.response);
-            } catch (err) {
-                console.error(err);
-                appendMessage('SYSTEM', `[NEMO ERROR]: ${err.message}`, 'error');
-            }
-        }
-
-        async function sendToKimi(text, whoLabel = 'KIMI', mode = null) {
-            const controller = new AbortController();
-            const kimiTimer = setTimeout(() => controller.abort(), 300000);
-            try {
-                const effectiveMode = mode || detectKimiMode(text) || 'tutor';
-                const kimiPayload = {
-                    message: text,
-                    mode: effectiveMode,
-                };
-                // Teaching topic only — not a filesystem path. Skip in Code Lab scans.
-                if (effectiveMode === 'tutor' || effectiveMode === 'learning') {
-                    kimiPayload.domain = 'neurodivergency';
-                }
-                const res = await fetch(`${API_BASE}/kimi`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    signal: controller.signal,
-                    body: JSON.stringify(kimiPayload)
-                });
-                if (!res.ok) {
-                    const errBody = await res.text();
-                    let detail = errBody;
-                    try {
-                        const parsed = JSON.parse(errBody);
-                        detail = parsed.detail || errBody;
-                    } catch (_) {}
-                    throw new Error(detail || `Server error: ${res.status}`);
-                }
-                const data = await res.json();
-                const reply = data.response || '';
-                appendMessage(whoLabel, reply, 'ai');
-                speakText(reply);
-            } catch (err) {
-                console.error(err);
-                let msg = err.message;
-                if (err.name === 'AbortError') {
-                    msg = 'Kimi timed out after 5 minutes — retry or switch to Nemo.';
-                } else if (msg.includes('500') || msg.includes('server error')) {
-                    msg = 'Kimi (NVIDIA) hit a server error (often on large agent prompts for broad tasks like "fix IDE"). Retried with local fallback if available. Try scoped requests or Nemo.';
-                }
-                appendMessage('SYSTEM', `[KIMI ERROR]: ${msg}`, 'error');
-            } finally {
-                clearTimeout(kimiTimer);
             }
         }
 
@@ -1657,6 +1738,19 @@
             try { fitAddon.fit(); fitTerminalAndNotify(); } catch (e) {}
         });
 
+        btnReview.addEventListener('click', () => {
+            toggleWholeProjectReview();
+        });
+
+        document.getElementById('btn-explorer-review')?.addEventListener('click', () => {
+            toggleWholeProjectReview();
+        });
+
+        document.getElementById('btn-review-run')?.addEventListener('click', () => {
+            if (!wholeProjectReviewMode) setWholeProjectReviewMode(true, { announce: false });
+            reviewProject(chatInput.value.trim());
+        });
+
         btnGit.addEventListener('click', async () => {
             setActiveSidebar(btnGit);
             setWorkspaceView('git');
@@ -1690,18 +1784,35 @@
             showModal('GIT', bodyHtml);
         });
 
+        function renderInstructorWiringTable(instructors) {
+            if (!instructors || typeof instructors !== 'object') return '';
+            const rows = Object.entries(instructors).map(([key, info]) => {
+                const label = info.label || info.model || '—';
+                const backend = info.backend || '—';
+                const keyNote = info.api_key_env
+                    ? (info.api_key_set ? `${info.api_key_env} ✓` : `${info.api_key_env} (missing)`)
+                    : '—';
+                return `<tr><td style="padding:3px 8px 3px 0;color:#888;">${escapeHtml(key)}</td><td style="padding:3px 0;color:#ccc;">${escapeHtml(label)}</td><td style="padding:3px 0 3px 8px;color:#666;font-size:10px;">${escapeHtml(backend)}<br><span style="color:${info.api_key_set ? '#6a6' : '#a66'}">${escapeHtml(keyNote)}</span></td></tr>`;
+            }).join('');
+            return `<table style="width:100%;font-size:11px;margin-top:6px;border-collapse:collapse;">${rows}</table>`;
+        }
+
         btnSettings.addEventListener('click', async () => {
             setActiveSidebar(btnSettings);
-            const modelName = document.getElementById('sb-model-name')?.textContent || 'unknown';
+            const instructorKey = MODEL_ORCHESTRATOR.currentInstructor || 'family';
+            const instructor = MODEL_ORCHESTRATOR.getCurrentInstructor();
+            const instName = instructor.name || instructorKey;
+            const instModel = instructor.model || 'unknown';
             let healthHtml = '<p style="color:#888;">Loading health...</p>';
             showModal('SETTINGS', `
-                <p><b style="color:var(--neon-orange);">Active model:</b> ${escapeHtml(modelName)}</p>
+                <p><b style="color:var(--neon-orange);">Active instructor:</b> ${escapeHtml(instName)}</p>
+                <p><b style="color:var(--neon-orange);">Active model:</b> ${escapeHtml(instModel)}</p>
                 <p><b style="color:var(--neon-orange);">Explorer path:</b> ${escapeHtml(currentPath || workspaceRoot || '(loading)')}</p>
                 <p><b style="color:var(--neon-orange);">Terminal:</b> ${ws && ws.readyState === WebSocket.OPEN ? 'connected' : 'disconnected'}</p>
                 <p><b style="color:var(--neon-orange);">Voice mode:</b> ${isVoiceModeEnabled ? 'on' : 'off'}</p>
                 <div id="settings-health">${healthHtml}</div>
                 <hr style="border:0;border-top:1px solid #222;margin:14px 0;">
-                <p style="color:#888;font-size:0.78rem;">Edit <code style="color:var(--neon-orange);">.env</code> for workspace + models, then restart <code style="color:var(--neon-orange);">./start.sh</code>. Sidebar: Code expands editor, Terminal expands shell, Git shows status.</p>
+                <p style="color:#888;font-size:0.78rem;">Edit <code style="color:var(--neon-orange);">.env</code> — <code style="color:var(--neon-orange);">STUDIO_WORKSPACE</code> for default folder, per-being NVIDIA/Ollama keys — then restart <code style="color:var(--neon-orange);">./start.sh</code>.</p>
             `);
             try {
                 const hres = await fetch(`${API_BASE}/health`);
@@ -1709,11 +1820,16 @@
                 const el = document.getElementById('settings-health');
                 if (!el) return;
                 const beings = h.beings || {};
+                const activeFromHealth = (h.instructors && h.instructors[instructorKey]) || {};
+                const activeLine = activeFromHealth.label || instModel;
                 el.innerHTML = `
+                    <p><b style="color:var(--neon-orange);">Active wiring:</b> ${escapeHtml(activeLine)}</p>
                     <p><b style="color:var(--neon-orange);">Workspace:</b> ${escapeHtml(h.workspace || '')}</p>
-                    <p><b style="color:var(--neon-orange);">Chat model:</b> ${escapeHtml((h.models && h.models.general) || '')}</p>
-                    <p><b style="color:var(--neon-orange);">Code model:</b> ${escapeHtml((h.models && h.models.coder) || '')}</p>
-                    <p style="color:#666;font-size:0.75rem;">Family/Nemo chat → ${escapeHtml(beings.family_chat || '')} · tools → ${escapeHtml(beings.being_agent_tools || '')}</p>`;
+                    <p><b style="color:var(--neon-orange);">Ollama general:</b> ${escapeHtml((h.models && h.models.general) || '')}</p>
+                    <p><b style="color:var(--neon-orange);">Ollama coder:</b> ${escapeHtml((h.models && h.models.coder) || '')}</p>
+                    <p style="color:#888;font-size:10px;margin-top:8px;"><b style="color:var(--neon-orange);">Per-instructor models</b></p>
+                    ${renderInstructorWiringTable(h.instructors)}
+                    <p style="color:#666;font-size:0.75rem;margin-top:10px;">Family chat → ${escapeHtml(beings.family_chat || '')}<br>Agent tools → ${escapeHtml(beings.being_agent_tools || '')}</p>`;
             } catch (e) {
                 const el = document.getElementById('settings-health');
                 if (el) el.innerHTML = `<p style="color:#ff6b6b;">Could not load /api/health</p>`;
@@ -1733,6 +1849,7 @@
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 currentPath = data.path || path;
+                if (wholeProjectReviewMode) updateWholeProjectReviewUI();
                 const breadcrumb = document.getElementById('explorer-path');
                 if (breadcrumb) {
                     breadcrumb.textContent = currentPath;
@@ -2213,13 +2330,13 @@
         const MODEL_ORCHESTRATOR = {
             instructors: {
                 'family': {
-                    name: 'Brockston Family',
+                    name: 'The Family',
                     model: 'qwen2.5-coder:32b (local)',
                     endpoint: '/api/chat',
                     color: '#FF5F1F',
                     voice: 'Daniel',
                     ttsBeing: 'brockston',
-                    description: 'The whole family — AlphaVox, AlphaWolf, Derek, Inferno, etc.'
+                    description: 'Christman AI Family — Brockston being + all Christman beings'
                 },
                 'claude': {
                     name: 'Claude (Anthropic)',
@@ -2228,31 +2345,31 @@
                     color: '#40E0D0',
                     voice: 'Daniel',
                     ttsBeing: 'brockston',
-                    description: 'Anthropic\'s Claude — additional instructor'
-                },
-                'kimi': {
-                    name: 'Kimi K2.6',
-                    model: 'moonshotai/kimi-k2.6 (NVIDIA NIM)',
-                    endpoint: '/api/kimi',
-                    color: '#76B900',
-                    voice: 'Alex',
-                    ttsBeing: 'brockston',
-                    description: 'NVIDIA learning tutor — kids, retention, open-code mentor'
-                },
-                'nemo': {
-                    name: 'Nemo',
-                    model: 'sovereign partner (Christman pipeline)',
-                    endpoint: '/api/nemo',
-                    color: '#40E0D0',
-                    voice: 'Fred',
-                    ttsBeing: 'brockston',
-                    description: 'Everett\'s partner — watching the IDE live through the viewer WebSocket'
+                    description: 'Anthropic Claude — carbon-silicon partner'
                 }
             },
 
-            currentInstructor: 'kimi',
+            currentInstructor: 'family',
 
-            setInstructor: function(instructorKey) {
+            syncFromHealth: async function() {
+                try {
+                    const h = await fetch(`${API_BASE}/health`).then(r => r.json());
+                    const map = h.instructors || {};
+                    for (const key of Object.keys(this.instructors)) {
+                        const live = map[key];
+                        if (live && live.label) {
+                            this.instructors[key].model = live.label;
+                            this.instructors[key].backend = live.backend;
+                        }
+                    }
+                    this.setInstructor(this.currentInstructor, { announce: false });
+                } catch (e) {
+                    console.warn('[MODEL_ORCHESTRATOR] health sync failed', e);
+                }
+            },
+
+            setInstructor: function(instructorKey, opts = {}) {
+                const announce = opts.announce !== false;
                 const instructor = this.instructors[instructorKey] || this.instructors['family'];
                 this.currentInstructor = instructorKey;
                 
@@ -2284,13 +2401,9 @@
                 // Visual mode on the panel for special instructors
                 const aiPanel = document.getElementById('ai-panel');
                 if (aiPanel) {
-                    aiPanel.classList.remove('claude-mode', 'kimi-mode', 'nemo-mode');
+                    aiPanel.classList.remove('claude-mode');
                     if (instructorKey === 'claude') {
                         aiPanel.classList.add('claude-mode');
-                    } else if (instructorKey === 'kimi') {
-                        aiPanel.classList.add('kimi-mode');
-                    } else if (instructorKey === 'nemo') {
-                        aiPanel.classList.add('nemo-mode');
                     }
                 }
                 
@@ -2301,12 +2414,10 @@
                     endpoint: instructor.endpoint
                 });
                 
-                // Announce
-                appendMessage('SYSTEM', `Switched to ${instructor.name} — ${instructor.model}. ${instructor.description}`, 'system');
+                if (announce) {
+                    appendMessage('SYSTEM', `Switched to ${instructor.name} — ${instructor.model}. ${instructor.description}`, 'system');
+                }
 
-                // Update mode switcher visibility for Kimi / Nemo
-                renderModeSwitcher();
-                
                 return instructor;
             },
 
@@ -2325,9 +2436,10 @@
             }
         };
 
-        // Initialize orchestrator — Kimi Code Lab is the primary compute operator
-        MODEL_ORCHESTRATOR.setInstructor('kimi');
-        renderModeSwitcher();
+        // Initialize orchestrator — sync live model labels from /api/health, then apply instructor
+        MODEL_ORCHESTRATOR.syncFromHealth().finally(() => {
+            MODEL_ORCHESTRATOR.setInstructor(MODEL_ORCHESTRATOR.currentInstructor || 'family');
+        });
 
         // Wrap existing event handlers to also broadcast to viewer
         const originalOpenOrFocusFile = openOrFocusFile;
@@ -2442,7 +2554,9 @@
         });
 
         // ----- Boot — reopen last folder if remembered, else workspace default from .env
+        updateWholeProjectReviewUI();
         loadFiles(savedStartPath || '').then(() => {
+            updateWholeProjectReviewUI();
             // Apply any filter that might have been typed early + initial friendly state
             setTimeout(() => {
                 const fi = document.getElementById('explorer-filter');
@@ -2451,19 +2565,20 @@
                 }
             }, 80);
         }).catch(() => {});
+
+        fetch(`${API_BASE}/health`).then(r => r.json()).then(h => {
+            if (h.features && h.features.review_project === false) {
+                appendMessage('SYSTEM', 'Whole-project review needs a server restart — Ctrl+C ./start.sh then run it again.', 'system');
+            }
+        }).catch(() => {});
         window.addEventListener('focus', () => {
             term.focus();
             scheduleExplorerRefresh();  // catch any external/terminal updates when returning to IDE
         });
 
-        // Highlight additional beings/instructors (orchestrator already set Family above)
         setTimeout(() => {
-            ['inst-claude', 'inst-kimi'].forEach(id => {
-                const btn = document.getElementById(id);
-                if (btn) btn.style.border = '1px solid #444';
-            });
-            const kimiBtn = document.getElementById('inst-kimi');
-            if (kimiBtn) kimiBtn.style.color = '#9acd32';
+            const claudeBtn = document.getElementById('inst-claude');
+            if (claudeBtn) claudeBtn.style.border = '1px solid #444';
             if (!musicLibrary.some(e => e.source.includes('Brockston.mp3'))) {
                 appendMessage('SYSTEM', '🎵 Your Brockston.mp3 from Downloads is ready to add — open the Lib and hit the specific track button, or browse to it in the explorer (auto-adds to the album).', 'system');
             }

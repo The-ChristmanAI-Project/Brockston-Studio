@@ -11,7 +11,7 @@ import pathlib
 from unittest.mock import ANY
 import urllib.parse
 
-from config import BROCKSTON_WORKSPACE
+from config import STUDIO_WORKSPACE
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def clone_repo(git_url: str, folder_name: str | None = None) -> pathlib.Path:
     
     """
-    Clone a GitHub repository into BROCKSTON_WORKSPACE.
+    Clone a GitHub repository into STUDIO_WORKSPACE.
 
     Args:
         git_url: The Git repository URL (HTTPS format)
@@ -56,14 +56,15 @@ def clone_repo(git_url: str, folder_name: str | None = None) -> pathlib.Path:
         raise ValueError(f"Invalid folder name: {folder_name}")
 
     # Build target directory path
-    target_dir = (BROCKSTON_WORKSPACE / folder_name).resolve()
+    workspace = pathlib.Path(STUDIO_WORKSPACE)
+    target_dir = (workspace / folder_name).resolve()
 
     # Security check: ensure target is within workspace
     try:
-        target_dir.relative_to(BROCKSTON_WORKSPACE)
+        target_dir.relative_to(workspace)
     except ValueError:
         raise ValueError(
-            f"Target directory '{target_dir}' is outside workspace root '{BROCKSTON_WORKSPACE}'. "
+            f"Target directory '{target_dir}' is outside workspace root '{workspace}'. "
             "Access denied for security."
         )
 
@@ -152,7 +153,7 @@ def get_repo_status(repo_path: pathlib.Path) -> dict:
     # Validate path is within workspace
     try:
         repo_path = repo_path.resolve()
-        repo_path.relative_to(BROCKSTON_WORKSPACE)
+        repo_path.relative_to(pathlib.Path(STUDIO_WORKSPACE))
     except ValueError:
         raise ValueError(f"Path '{repo_path}' is outside workspace root")
 

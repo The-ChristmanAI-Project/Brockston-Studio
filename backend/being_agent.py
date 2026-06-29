@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import httpx
@@ -63,7 +64,7 @@ Project scan workflow (use before answering "where is X?" or "what's in this rep
   3. read specific files; run rg/grep to search
   4. read ~/.grok/skills/<name>/SKILL.md for domain playbooks (optional)
 
-Key paths (use BROCKSTON_WORKSPACE / workspace root — not random home subfolders):
+Key paths (use STUDIO_WORKSPACE / workspace root — not random home subfolders):
   backend/being_agent.py, being_eyes.py, being_context.py, kimi_service.py
   Skills (optional): ~/.grok/skills/  |  MCP: ~/.grok/projects/*/mcps/
 
@@ -83,10 +84,23 @@ _TOOL_CALL_RE = re.compile(
     r"<tool_call>\s*(\{.*?\})\s*</tool_call>",
     re.DOTALL | re.IGNORECASE,
 )
+# Kimi K2.6 native tool format (NVIDIA NIM)
+_KIMI_TOOL_ARG_RE = re.compile(
+    r"<\|tool_call_argument_begin\|>\s*(\{.*?\})\s*(?:<\|tool_call_end\|>|(?=<\|tool_call_begin\|>)|$)",
+    re.DOTALL,
+)
+_TOOL_JSON_BLOB_RE = re.compile(
+    r'\{\s*"tool"\s*:\s*"[^"]+"[^}]*\}',
+    re.DOTALL,
+)
 # Kimi sometimes emits unclosed <tool_call>{...} without </tool_call>
 _TOOL_CALL_LEAK_RE = re.compile(
     r"<tool_call>\s*\{[^}]*\}[^<]*(?:</tool_call>)?",
     re.DOTALL | re.IGNORECASE,
+)
+_KIMI_TOOL_LEAK_RE = re.compile(
+    r"<\|tool_calls_section_begin\|>.*?<\|tool_calls_section_end\|>",
+    re.DOTALL,
 )
 
 _CODE_FIX_RE = re.compile(
@@ -102,21 +116,89 @@ _SCAN_RE = re.compile(
     re.IGNORECASE,
 )
 
+_REVIEW_RE = re.compile(
+    r"\b(review|audit|compliance|cardinal\s+rule|code\s+review|"
+    r"look\s+over|go\s+through|assess|evaluate)\b.*\b(project|repo|codebase|whole|entire)\b|"
+    r"\b(review|audit)\s+(this\s+)?(project|repo|codebase)\b|"
+    r"\[PROJECT\s+ROOT:",
+    re.IGNORECASE,
+)
+
+AGENT_REVIEW_MAX_STEPS = int(os.getenv("BEING_AGENT_REVIEW_MAX_STEPS", "12"))
+AGENT_REVIEW_MIN_TOOLS = int(os.getenv("BEING_AGENT_REVIEW_MIN_TOOLS", "5"))
+AGENT_REVIEW_TOOLS_PER_STEP = int(os.getenv("BEING_AGENT_REVIEW_TOOLS_PER_STEP", "8"))
+AGENT_REVIEW_NUM_PREDICT = int(os.getenv("BEING_AGENT_REVIEW_NUM_PREDICT", "1024"))
+REVIEW_FINALIZE_MODEL = os.getenv(
+    "REVIEW_FINALIZE_MODEL",
+    os.getenv("LLM_MODEL_GENERAL", os.getenv("OLLAMA_MODEL", "llama3.2")),
+)
+REVIEW_FINALIZE_TIMEOUT = float(os.getenv("REVIEW_FINALIZE_TIMEOUT_SEC", "120"))
+REVIEW_NEMOTRON_TIMEOUT = float(os.getenv("REVIEW_NEMOTRON_TIMEOUT_SEC", "240"))
+
+_REVIEW_SKIP_DIRS = frozenset({
+    ".git", ".svn", "node_modules", "__pycache__", "venv", ".venv",
+    "dist", "build", ".mypy_cache", ".pytest_cache", "logs",
+})
+_REVIEW_ROOT_FILES = (
+    "README.md", "README", "README.txt", "CARDINAL_RULES.md",
+    "main.py", "package.json", "pyproject.toml", "requirements.txt",
+    "start.sh", "docker-compose.yml",
+)
+
+PROJECT_REVIEW_TASK = """Review the ENTIRE project at [PROJECT ROOT].
+
+Workflow (use <tool_call> — do not skip exploration):
+1. ls project root depth=2 — map structure
+2. ls backend/, frontend/, scripts/ (or equivalent dirs you find)
+3. read README, main entry points, and 3-8 key source files
+4. run rg for: TODO|FIXME|hardcoded.*key|password|api_key|except:|pass
+5. Summarize architecture, risks, and Cardinal Rule compliance
+
+Deliver:
+  ARCHITECTURE — what this project is and how pieces connect
+  CRITICAL — must fix (with file paths)
+  WARNING — should fix soon
+  CLEAN — what passes review
+  VERDICT — PASS / FAIL with one honest sentence"""
+
+
+def wants_project_review(message: str) -> bool:
+    """True when the user wants a whole-project review (not a single open file)."""
+    return bool(_REVIEW_RE.search(message or ""))
+
+
+def review_agent_max_steps() -> int:
+    return AGENT_REVIEW_MAX_STEPS
+
 
 def wants_agent_tools(message: str, mode: str) -> bool:
     """Enable the tool loop for code work and project exploration — not creative tutor chat."""
     if mode in ("codelab", "code"):
         return True
     text = message or ""
-    return bool(_CODE_FIX_RE.search(text) or _SCAN_RE.search(text))
+    return bool(
+        _CODE_FIX_RE.search(text)
+        or _SCAN_RE.search(text)
+        or wants_project_review(text)
+    )
 
 
 def strip_tool_blocks(text: str) -> str:
-    """Remove <tool_call> blocks from user-facing text (closed or unclosed)."""
+    """Remove tool_call / Kimi tool markup from user-facing text."""
     raw = text or ""
-    cleaned = _TOOL_CALL_RE.sub("", raw)
+    cleaned = _KIMI_TOOL_LEAK_RE.sub("", raw)
+    cleaned = _TOOL_CALL_RE.sub("", cleaned)
+    cleaned = _KIMI_TOOL_ARG_RE.sub("", cleaned)
     cleaned = _TOOL_CALL_LEAK_RE.sub("", cleaned)
     cleaned = re.sub(r"</?tool_call>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"<\|tool_calls_section_begin\|>", "", cleaned)
+    cleaned = re.sub(r"<\|tool_calls_section_end\|>", "", cleaned)
+    cleaned = re.sub(r"<\|tool_call_begin\|>[^<]*", "", cleaned)
+    cleaned = re.sub(r"<\|tool_call_end\|>", "", cleaned)
+    cleaned = re.sub(r"<\|tool_call_argument_begin\|>", "", cleaned)
+    cleaned = re.sub(r"functions\.tool_call:\d+", "", cleaned)
+    cleaned = re.sub(r'\{\s*"tool"\s*:\s*"[^"]+"[^}]*\}', "", cleaned)
+    cleaned = re.sub(r'^\s*\{\s*"tool"\s*:.*$', "", cleaned, flags=re.MULTILINE)
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
 
@@ -127,11 +209,37 @@ def _is_tool_leak(text: str) -> bool:
         return True
     if "<tool_call>" in t or "</tool_call>" in t:
         return True
+    if "<|tool_call" in t or "functions.tool_call" in t:
+        return True
     if t.startswith("{") and '"tool"' in t:
         return True
-    if '"tool":' in t and len(t) < 200:
+    if '"tool":' in t and len(t) < 800:
+        return True
+    if "i need to stop here" in t or "hit my limit" in t:
+        return True
+    if re.search(r'\{\s*"tool"\s*:', text or ""):
         return True
     return False
+
+
+def _resolve_scope_path(raw: str) -> Path:
+    return Path(os.path.expanduser(str(raw).strip())).resolve()
+
+
+def _check_scope(path: Optional[str], scope_root: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Return error dict if path is outside review scope."""
+    if not scope_root or not path:
+        return None
+    try:
+        resolved = _resolve_scope_path(path)
+        scope = _resolve_scope_path(scope_root)
+        resolved.relative_to(scope)
+    except (ValueError, OSError):
+        return {
+            "status": "error",
+            "detail": f"Outside project boundary ({scope_root}): {path}",
+        }
+    return None
 
 
 def _compact_tool_result(entry: Dict[str, Any], max_chars: int = AGENT_TOOL_RESULT_MAX_CHARS) -> Dict[str, Any]:
@@ -170,9 +278,10 @@ def _trim_conversation(text: str, max_chars: int = AGENT_CONVERSATION_MAX_CHARS)
     return head + user_line + "\n...[older context trimmed]...\n" + rest[-tail_budget:]
 
 
-def _build_tool_digest(tools_executed: List[Dict[str, Any]], max_entries: int = 12) -> str:
+def _build_tool_digest(tools_executed: List[Dict[str, Any]], max_entries: int = 24) -> str:
     """Compact plain-text digest of tool results for finalize prompts and fallbacks."""
     lines: List[str] = []
+    seen_ls: set[str] = set()
     for i, entry in enumerate(tools_executed[:max_entries], 1):
         call = entry.get("call") or {}
         result = entry.get("result") or {}
@@ -180,13 +289,17 @@ def _build_tool_digest(tools_executed: List[Dict[str, Any]], max_entries: int = 
         path = call.get("path") or call.get("src") or call.get("command", "")[:60]
 
         if tool == "ls":
+            ls_key = str(path)
+            if ls_key in seen_ls:
+                continue
+            seen_ls.add(ls_key)
             entries = result.get("entries") or []
-            names = [e.get("name", "?") for e in entries[:20]]
-            suffix = f" (+{len(entries) - 20} more)" if len(entries) > 20 else ""
+            names = [e.get("name", "?") for e in entries[:35]]
+            suffix = f" (+{len(entries) - 35} more)" if len(entries) > 35 else ""
             lines.append(f"{i}. ls {path} → {len(entries)} entries: {', '.join(names)}{suffix}")
         elif tool == "read":
             content = (result.get("content") or "").strip()
-            preview = "\n".join(content.splitlines()[:8])
+            preview = "\n".join(content.splitlines()[:20])
             if len(content.splitlines()) > 8:
                 preview += "\n..."
             range_note = ""
@@ -225,20 +338,268 @@ def _fallback_summary_from_tools(
     )
 
 
+def _normalize_tool_payload(
+    payload: Dict[str, Any],
+    *,
+    scope_root: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Map Kimi aliases (rg/grep) to real being_eyes tools."""
+    tool = str(payload.get("tool", "")).lower().strip()
+    if tool in ("rg", "grep", "search", "find", "ack", "ag"):
+        pattern = str(payload.get("pattern") or payload.get("query") or ".").replace("'", "")
+        root = payload.get("path") or payload.get("cwd") or scope_root or "."
+        return {
+            "tool": "run",
+            "command": f"rg -n --max-count 25 '{pattern}' . 2>/dev/null | head -50",
+            "cwd": root,
+            "timeout_sec": int(payload.get("timeout_sec", 60)),
+        }
+    return payload
+
+
+def _append_tool_call(calls: List[Dict[str, Any]], seen: set, raw: str) -> None:
+    try:
+        payload = json.loads(raw.strip())
+        if not isinstance(payload, dict) or not payload.get("tool"):
+            return
+        key = json.dumps(payload, sort_keys=True)
+        if key in seen:
+            return
+        seen.add(key)
+        calls.append(payload)
+    except json.JSONDecodeError as exc:
+        logger.warning("[being_agent] Bad tool_call JSON: %s", exc)
+
+
 def parse_tool_calls(text: str) -> List[Dict[str, Any]]:
     calls: List[Dict[str, Any]] = []
-    for match in _TOOL_CALL_RE.finditer(text or ""):
-        raw = match.group(1).strip()
-        try:
-            payload = json.loads(raw)
-            if isinstance(payload, dict) and payload.get("tool"):
-                calls.append(payload)
-        except json.JSONDecodeError as exc:
-            logger.warning("[being_agent] Bad tool_call JSON: %s", exc)
+    seen: set = set()
+    source = text or ""
+    for match in _TOOL_CALL_RE.finditer(source):
+        _append_tool_call(calls, seen, match.group(1))
+    for match in _KIMI_TOOL_ARG_RE.finditer(source):
+        _append_tool_call(calls, seen, match.group(1))
+    for match in _TOOL_JSON_BLOB_RE.finditer(source):
+        _append_tool_call(calls, seen, match.group(0))
+    for line in source.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("{") and '"tool"' in stripped:
+            _append_tool_call(calls, seen, stripped)
     return calls
 
 
-async def execute_being_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _review_finalize_prompt(
+    *,
+    message: str,
+    digest: str,
+    scope_root: str,
+    tool_count: int,
+    instructor: str = "family",
+) -> str:
+    if instructor in ("kimi", "nemo"):
+        who = "Kimi K2.6" if instructor == "kimi" else "Nemo"
+        return (
+            f"You are {who} — senior engineer. Write a useful project review for Everett.\n\n"
+            f"Project: {scope_root}\n"
+            f"Your tool runs on disk ({tool_count} tools):\n{digest}\n\n"
+            "Use what the digest shows — ls listings, read previews, rg output are verified facts.\n"
+            "Do not invent files that never appeared in the digest. Do not nitpick the tool workflow.\n"
+            "Write like a code reviewer, not a compliance auditor. Minimize 'not verified' — "
+            "only use it when you truly lack data for a specific claim.\n"
+            "Sections: ARCHITECTURE, CRITICAL, WARNING, CLEAN, VERDICT (PASS / PARTIAL / FAIL).\n"
+            "VERDICT grades the project from findings — not whether exploration was perfect.\n"
+            "Plain English. No tool markup."
+        )
+    return (
+        f"User request:\n{message}\n\n"
+        f"Project boundary: {scope_root}\n"
+        f"Tools executed on disk: {tool_count}\n\n"
+        f"TOOL RESULTS DIGEST:\n{digest}\n\n"
+        "Write a project review for Everett from the digest above.\n"
+        "Sections: ARCHITECTURE, CRITICAL, WARNING, CLEAN, VERDICT.\n"
+        "Plain English only. No JSON. No tool markup."
+    )
+
+
+async def _review_finalize_generate(prompt: str) -> str:
+    """Local Ollama summary — uses fast GENERAL model, not 32B coder."""
+    trimmed = _trim_conversation(prompt, max_chars=10000)
+    try:
+        async with httpx.AsyncClient(timeout=REVIEW_FINALIZE_TIMEOUT) as client:
+            r = await client.post(
+                f"{OLLAMA_BASE}/api/chat",
+                json={
+                    "model": REVIEW_FINALIZE_MODEL,
+                    "messages": [{"role": "user", "content": trimmed}],
+                    "stream": False,
+                    "options": {
+                        "num_predict": AGENT_REVIEW_NUM_PREDICT,
+                        "num_ctx": 8192,
+                        "temperature": 0.1,
+                        "top_p": 0.85,
+                    },
+                },
+            )
+            r.raise_for_status()
+            return r.json()["message"]["content"]
+    except Exception as e:
+        logger.warning(
+            "[being_agent] review finalize ollama failed model=%s: %s",
+            REVIEW_FINALIZE_MODEL,
+            e,
+        )
+        return ""
+
+
+async def deterministic_project_review_scan(scope_root: str) -> List[Dict[str, Any]]:
+    """Server-side project scan — no LLM. ls, read key files, rg security patterns."""
+    root = Path(scope_root).resolve()
+    tools_executed: List[Dict[str, Any]] = []
+
+    async def _run(call: Dict[str, Any]) -> Dict[str, Any]:
+        result = await execute_being_tool(call, scope_root=str(root))
+        tools_executed.append({"call": call, "result": result})
+        return result
+
+    logger.info("[being_agent] Fast review scan: %s", root)
+
+    root_ls = await _run({"tool": "ls", "path": str(root), "depth": 2})
+    entries = root_ls.get("entries") or []
+    dir_names = [
+        e.get("name", "")
+        for e in entries
+        if e.get("type") == "dir" and e.get("name") and not e["name"].startswith(".")
+    ]
+
+    for dname in dir_names[:10]:
+        if dname in _REVIEW_SKIP_DIRS:
+            continue
+        await _run({"tool": "ls", "path": str(root / dname), "depth": 1})
+
+    for fname in _REVIEW_ROOT_FILES:
+        fpath = root / fname
+        if fpath.is_file():
+            await _run({
+                "tool": "read",
+                "path": str(fpath),
+                "limit_lines": 150,
+            })
+
+    for candidate in (
+        root / "backend" / "main.py",
+        root / "src" / "main.py",
+        root / "app" / "main.py",
+        root / "brain.py",
+    ):
+        if candidate.is_file():
+            await _run({
+                "tool": "read",
+                "path": str(candidate),
+                "limit_lines": 120,
+            })
+
+    await _run({
+        "tool": "run",
+        "command": (
+            "rg -n --max-count 25 "
+            "-e 'TODO|FIXME|api_key|password|hardcoded|except:[[:space:]]*pass' . "
+            "2>/dev/null | head -60"
+        ),
+        "cwd": str(root),
+        "timeout_sec": 45,
+    })
+
+    logger.info("[being_agent] Fast review scan done: %d tool(s)", len(tools_executed))
+    return tools_executed
+
+
+async def finalize_project_review(
+    *,
+    message: str,
+    tools_executed: List[Dict[str, Any]],
+    scope_root: str,
+    instructor: str = "family",
+    nemo_svc: Any = None,
+    kimi_svc: Any = None,
+) -> Dict[str, Any]:
+    """Write VERDICT from disk digest — one LLM call (Nemotron/Kimi/Ollama)."""
+    digest = _build_tool_digest(tools_executed)
+    prompt = _review_finalize_prompt(
+        message=message,
+        digest=digest,
+        scope_root=scope_root,
+        tool_count=len(tools_executed),
+    )
+    instructor = (instructor or "family").lower()
+    loop = asyncio.get_event_loop()
+    text = ""
+
+    if instructor == "nemo" and nemo_svc and getattr(nemo_svc, "uses_nvidia", False):
+        trimmed = _trim_conversation(prompt, max_chars=12000)
+
+        def _nemo_call() -> str:
+            return nemo_svc.generate_content(
+                trimmed,
+                mode="code",
+                context=None,
+                agent_loop=False,
+                review_finalize=True,
+            )
+
+        try:
+            text = await asyncio.wait_for(
+                loop.run_in_executor(None, _nemo_call),
+                timeout=REVIEW_NEMOTRON_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.error("[being_agent] Nemotron review finalize timed out after %ss", REVIEW_NEMOTRON_TIMEOUT)
+            text = ""
+    elif instructor == "kimi" and kimi_svc:
+        trimmed = _trim_conversation(prompt, max_chars=12000)
+
+        def _kimi_call() -> str:
+            result = kimi_svc.interact(
+                message=trimmed,
+                mode="codelab",
+                context=None,
+                thinking=False,
+            )
+            return result.get("text", "")
+
+        try:
+            text = await asyncio.wait_for(
+                loop.run_in_executor(None, _kimi_call),
+                timeout=REVIEW_NEMOTRON_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.error("[being_agent] Kimi review finalize timed out")
+            text = ""
+    else:
+        text = await _review_finalize_generate(prompt)
+
+    text = strip_tool_blocks(text or "")
+    if not text or _is_tool_leak(text) or len(text) < 40:
+        logger.warning(
+            "[being_agent] Review finalize empty — using disk digest (%d tools)",
+            len(tools_executed),
+        )
+        text = _fallback_summary_from_tools(tools_executed, user_message=message)
+
+    return {
+        "ok": True,
+        "text": text,
+        "tools_executed": tools_executed,
+        "tool_count": len(tools_executed),
+        "agent_steps": 0,
+        "scan": "deterministic",
+    }
+
+
+async def execute_being_tool(
+    payload: Dict[str, Any],
+    *,
+    scope_root: Optional[str] = None,
+) -> Dict[str, Any]:
     """Run one Being Eyes action. Returns result or explicit error — Rule 6."""
     from backend.being_eyes import (
         DeleteRequest,
@@ -256,10 +617,25 @@ async def execute_being_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
         write_file,
     )
 
+    payload = _normalize_tool_payload(payload, scope_root=scope_root)
     tool = str(payload.get("tool", "")).lower().strip()
     logger.info("[being_agent] Executing tool=%s path=%s", tool, payload.get("path", ""))
 
     try:
+        if tool in ("read", "ls", "patch", "write", "mkdir", "delete"):
+            scope_err = _check_scope(payload.get("path"), scope_root)
+            if scope_err:
+                return scope_err
+        if tool == "move":
+            for key in ("src", "dst"):
+                scope_err = _check_scope(payload.get(key), scope_root)
+                if scope_err:
+                    return scope_err
+        if tool == "run" and scope_root and payload.get("cwd"):
+            scope_err = _check_scope(payload.get("cwd"), scope_root)
+            if scope_err:
+                return scope_err
+
         if tool == "read":
             limit_lines = payload.get("limit_lines") or payload.get("limit") or 0
             return await read_file(
@@ -288,17 +664,23 @@ async def execute_being_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
                 )
             )
         if tool == "run":
+            cwd = payload.get("cwd") or scope_root
+            if scope_root and cwd:
+                scope_err = _check_scope(cwd, scope_root)
+                if scope_err:
+                    return scope_err
             return await run_command(
                 RunRequest(
                     command=payload["command"],
-                    cwd=payload.get("cwd"),
+                    cwd=cwd,
                     timeout_sec=int(payload.get("timeout_sec", 60)),
                 )
             )
         if tool == "ls":
+            depth = min(int(payload.get("depth", 1)), 2)
             return await list_directory(
                 path=payload.get("path", "."),
-                depth=int(payload.get("depth", 1)),
+                depth=depth,
             )
         if tool == "mkdir":
             return await make_directory(path=payload["path"])
@@ -352,12 +734,36 @@ async def _fast_direct_generate(prompt: str) -> str:
         return f"[compute error - model {AGENT_MODEL} not responding: {e}]"
 
 
+def _scoped_agent_prompt(scope_root: Optional[str]) -> str:
+    if not scope_root:
+        return AGENT_TOOLS_PROMPT
+    return (
+        f"{AGENT_TOOLS_PROMPT}\n\n"
+        f"=== REVIEW BOUNDARY (NON-NEGOTIABLE) ===\n"
+        f"Project root: {scope_root}\n"
+        f"Every tool path MUST be inside {scope_root}.\n"
+        f"Do NOT access Brockston-Studio, ~/.grok, or other projects.\n"
+        f"Valid tools: ls, read, run, patch, write only. For search use run+rg, not {{\"tool\":\"rg\"}}.\n"
+        f"Do not invent file paths — ls first, then read files that exist.\n"
+        f"REVIEW WORKFLOW:\n"
+        f"- ls {scope_root} depth=2 ONCE — then ls subdirs you find (backend/, client/, docker/, scripts/)\n"
+        f"- read README.md, CARDINAL_RULES.md if present, and main entry points\n"
+        f"- run rg for TODO|FIXME|api_key|password|except: inside {scope_root}\n"
+        f"- Do NOT ls the project root repeatedly — go deeper into subdirectories\n"
+        f"- Do NOT ls paths outside {scope_root}\n"
+        f"Final answer: plain English summary only — no tool markup, no JSON lines."
+    )
+
+
 async def run_agent_loop(
     generate: Callable[[str], Awaitable[str]],
     *,
     message: str,
     context: str = "",
     max_steps: int = None,
+    scope_root: Optional[str] = None,
+    finalize_generate: Optional[Callable[[str], Awaitable[str]]] = None,
+    review_instructor: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Loop: model → tool_calls → execute on disk → feed results → repeat.
     Reduced lag: default max_steps lowered, callers should pass fast generate.
@@ -371,18 +777,31 @@ async def run_agent_loop(
 
     last_text = ""
     steps_used = 0
+    tools_per_step = (
+        AGENT_REVIEW_TOOLS_PER_STEP if scope_root else KIMI_AGENT_MAX_TOOLS_PER_STEP
+    )
+    min_review_tools = AGENT_REVIEW_MIN_TOOLS if scope_root else 0
+
     for step in range(max_steps):
         steps_used = step + 1
-        prompt = f"{AGENT_TOOLS_PROMPT}\n\n{conversation}" if step == 0 else conversation
+        prompt = f"{_scoped_agent_prompt(scope_root)}\n\n{conversation}" if step == 0 else conversation
 
         last_text = await generate(prompt)
         calls = parse_tool_calls(last_text)
         if not calls:
+            if scope_root and len(tools_executed) < min_review_tools and step + 1 < max_steps:
+                conversation = _trim_conversation(
+                    f"{conversation}\n\n"
+                    f"SYSTEM: Review incomplete — only {len(tools_executed)} tool(s) ran. "
+                    f"Emit <tool_call> blocks to ls {scope_root} depth=2, read README/main files, "
+                    f"and run rg inside {scope_root}. Do not summarize yet."
+                )
+                continue
             break
 
         batch_results: List[Dict[str, Any]] = []
-        for call in calls[:KIMI_AGENT_MAX_TOOLS_PER_STEP]:
-            result = await execute_being_tool(call)
+        for call in calls[:tools_per_step]:
+            result = await execute_being_tool(call, scope_root=scope_root)
             entry = {"call": call, "result": result}
             tools_executed.append(entry)
             batch_results.append(_compact_tool_result(entry))
@@ -392,37 +811,76 @@ async def run_agent_loop(
                 call.get("tool"),
                 result.get("status", result.get("exit_code")),
             )
-        if len(calls) > KIMI_AGENT_MAX_TOOLS_PER_STEP:
+        if len(calls) > tools_per_step:
             logger.warning(
                 "[being_agent] Capped tools step=%d from %d to %d",
                 step + 1,
                 len(calls),
-                KIMI_AGENT_MAX_TOOLS_PER_STEP,
+                tools_per_step,
             )
+
+        repeat_nudge = ""
+        if scope_root:
+            root = str(scope_root).rstrip("/")
+            repeat_root_ls = sum(
+                1
+                for e in tools_executed
+                if (e.get("call") or {}).get("tool") == "ls"
+                and str((e.get("call") or {}).get("path", "")).rstrip("/") == root
+            )
+            if repeat_root_ls >= 2:
+                repeat_nudge = (
+                    f"\nSYSTEM: You ls'd {root} {repeat_root_ls} times already. "
+                    f"Stop repeating root ls. ls subdirectories (backend/, client/, docker/) "
+                    f"and read README + main.py inside {root}.\n"
+                )
 
         conversation = _trim_conversation(
             f"{conversation}\n\n"
             f"Assistant (step {step + 1}):\n{strip_tool_blocks(last_text)}\n\n"
             f"TOOL RESULTS (real execution on disk):\n"
             f"{json.dumps(batch_results, indent=2, default=str)}\n\n"
-            "Continue with more <tool_call> blocks if needed, "
-            "or give a final plain-text summary for Everett. No raw tool_call XML in the final answer."
+            f"{repeat_nudge}"
+            "Continue with more <tool_call> blocks if needed. "
+            "Do not paste JSON tool lines — use <tool_call> wrappers only. "
+            "Do not summarize until you have ls + reads + rg results from inside the project."
         )
 
-    stripped = strip_tool_blocks(last_text)
-    needs_finalize = bool(parse_tool_calls(last_text)) or (
-        tools_executed and not stripped
-    )
-    if needs_finalize and tools_executed:
-        digest = _build_tool_digest(tools_executed)
-        finalize_prompt = (
-            f"User request:\n{message}\n\n"
-            f"TOOL RESULTS DIGEST (already executed on disk):\n{digest}\n\n"
-            "Write a direct plain-text summary for Everett. "
-            "3-8 sentences. Cite paths and what was found. "
-            "No <tool_call> blocks. No asking him to ask again."
+    digest = _build_tool_digest(tools_executed)
+    finalize_gen = finalize_generate or _review_finalize_generate
+
+    if scope_root:
+        if len(tools_executed) < min_review_tools:
+            last_text = (
+                f"Review incomplete — only {len(tools_executed)} tool(s) executed "
+                f"(need {min_review_tools}+ inside {scope_root}).\n\n"
+                f"What was actually read on disk:\n\n{digest}\n\n"
+                "Re-run review — Kimi or Nemo should ls, read, and rg inside "
+                f"{scope_root} before writing the verdict."
+            )
+        else:
+            prompt = _review_finalize_prompt(
+                message=message,
+                digest=digest,
+                scope_root=scope_root,
+                tool_count=len(tools_executed),
+                instructor=review_instructor or "family",
+            )
+            last_text = await finalize_gen(prompt)
+            if not strip_tool_blocks(last_text) and finalize_generate is not None:
+                last_text = await _review_finalize_generate(prompt)
+    elif tools_executed:
+        stripped = strip_tool_blocks(last_text)
+        needs_finalize = bool(parse_tool_calls(last_text)) or (
+            not stripped or _is_tool_leak(last_text)
         )
-        last_text = await generate(finalize_prompt)
+        if needs_finalize:
+            finalize_prompt = (
+                f"User request:\n{message}\n\n"
+                f"TOOL RESULTS DIGEST:\n{digest}\n\n"
+                "Write a direct plain-text summary for Everett. Plain English only."
+            )
+            last_text = await finalize_gen(finalize_prompt)
 
     last_text = strip_tool_blocks(last_text)
     if tools_executed and (_is_tool_leak(last_text) or len(last_text) < 40):
@@ -447,6 +905,9 @@ async def run_being_agent(
     message: str,
     context: str = "",
     max_steps: int = None,
+    scope_root: Optional[str] = None,
+    finalize_generate: Optional[Callable[[str], Awaitable[str]]] = None,
+    review_instructor: Optional[str] = None,
 ) -> Dict[str, Any]:
     """General compute agent for ANY Christman family being.
     All beings now have full capacity to run the compute via being_eyes tools.
@@ -459,6 +920,9 @@ async def run_being_agent(
         message=message,
         context=context,
         max_steps=max_steps,
+        scope_root=scope_root,
+        finalize_generate=finalize_generate,
+        review_instructor=review_instructor,
     )
 
 
@@ -470,15 +934,17 @@ async def run_kimi_agent(
     mode: str = "codelab",
     domain: Optional[str] = None,
     max_steps: int = 6,
+    scope_root: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Kimi — NVIDIA K2.6 explores the project via <tool_call> and writes the verdict."""
     loop = asyncio.get_event_loop()
 
     async def generate(prompt: str) -> str:
-        # Trim middle of bloated agent context — keep user request + latest tool results
-        prompt = _trim_conversation(prompt, max_chars=8000)
+        trimmed = _trim_conversation(prompt, max_chars=8000)
+
         def _call() -> str:
             result = kimi_svc.interact(
-                message=prompt,
+                message=trimmed,
                 mode=mode,
                 context=None,
                 domain=domain,
@@ -488,11 +954,36 @@ async def run_kimi_agent(
 
         return await loop.run_in_executor(None, _call)
 
+    async def kimi_finalize(prompt: str) -> str:
+        trimmed = _trim_conversation(prompt, max_chars=12000)
+
+        def _call() -> str:
+            result = kimi_svc.interact(
+                message=trimmed,
+                mode=mode,
+                context=None,
+                domain=domain,
+                thinking=False,
+            )
+            return result.get("text", "")
+
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(None, _call),
+                timeout=REVIEW_NEMOTRON_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.error("[being_agent] Kimi finalize timed out")
+            return ""
+
     return await run_being_agent(
         generate,
         message=message,
         context=context,
         max_steps=max_steps,
+        scope_root=scope_root,
+        finalize_generate=kimi_finalize,
+        review_instructor="kimi" if scope_root else None,
     )
 
 
@@ -503,23 +994,57 @@ async def run_nemo_agent(
     context: str,
     mode: str = "code",
     max_steps: int = 6,
+    scope_root: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Nemo — Nemotron on NVIDIA explores via <tool_call> and writes the verdict."""
     loop = asyncio.get_event_loop()
+    uses_nvidia = bool(getattr(nemo_svc, "uses_nvidia", False))
+
+    if not uses_nvidia:
+        raise RuntimeError(
+            "Nemo requires NVIDIA_NEMO_API_KEY — Nemotron is Nemo's brain, not local Ollama."
+        )
 
     async def generate(prompt: str) -> str:
-        return await loop.run_in_executor(
-            None,
-            lambda: nemo_svc.generate_content(
-                prompt,
+        trimmed = _trim_conversation(prompt, max_chars=8000)
+
+        def _call() -> str:
+            return nemo_svc.generate_content(
+                trimmed,
                 mode=mode,
                 context=None,
-                model=AGENT_MODEL,
-            ),
-        )
+                agent_loop=True,
+            )
+
+        return await loop.run_in_executor(None, _call)
+
+    async def nemo_finalize(prompt: str) -> str:
+        trimmed = _trim_conversation(prompt, max_chars=12000)
+
+        def _call() -> str:
+            return nemo_svc.generate_content(
+                trimmed,
+                mode=mode,
+                context=None,
+                agent_loop=False,
+                review_finalize=bool(scope_root),
+            )
+
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(None, _call),
+                timeout=REVIEW_NEMOTRON_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.error("[being_agent] Nemotron finalize timed out")
+            return ""
 
     return await run_being_agent(
         generate,
         message=message,
         context=context,
         max_steps=max_steps,
+        scope_root=scope_root,
+        finalize_generate=nemo_finalize,
+        review_instructor="nemo" if scope_root else None,
     )

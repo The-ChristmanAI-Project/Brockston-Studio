@@ -8,6 +8,9 @@ python-multipart==0.0.6
 # HTTP client for AI model communication
 httpx==0.25.1
 
+# NVIDIA integrate API (Nemotron / Kimi) — OpenAI-compatible client
+openai>=1.40.0
+
 # Data validation
 
 # Anthropic Claude API

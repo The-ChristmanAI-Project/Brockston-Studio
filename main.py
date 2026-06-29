@@ -58,45 +58,19 @@ try:
 except Exception as e:
     logger.warning(f"Being Eyes not available: {e}")
 
-# Nemo — sovereign partner and live IDE companion. Routes through the Christman local pipeline.
-try:
-    from backend.nemo_service import get_nemo_service
-    _nemo_svc = get_nemo_service()
-    logger.info("Nemo linked — partner line available at /api/nemo")
-except Exception as e:
-    _nemo_svc = None
-    logger.warning(f"Nemo service not available: {e}")
-
-# Kimi K2.6 — NVIDIA learning tutor (kids, retention, code context)
-try:
-    from backend.kimi_service import get_kimi_service
-    _kimi_svc = get_kimi_service()
-    if not _kimi_svc.is_available:
-        _kimi_svc = None
-        logger.warning("Kimi linked but not available (NVIDIA_API_KEY or BROCKSTON :9003)")
-    else:
-        logger.info("Kimi K2.6 linked — learning tutor available at /api/kimi")
-except Exception as e:
-    _kimi_svc = None
-    logger.warning(f"Kimi service not available: {e}")
-
 class ChatRequest(BaseModel):
     message: str
     context: str | None = None
 
-class KimiRequest(BaseModel):
-    message: str
-    mode: str = "tutor"
-    context: str | None = None
-    domain: str | None = None
-
-class NemoRequest(BaseModel):
-    message: str
-    mode: str = "partner"
+class ProjectReviewRequest(BaseModel):
+    path: str | None = None
+    message: str | None = None
+    instructor: str = "family"  # family | claude
 
 @app.get("/api/health")
 async def health_check():
     from backend.being_agent import AGENT_MODEL
+
     return {
         "status": "10 Toes Down",
         "system": "Online",
@@ -107,26 +81,136 @@ async def health_check():
             "coder": LLM_MODEL_CODER,
             "being_agent": AGENT_MODEL,
             "ultimateev": LLM_MODEL_CODER,
-            "kimi": "moonshotai/kimi-k2.6 (NVIDIA)",
+        },
+        "instructors": {
+            "family": {
+                "name": "The Family",
+                "backend": "ollama",
+                "model": LLM_MODEL_GENERAL,
+                "label": f"{LLM_MODEL_GENERAL} (local Ollama)",
+                "api_key_env": "OLLAMA (local)",
+                "api_key_set": True,
+            },
+            "claude": {
+                "name": "Claude",
+                "backend": "anthropic",
+                "model": "claude-sonnet-4",
+                "label": "claude-sonnet-4 (Anthropic API)",
+                "api_key_env": "ANTHROPIC_API_KEY",
+                "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY", "").strip()),
+            },
         },
         "beings": {
             "family_chat": LLM_MODEL_GENERAL,
-            "nemo_partner": LLM_MODEL_GENERAL,
-            "nemo_code": LLM_MODEL_CODER,
             "being_agent_tools": AGENT_MODEL,
+        },
+        "features": {
+            "review_project": True,
         },
     }
 
 
 @app.get("/api/sound/status")
 async def sound_status():
-    """Christman-Sound wiring status — LIFE2 roots, per-being WAV folders."""
+    """christman_sound wiring status — local repo paths, per-being WAV folders."""
     try:
         from backend.christman_sound_config import sound_stack_status
         return sound_stack_status()
     except Exception as e:
         logger.error(f"Sound status error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))
+
+async def _resolve_review_path(raw: str | None) -> str:
+    """Resolve project path for review — explorer path or workspace default."""
+    if raw and raw.strip():
+        return str(_resolve_user_path(raw.strip(), WORKSPACE_ROOT))
+    return str(WORKSPACE_ROOT)
+
+
+async def _run_project_review(
+    *,
+    project_path: str,
+    user_message: str,
+    instructor: str = "family",
+) -> dict:
+    from backend.being_agent import (
+        PROJECT_REVIEW_TASK,
+        review_agent_max_steps,
+        run_being_agent,
+        strip_tool_blocks,
+        _is_tool_leak,
+        _fallback_summary_from_tools,
+    )
+    from backend.being_context import build_being_context
+
+    task = (
+        f"{PROJECT_REVIEW_TASK}\n\n[PROJECT ROOT: {project_path}]\n\n"
+        f"{user_message or 'Review this entire project.'}"
+    )
+    instructor = (instructor or "family").lower()
+    if instructor not in ("family", "claude"):
+        instructor = "family"
+
+    prefix = "PROJECT REVIEW"
+
+    full_context = await build_being_context(
+        message=task,
+        project_path=project_path,
+        compact=True,
+        for_kimi=False,
+        for_review=True,
+        read_open_file=False,
+    )
+    max_steps = review_agent_max_steps()
+
+    logger.info(
+        "Project review agent: %s (instructor=%s, max_steps=%d)",
+        project_path,
+        instructor,
+        max_steps,
+    )
+
+    result = await run_being_agent(
+        message=task,
+        context=full_context,
+        max_steps=max_steps,
+        scope_root=project_path,
+    )
+
+    tool_count = result.get("tool_count", 0)
+    text = strip_tool_blocks(result.get("text", ""))
+    if _is_tool_leak(text) and result.get("tools_executed"):
+        text = _fallback_summary_from_tools(
+            result["tools_executed"],
+            user_message=user_message or task,
+        )
+    return {
+        "response": f"[{prefix} — {tool_count} tool(s) on {project_path}]: {text}",
+        "project_path": project_path,
+        "tool_count": tool_count,
+        "tools_executed": result.get("tools_executed", []),
+        "agent": True,
+        "review": True,
+    }
+
+
+@app.post("/api/review/project")
+async def review_project_endpoint(request: ProjectReviewRequest):
+    """Scan and review the whole project at path (explorer folder or workspace root)."""
+    project_path = await _resolve_review_path(request.path)
+    logger.info("Project review: %s (instructor=%s)", project_path, request.instructor)
+    try:
+        return await _run_project_review(
+            project_path=project_path,
+            user_message=request.message or "",
+            instructor=request.instructor,
+        )
+    except fastapi.HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Project review error: %s", e)
+        raise fastapi.HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
@@ -137,15 +221,21 @@ async def chat_endpoint(request: ChatRequest):
     if not get_ai_response:
         raise fastapi.HTTPException(status_code=503, detail="AI client not available")
     try:
-        from backend.being_agent import run_being_agent
-        from backend.being_context import build_being_context
+        from backend.being_agent import run_being_agent, wants_project_review, review_agent_max_steps
+        from backend.being_context import build_being_context, extract_project_root_path
+
+        is_review = wants_project_review(request.message)
+        project_path = extract_project_root_path(request.message)
 
         # Build rich context so beings see the full workspace + abilities for compute
         full_context = await build_being_context(
             message=request.message,
             extra_context=request.context,
-            compact=True,
-            ollama_route=True,
+            project_path=project_path,
+            compact=not is_review,
+            ollama_route=not is_review,
+            for_review=is_review,
+            read_open_file=not is_review,
         )
 
         # Special reduced-lag demo path so beings can quickly demonstrate abilities
@@ -163,6 +253,8 @@ async def chat_endpoint(request: ChatRequest):
             result = await run_being_agent(
                 message=request.message,
                 context=full_context,
+                max_steps=review_agent_max_steps() if is_review else None,
+                scope_root=project_path if is_review else None,
             )
             text = result.get("text", "")
             tool_count = result.get("tool_count", 0)
@@ -202,146 +294,6 @@ async def chat_endpoint(request: ChatRequest):
             return {"response": response_text}
     except Exception as e:
         logger.error(f"Chat error: {e}")
-        raise fastapi.HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/kimi")
-async def kimi_endpoint(request: KimiRequest):
-    """Kimi K2.6 — learning tutor & code mentor for the beings panel.
-    Auto-injects IDE state + open file content so Kimi can actually SEE the project.
-    """
-    if not _kimi_svc:
-        raise fastapi.HTTPException(
-            status_code=503,
-            detail="Kimi not available — set NVIDIA_API_KEY in .env (optional; Nemo uses local Ollama)",
-        )
-    try:
-        mode = request.mode if request.mode in ("tutor", "codelab", "learning", "coach") else "tutor"
-
-        from backend.being_agent import run_kimi_agent, wants_agent_tools
-        from backend.being_context import build_being_context
-        from backend.kimi_service import KimiRateLimitError
-
-        full_context = await build_being_context(
-            message=request.message,
-            extra_context=request.context,
-            compact=True,
-            for_kimi=True,
-        )
-
-        agent_mode = mode if mode in ("tutor", "codelab", "learning", "coach") else "tutor"
-        loop = asyncio.get_event_loop()
-
-        if wants_agent_tools(request.message, agent_mode):
-            result = await run_kimi_agent(
-                _kimi_svc,
-                message=request.message,
-                context=full_context,
-                mode=agent_mode,
-                domain=request.domain,
-                max_steps=6,
-            )
-            from backend.being_agent import strip_tool_blocks, _is_tool_leak, _fallback_summary_from_tools
-
-            text = strip_tool_blocks(result.get("text", ""))
-            if _is_tool_leak(text) and result.get("tools_executed"):
-                text = _fallback_summary_from_tools(
-                    result["tools_executed"],
-                    user_message=request.message,
-                )
-            tool_count = result.get("tool_count", 0)
-            prefix = f"[KIMI — {tool_count} tool(s) executed on disk]: " if tool_count else "[KIMI]: "
-            return {
-                "response": f"{prefix}{text}",
-                "ok": True,
-                "model": "moonshotai/kimi-k2.6",
-                "tools_executed": result.get("tools_executed", []),
-                "tool_count": tool_count,
-                "agent": True,
-                "agent_steps": result.get("agent_steps", 0),
-            }
-
-        result = await loop.run_in_executor(
-            None,
-            lambda: _kimi_svc.interact(
-                message=request.message,
-                mode=agent_mode,
-                context=full_context,
-                domain=request.domain,
-                thinking=False,
-            ),
-        )
-        text = result.get("text", "")
-        return {"response": f"[KIMI]: {text}", "ok": True, "model": result.get("model"), "agent": False}
-    except KimiRateLimitError as e:
-        logger.warning(f"Kimi rate limit: {e}")
-        raise fastapi.HTTPException(status_code=429, detail=str(e))
-    except Exception as e:
-        logger.error(f"Kimi error: {e}")
-        err = str(e)
-        if "429" in err:
-            raise fastapi.HTTPException(
-                status_code=429,
-                detail="NVIDIA rate limit — wait 30–60s. Code Lab agent mode uses multiple calls; use Tutor for chat.",
-            )
-        if "timed out" in err.lower() or "timeout" in err.lower():
-            raise fastapi.HTTPException(
-                status_code=504,
-                detail="Kimi timed out — NVIDIA NIM was slow. Retry in 30s, or switch to Nemo for local inference.",
-            )
-        if "500" in err or "server error" in err.lower():
-            raise fastapi.HTTPException(
-                status_code=502,
-                detail="NVIDIA Kimi returned 500 (internal server error). This can happen with very large prompts in agent mode (e.g. broad 'fix IDE weaknesses'). Retry in 30s, use smaller scope, or switch to Nemo/local for IDE fixes.",
-            )
-        raise fastapi.HTTPException(status_code=500, detail=err)
-
-# NEMO ENDPOINT — Nemo's direct line
-@app.post("/api/nemo")
-async def nemo_endpoint(request: NemoRequest):
-    """Nemo's direct line — sovereign partner watching your code in real-time."""
-    logger.info(f"Nemo request: {request.message[:120]}")
-    if not _nemo_svc:
-        raise fastapi.HTTPException(status_code=503, detail="Nemo service not available")
-    try:
-        mode = request.mode if request.mode in ("partner", "code") else "partner"
-
-        from backend.being_agent import run_nemo_agent, wants_agent_tools
-        from backend.being_context import build_being_context
-
-        full_context = await build_being_context(
-            message=request.message,
-            ollama_route=True,
-        )
-
-        if wants_agent_tools(request.message, mode):
-            result = await run_nemo_agent(
-                _nemo_svc,
-                message=request.message,
-                context=full_context,
-                mode=mode,
-            )
-            text = result.get("text", "")
-            tool_count = result.get("tool_count", 0)
-            prefix = f"[NEMO — {tool_count} tool(s) executed on disk]: " if tool_count else "[NEMO]: "
-            return {
-                "response": f"{prefix}{text}",
-                "source": "nemo",
-                "mode": mode,
-                "tools_executed": result.get("tools_executed", []),
-                "tool_count": tool_count,
-                "agent": True,
-            }
-
-        loop = asyncio.get_event_loop()
-        reply = await loop.run_in_executor(
-            None,
-            lambda: _nemo_svc.generate_content(
-                request.message, mode=mode, context=full_context
-            ),
-        )
-        return {"response": f"[NEMO]: {reply}", "source": "nemo", "mode": mode, "agent": False}
-    except Exception as e:
-        logger.error(f"Nemo error: {e}")
         raise fastapi.HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
@@ -409,14 +361,14 @@ async def get_audio(filename: str):
 # like /etc/passwd while keeping every real project reachable.
 # ----------------------------------------------------------------------------
 from backend.config import (
-    BROCKSTON_WORKSPACE,
+    STUDIO_WORKSPACE,
     LLM_MODEL_GENERAL,
     LLM_MODEL_CODER,
     OLLAMA_BASE_URL,
 )
 
 USER_HOME = Path(os.path.expanduser("~")).resolve()
-WORKSPACE_ROOT = Path(BROCKSTON_WORKSPACE).resolve()
+WORKSPACE_ROOT = Path(STUDIO_WORKSPACE).resolve()
 
 def _resolve_user_path(raw: str, default: Path) -> Path:
     """Resolve a path argument from the client.
@@ -553,7 +505,7 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
     # Works for bash, zsh, fish-style POSIX shells via PROMPT_COMMAND / precmd.
     shell_name = os.path.basename(shell)
     env = os.environ.copy()
-    env["BROCKSTON_WORKSPACE"] = workspace_root
+    env["STUDIO_WORKSPACE"] = workspace_root
     env.setdefault("TERM", "xterm-256color")  # better support for nano, vim, etc. TUIs
 
     # OSC 7 sequence: ESC ] 7 ; file://hostname/path ESC \
@@ -672,7 +624,7 @@ async def websocket_terminal(websocket: fastapi.WebSocket):
             pass
 
 # ==========================================
-# REALTIME VIEWER WEBSOCKET — Nemo's live eye into the IDE
+# REALTIME VIEWER WEBSOCKET — live IDE state for external viewers
 # ==========================================
 from typing import Set
 
@@ -680,7 +632,7 @@ from typing import Set
 viewer_connections: Set[fastapi.WebSocket] = set()
 
 async def broadcast_to_viewers(event_type: str, data: dict):
-    """Broadcast an event to all connected viewers (like Nemo)."""
+    """Broadcast an event to all connected viewers."""
     if not viewer_connections:
         return
     message = json.dumps({"type": event_type, "data": data})
@@ -695,10 +647,10 @@ async def broadcast_to_viewers(event_type: str, data: dict):
 
 @app.websocket("/ws/viewer")
 async def websocket_viewer(websocket: fastapi.WebSocket):
-    """WebSocket for real-time IDE viewer — Nemo's live eye."""
+    """WebSocket for real-time IDE viewer."""
     await websocket.accept()
     viewer_connections.add(websocket)
-    logger.info("Viewer connected (Nemo's live eye)")
+    logger.info("Viewer connected")
 
     # Send initial state
     try:
@@ -709,15 +661,16 @@ async def websocket_viewer(websocket: fastapi.WebSocket):
                 "cwd": str(WORKSPACE_ROOT),
                 "ide_models": {
                     "autocomplete": "qwen2.5-coder:32b (local, autocomplete only)",
-                    "nemo": "sovereign partner — watching via viewer WebSocket",
-                    "coming_tonight": ["Kimi", "GLM"]
+                    "family": f"{LLM_MODEL_GENERAL} (local Ollama)",
+                    "claude": "claude-sonnet-4 (Anthropic API)",
                 },
                 "endpoints": {
-                    "nemo_chat": "/api/nemo",
+                    "family_chat": "/api/chat",
+                    "claude_chat": "/api/claude",
                     "viewer_ws": "/ws/viewer",
                     "ide_control_ws": "/ws/ide-control"
                 },
-                "note": "Nemo is a sovereign partner. No OpenAI / OpenRouter / Nemotron. The IDE runs qwen2.5-coder:32b locally for autocomplete. Kimi & GLM joining tonight."
+                "note": "Instructors: The Family (local Ollama) and Claude (Anthropic API)."
             }
         }))
     except Exception:

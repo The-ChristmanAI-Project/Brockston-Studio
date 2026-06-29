@@ -1,4 +1,4 @@
-# BROCKSTON Studio — Quick Start
+# Brockston-Studio — Quick Start
 
 One command after clone. Three services. Open the board.
 
@@ -17,7 +17,7 @@ One command after clone. Three services. Open the board.
 ## 2. Clone and launch
 
 ```bash
-git clone https://github.com/EverettNC/Brockston-Studio.git
+git clone https://github.com/The-ChristmanAI-Project/Brockston-Studio.git
 cd Brockston-Studio
 chmod +x start.sh
 ```
@@ -50,7 +50,7 @@ First run automatically:
 2. Creates `backend/venv` and `pip install -r requirements.txt`
 3. Runs `npm install` only if `node_modules` is missing
 
-When you see `BROCKSTON Studio is up`, open **http://localhost:5055**.
+When you see `Brockston-Studio is up`, open **http://localhost:5055**.
 
 **Ctrl+C** stops all three services cleanly.
 
@@ -60,12 +60,12 @@ When you see `BROCKSTON Studio is up`, open **http://localhost:5055**.
 
 | Element | Port | Role |
 |---------|------|------|
-| **IDE Board** | 5055 | Browser IDE — editor, terminal, beings panel |
-| **Brockston** | 9003 | Educator backend — chat, suggest-fix |
+| **Studio IDE** | 5055 | Browser IDE — editor, terminal, beings panel |
+| **Studio backend** | 9003 | Educator API in this repo — chat, suggest-fix |
 | **UltimateEV** | 5174 | Code mechanic — heavy code questions |
 | **Ollama** | 11434 | Local models (you run separately) |
 
-Logs: `./logs/ultimateev.log`, `./logs/brockston.log`, `./logs/ide.log`
+Logs: `./logs/ultimateev.log`, `./logs/studio-backend.log`, `./logs/ide.log`
 
 ---
 
@@ -75,12 +75,12 @@ Edit `.env` at the repo root:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `BROCKSTON_WORKSPACE` | `~/Code` | Folder IDE opens to (last path remembered in browser) |
+| `STUDIO_WORKSPACE` | `~/Code` | Studio IDE default folder (last path remembered in browser) |
 | `LLM_MODEL_GENERAL` | `llama3.2` | Fast chat / Nemo partner |
 | `LLM_MODEL_CODER` | `qwen2.5-coder:32b` | Code / tools / UltimateEV |
-| `BROCKSTON_PORT` | `9003` | Educator backend port |
-| `IDE_PORT` | `5055` | IDE port |
-| `NVIDIA_API_KEY` | *(empty)* | Enables Kimi tutor (optional) |
+| `STUDIO_BACKEND_PORT` | `9003` | Studio educator backend port |
+| `IDE_PORT` | `5055` | Studio IDE port |
+| `NVIDIA_KIMI_API_KEY` | *(empty)* | Enables Kimi tutor (optional) |
 | `ANTHROPIC_API_KEY` | *(empty)* | Enables Claude instructor (optional) |
 
 Restart `./start.sh` after changing `.env`.
@@ -94,7 +94,7 @@ curl -s http://localhost:5055/api/health | python3 -m json.tool
 
 ## 5. First-run sanity check
 
-1. Open **http://localhost:5055** — explorer should show `~/Code` (or your `BROCKSTON_WORKSPACE`).
+1. Open **http://localhost:5055** — explorer should show `~/Code` (or your `STUDIO_WORKSPACE`).
 2. Click a folder or file — terminal `cd` should follow.
 3. Ask **Family** or **Nemo**: "What is a variable?" — should answer via local Ollama.
 4. Ask a code question — may route to tool loop or coder model (slower on first hit).
