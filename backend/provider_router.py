@@ -13,8 +13,8 @@ PROVIDER HIERARCHY (cost → sovereignty):
                              This is the goal. Everything else funds the path to this.
   2. Anthropic Claude      — Premium external reasoning when Ollama isn't enough yet.
   3. Perplexity Sonar      — Live search. Real-world grounded answers. Citations.
-  4. AWS Polly / Bedrock   — Voice synthesis + Bedrock Claude fallback.
-  5. ElevenLabs            — Neural voice (Matthew profile). Highest quality TTS.
+  4. Christman Sound       — Local ear canal + voice SDK (sovereign TTS).
+  5. AWS Bedrock           — Optional Claude LLM fallback (not voice).
 
 The router tries providers in the configured priority order.
 If one fails or isn't available, it moves to the next — loud about why.
@@ -23,9 +23,8 @@ No silent failures. No pretending a provider worked when it didn't.
 Environment variables:
   ANTHROPIC_API_KEY      — Required for Anthropic Claude
   PERPLEXITY_API_KEY     — Required for Perplexity Sonar search
-  ELEVENLABS_API_KEY     — Required for ElevenLabs TTS
-  AWS_ACCESS_KEY_ID      — Required for AWS Polly / Bedrock
-  AWS_SECRET_ACCESS_KEY  — Required for AWS Polly / Bedrock
+  AWS_ACCESS_KEY_ID      — Optional for AWS Bedrock LLM fallback
+  AWS_SECRET_ACCESS_KEY  — Optional for AWS Bedrock LLM fallback
   AWS_REGION             — AWS region (default: us-east-1)
   OLLAMA_HOST            — Ollama API host (default: http://localhost:11434)
   OLLAMA_MODEL           — Preferred Ollama model (default: llama3.1:8b)
@@ -55,10 +54,9 @@ class Provider(str, Enum):
     OLLAMA      = "ollama"       # Local — sovereignty
     ANTHROPIC   = "anthropic"    # External reasoning
     PERPLEXITY  = "perplexity"   # Live search
-    APPLE_MUSIC = "apple_music"  # iTunes / Apple Music store + personal library tunnel (via share links / local MP3s)
-    AWS_POLLY   = "aws_polly"    # Voice synthesis
-    AWS_BEDROCK = "aws_bedrock"  # Claude via Bedrock
-    ELEVENLABS  = "elevenlabs"   # Neural voice
+    APPLE_MUSIC     = "apple_music"      # iTunes / Apple Music tunnel
+    CHRISTMAN_SOUND = "christman_sound"  # Ear canal + voice SDK — sovereign TTS
+    AWS_BEDROCK     = "aws_bedrock"      # Claude via Bedrock (LLM only)
 
 
 # Default priority — Ollama first (local sovereignty), then external
@@ -69,8 +67,7 @@ DEFAULT_LLM_PRIORITY = [
 ]
 
 DEFAULT_TTS_PRIORITY = [
-    Provider.ELEVENLABS,
-    Provider.AWS_POLLY,
+    Provider.CHRISTMAN_SOUND,
 ]
 
 DEFAULT_SEARCH_PRIORITY = [
@@ -102,8 +99,8 @@ class ProviderStatus:
         self._check_anthropic()
         self._check_perplexity()
         self._check_apple_music()
+        self._check_christman_sound()
         self._check_aws()
-        self._check_elevenlabs()
 
         self._checked = True
 
@@ -194,12 +191,37 @@ class ProviderStatus:
         except Exception as e:
             logger.warning(f"[ProviderRouter] Apple Music init failed: {e}")
 
+    def _check_christman_sound(self):
+        try:
+            from backend.christman_sound_config import CHRISTMAN_SOUND_ROOT, sdk_root
+
+            ear_canal = CHRISTMAN_SOUND_ROOT / "CHRISTMAN_EAR_CANAL"
+            sdk = sdk_root()
+            if ear_canal.is_dir():
+                self._status[Provider.CHRISTMAN_SOUND] = True
+                self._clients[Provider.CHRISTMAN_SOUND] = {
+                    "root": str(CHRISTMAN_SOUND_ROOT),
+                    "ear_canal": str(ear_canal),
+                    "sdk": str(sdk),
+                }
+                logger.info(
+                    "[ProviderRouter] Christman Sound ONLINE — ear canal + SDK at %s",
+                    CHRISTMAN_SOUND_ROOT,
+                )
+            else:
+                logger.info(
+                    "[ProviderRouter] Christman Sound: CHRISTMAN_EAR_CANAL missing at %s",
+                    ear_canal,
+                )
+        except Exception as e:
+            logger.warning(f"[ProviderRouter] Christman Sound check failed: {e}")
+
     def _check_aws(self):
         key = os.getenv("AWS_ACCESS_KEY_ID")
         secret = os.getenv("AWS_SECRET_ACCESS_KEY")
         region = os.getenv("AWS_REGION", "us-east-1")
         if not key or not secret:
-            logger.info("[ProviderRouter] AWS: credentials not set (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)")
+            logger.info("[ProviderRouter] AWS Bedrock: credentials not set")
             return
         try:
             import boto3 as _boto3 # pyright: ignore[reportMissingImports]
@@ -208,13 +230,6 @@ class ProviderStatus:
                 aws_secret_access_key=secret,
                 region_name=region,
             )
-            # Check Polly
-            polly = session.client("polly")
-            self._status[Provider.AWS_POLLY] = True
-            self._clients[Provider.AWS_POLLY] = polly
-            logger.info(f"[ProviderRouter] AWS Polly ONLINE — region: {region}")
-
-            # Check Bedrock
             try:
                 bedrock = session.client("bedrock-runtime")
                 self._status[Provider.AWS_BEDROCK] = True
@@ -227,36 +242,6 @@ class ProviderStatus:
             logger.warning("[ProviderRouter] AWS: boto3 not installed (pip install boto3)")
         except Exception as e:
             logger.warning(f"[ProviderRouter] AWS init failed: {e}")
-
-    def _check_elevenlabs(self):
-        key = os.getenv("ELEVENLABS_API_KEY")
-        if not key:
-            logger.info("[ProviderRouter] ElevenLabs: ELEVENLABS_API_KEY not set")
-            return
-        try:
-            import requests as _req
-            r = _req.get(
-                "https://api.elevenlabs.io/v1/user",
-                headers={"xi-api-key": key},
-                timeout=5,
-            )
-            if r.status_code == 200:
-                user = r.json()
-                self._status[Provider.ELEVENLABS] = True
-                self._clients[Provider.ELEVENLABS] = {
-                    "api_key": key,
-                    "user": user.get("first_name", "user"),
-                    "voice_id": os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB"),  # Matthew
-                }
-                logger.info(
-                    f"[ProviderRouter] ElevenLabs ONLINE — "
-                    f"Matthew voice ready"
-                )
-            else:
-                logger.warning(f"[ProviderRouter] ElevenLabs key invalid: {r.status_code}")
-        except Exception as e:
-            logger.warning(f"[ProviderRouter] ElevenLabs check failed: {e}")
-
 
 # ---------------------------------------------------------------------------
 # PROVIDER ROUTER
@@ -486,83 +471,50 @@ class ProviderRouter:
         self,
         text: str,
         output_path: Optional[str] = None,
+        being: str = "brockston",
     ) -> Tuple[bytes, Provider]:
         """
-        Convert text to speech using the best available TTS provider.
+        Convert text to speech via Christman Sound (ear canal + voice SDK).
 
-        Priority: ElevenLabs (neural, Matthew voice) → AWS Polly → gTTS fallback
-
-        Args:
-            text: Text to speak
-            output_path: Optional file path to save audio
-
-        Returns:
-            (audio_bytes, provider_used)
+        No ElevenLabs. No AWS Polly. Local sovereign pipeline only.
         """
-        for p in self.tts_priority:
-            if not self._status.is_available(p):
-                continue
+        if not text or not text.strip():
+            raise RuntimeError("[ProviderRouter] Empty text for TTS")
 
+        audio: bytes | None = None
+        try:
+            from backend.voice_service import synthesize_speech as cs_synthesize
+
+            audio = cs_synthesize(text, being=being)
+        except Exception as e:
+            logger.warning(f"[ProviderRouter] voice_service TTS failed: {e}")
+
+        if not audio:
             try:
-                if p == Provider.ELEVENLABS:
-                    audio = self._elevenlabs_synthesize(text)
-                elif p == Provider.AWS_POLLY:
-                    audio = self._polly_synthesize(text)
-                else:
-                    continue
+                from christman_sound import speak
 
-                if output_path:
-                    with open(output_path, "wb") as f:
-                        f.write(audio)
-
-                logger.info(f"[ProviderRouter] TTS via {p.value}")
-                return audio, p
-
+                result = speak(text, being=being)
+                wav_path = result.get("wav")
+                if wav_path:
+                    with open(wav_path, "rb") as f:
+                        audio = f.read()
+                elif result.get("status") == "spoken":
+                    audio = b""
             except Exception as e:
-                logger.warning(f"[ProviderRouter] TTS via {p.value} failed: {e}")
-                continue
+                logger.warning(f"[ProviderRouter] christman_sound.speak failed: {e}")
 
-        # Christman Sound fallback (now per-being aware via find_reference_wav improvements)
-        logger.info("[ProviderRouter] TTS falling back to Christman Sound for being-aware synthesis")
-        from christman_sound import speak
-        # Try to pass a being if we can infer, but default is fine
-        speak(text, being="brockston")
-        return b"", Provider.AWS_POLLY
+        if audio is None:
+            raise RuntimeError(
+                "[ProviderRouter] Christman Sound TTS failed. "
+                "Check christman_sound/CHRISTMAN_EAR_CANAL and voice reference WAVs."
+            )
 
-    def _elevenlabs_synthesize(self, text: str) -> bytes:
-        import requests as _req
-        client = self._status.get_client(Provider.ELEVENLABS)
-        voice_id = client["voice_id"]
-        r = _req.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-            headers={
-                "xi-api-key": client["api_key"],
-                "Content-Type": "application/json",
-            },
-            json={
-                "text": text,
-                "model_id": "eleven_turbo_v2_5",
-                "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.75,
-                    "style": 0.0,
-                    "use_speaker_boost": True,
-                },
-            },
-            timeout=30,
-        )
-        r.raise_for_status()
-        return r.content
+        if output_path and audio:
+            with open(output_path, "wb") as f:
+                f.write(audio)
 
-    def _polly_synthesize(self, text: str) -> bytes:
-        client = self._status.get_client(Provider.AWS_POLLY)
-        response = client.synthesize_speech(
-            Text=text,
-            OutputFormat="mp3",
-            VoiceId="Matthew",
-            Engine="neural",
-        )
-        return response["AudioStream"].read()
+        logger.info("[ProviderRouter] TTS via christman_sound being=%s", being)
+        return audio, Provider.CHRISTMAN_SOUND
 
     # -------------------------------------------------------------------------
     # STATUS REPORT — Honest accounting of what's online
@@ -600,9 +552,8 @@ class ProviderRouter:
             Provider.OLLAMA:      "Local LLM — sovereign reasoning (free, on-device)",
             Provider.ANTHROPIC:   "External LLM — Claude Sonnet reasoning",
             Provider.PERPLEXITY:  "Live search — grounded answers with citations",
-            Provider.AWS_POLLY:   "Voice synthesis — AWS neural TTS (Matthew)",
+            Provider.CHRISTMAN_SOUND: "Sovereign TTS — ear canal + voice SDK (local)",
             Provider.AWS_BEDROCK: "External LLM — Claude via AWS Bedrock",
-            Provider.ELEVENLABS:  "Neural voice — highest quality TTS (Matthew profile)",
         }
         return roles.get(provider, "unknown")
 

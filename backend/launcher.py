@@ -22,9 +22,11 @@ from fastapi.staticfiles import StaticFiles # pyright: ignore[reportMissingImpor
 from fastapi.middleware.cors import CORSMiddleware # pyright: ignore[reportMissingImports]
 from pydantic import BaseModel # pyright: ignore[reportMissingImports]
 
-from config import OLLAMA_BASE_URL, LLM_MODEL_GENERAL, LLM_MODEL_CODER, BROCKSTON_WORKSPACE, HOST, PORT
+from config import OLLAMA_BASE_URL, LLM_MODEL_GENERAL, LLM_MODEL_CODER, STUDIO_WORKSPACE, HOST, PORT
 
-BROCKSTON_MODE = os.getenv("BROCKSTON_MODE", "educator")
+STUDIO_BACKEND_MODE = os.getenv(
+    "STUDIO_BACKEND_MODE", os.getenv("BROCKSTON_MODE", "educator")
+)
 from brockston_client import BrockstonClient
 
 logging.basicConfig(level=logging.INFO)
@@ -79,8 +81,8 @@ async def health_check():
     return {
         "status": "ok",
         "port": PORT,
-        "mode": BROCKSTON_MODE,
-        "workspace": BROCKSTON_WORKSPACE,
+        "mode": STUDIO_BACKEND_MODE,
+        "workspace": STUDIO_WORKSPACE,
         "ollama": OLLAMA_BASE_URL,
         "models": {
             "chat": LLM_MODEL_GENERAL,
@@ -194,7 +196,7 @@ async def suggest_fix(request: SuggestFixRequest):
 @app.get("/api/files")
 async def list_files(path: str = ""):
     try:
-        target_dir = os.path.join(BROCKSTON_WORKSPACE, path) if path else BROCKSTON_WORKSPACE
+        target_dir = os.path.join(STUDIO_WORKSPACE, path) if path else STUDIO_WORKSPACE
         if not os.path.isdir(target_dir):
             raise HTTPException(status_code=400, detail="Invalid path")
         
@@ -401,7 +403,7 @@ async def read_file(filename: str):
         if ".." in filename or filename.startswith("/"):
             raise HTTPException(status_code=400, detail="Invalid filename")
         
-        filepath = os.path.join(BROCKSTON_WORKSPACE, filename)
+        filepath = os.path.join(STUDIO_WORKSPACE, filename)
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
         

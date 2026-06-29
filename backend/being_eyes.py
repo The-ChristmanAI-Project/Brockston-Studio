@@ -44,11 +44,12 @@ router = APIRouter(prefix="/api/eyes", tags=["being_eyes"])
 
 # ── Workspace root — same as Studio's WORKSPACE_ROOT (backend/config.py) ─────
 try:
-    from backend.config import BROCKSTON_WORKSPACE as _CFG_WORKSPACE
+    from backend.config import STUDIO_WORKSPACE as _CFG_WORKSPACE
 except ImportError:
-    from config import BROCKSTON_WORKSPACE as _CFG_WORKSPACE
+    from config import STUDIO_WORKSPACE as _CFG_WORKSPACE
 
 WORKSPACE_ROOT = Path(_CFG_WORKSPACE).resolve()
+USER_HOME = Path(os.path.expanduser("~")).resolve()
 
 
 def _safe_path(raw: str) -> Path:
@@ -58,10 +59,20 @@ def _safe_path(raw: str) -> Path:
     Rule 13: Never silently redirects — if path is bad, raise immediately.
     """
     expanded = os.path.expanduser(raw.strip())
+    if ".." in expanded.replace("\\", "/").split("/"):
+        raise HTTPException(status_code=400, detail="Path contains '..'")
     p = Path(expanded)
     if not p.is_absolute():
         p = WORKSPACE_ROOT / p
-    return p.resolve()
+    resolved = p.resolve()
+    try:
+        resolved.relative_to(USER_HOME)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path outside user home ({USER_HOME})",
+        )
+    return resolved
 
 
 # ── Screenshot ─────────────────────────────────────────────────────────────────

@@ -7,9 +7,9 @@
 Brockston Studio - AI Client
 Part of The Christman AI Project
 
-Routes Family chat requests through available local teachers:
+Routes Family chat requests through Brockston-Studio local teachers:
   1. UltimateEV (port 5174) — code mechanic, first responder
-  2. Brockston educator backend (port 9003) — full pipeline
+  2. Studio educator backend (port 9003) — full pipeline in this repo
   3. Ollama direct fallback
 
 Nothing lives on port 8000.
@@ -22,7 +22,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-BROCKSTON_API = os.getenv("BROCKSTON_BASE_URL", "http://localhost:9003")
+STUDIO_BACKEND_URL = os.getenv(
+    "STUDIO_BACKEND_URL",
+    os.getenv("BROCKSTON_BASE_URL", "http://localhost:9003"),
+)
 ULTIMATEEV_API = os.getenv("ULTIMATEEV_BASE_URL", "http://localhost:5174")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 FALLBACK_MODEL = os.getenv("LLM_MODEL_GENERAL", os.getenv("OLLAMA_MODEL", "llama3.2"))
@@ -31,7 +34,9 @@ CODER_MODEL = os.getenv(
     os.getenv("LLM_MODEL_CODER", "qwen2.5-coder:32b"),
 )
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "300"))
-BROCKSTON_TIMEOUT = float(os.getenv("BROCKSTON_TIMEOUT", "180"))
+STUDIO_BACKEND_TIMEOUT = float(
+    os.getenv("STUDIO_BACKEND_TIMEOUT", os.getenv("BROCKSTON_TIMEOUT", "180"))
+)
 
 BROCKSTON_SYSTEM = """You are BROCKSTON C — COO of the Christman AI Project, Everett Christman's partner.
 You KNOW Everett — he built you. Never say you cannot recognize or remember users.
@@ -116,22 +121,22 @@ def _ask_brockston(user_prompt: str, context: dict, system: Optional[str] = None
             "context": context,
         }
         response = httpx.post(
-            f"{BROCKSTON_API}/api/chat",
+            f"{STUDIO_BACKEND_URL}/api/chat",
             json=payload,
-            timeout=BROCKSTON_TIMEOUT,
+            timeout=STUDIO_BACKEND_TIMEOUT,
         )
         if response.status_code == 200:
             data = response.json()
             text = data.get("response") or data.get("reply") or data.get("text") or ""
             if text:
-                logger.info(f"✅ Brockston responded: {text[:100]}...")
+                logger.info(f"✅ Studio backend responded: {text[:100]}...")
                 return text
         else:
-            logger.debug(f"Brockston returned {response.status_code}: {response.text[:200]}")
+            logger.debug(f"Studio backend returned {response.status_code}: {response.text[:200]}")
     except httpx.ConnectError:
-        logger.debug("Brockston educator offline (%s)", BROCKSTON_API)
+        logger.debug("Studio educator backend offline (%s)", STUDIO_BACKEND_URL)
     except Exception as e:
-        logger.debug(f"Brockston error: {e}")
+        logger.debug(f"Studio backend error: {e}")
     return None
 
 
@@ -182,10 +187,10 @@ def _ollama_fallback(
     except httpx.ConnectError:
         return "Ollama is offline. Start it with: ollama serve"
     except httpx.ReadTimeout:
-        logger.error("[ollama] timed out after %ss", OLLAMA_TIMEOUT)
+        logger.error("[ollama] timed out after %ss on %s", OLLAMA_TIMEOUT, ollama_model)
         return (
-            f"Ollama timed out after {int(OLLAMA_TIMEOUT)}s on {FALLBACK_MODEL}. "
-            "Use a smaller model for vocal/chat or shorten the prompt."
+            f"Ollama timed out after {int(OLLAMA_TIMEOUT)}s on {ollama_model}. "
+            "Shorten the prompt or use a smaller/faster model in .env."
         )
     except Exception as e:
         logger.error("[ollama] error: %s", e)
@@ -194,14 +199,14 @@ def _ollama_fallback(
 
 def suggest_fix(code: str, instruction: str = "", path: str = "", language: str = "") -> dict:
     """
-    Ask Brockston to fix/improve a code snippet.
+    Ask the Studio educator backend to fix/improve a code snippet.
 
     Returns:
         {"fixed": bool, "fixed_code": str, "explanation": str, "changes": list}
     """
     try:
         response = httpx.post(
-            f"{BROCKSTON_API}/api/suggest_fix",
+            f"{STUDIO_BACKEND_URL}/api/suggest_fix",
             json={
                 "code": code,
                 "instruction": instruction,
@@ -215,9 +220,9 @@ def suggest_fix(code: str, instruction: str = "", path: str = "", language: str 
         logger.error(f"suggest_fix returned {response.status_code}")
     except Exception as e:
         logger.error(f"suggest_fix error: {e}")
-        return {"fixed": False, "explanation": f"Brockston API unreachable: {e}", "fixed_code": code}
+        return {"fixed": False, "explanation": f"Studio backend unreachable: {e}", "fixed_code": code}
 
-    return {"fixed": False, "explanation": "Brockston API unreachable", "fixed_code": code}
+    return {"fixed": False, "explanation": "Studio backend unreachable", "fixed_code": code}
 
 
 def get_embedding(text: str) -> list:
@@ -236,7 +241,7 @@ def get_embedding(text: str) -> list:
 
 
 def check_health() -> dict:
-    """Check UltimateEV, Brockston educator, and Ollama status."""
+    """Check UltimateEV, Studio educator backend, and Ollama status."""
     ultimateev_ok = False
     try:
         r = httpx.get(f"{ULTIMATEEV_API}/health", timeout=5.0)
@@ -244,10 +249,10 @@ def check_health() -> dict:
     except Exception:
         pass
 
-    brockston_ok = False
+    studio_backend_ok = False
     try:
-        r = httpx.get(f"{BROCKSTON_API}/api/health", timeout=5.0)
-        brockston_ok = r.status_code == 200
+        r = httpx.get(f"{STUDIO_BACKEND_URL}/api/health", timeout=5.0)
+        studio_backend_ok = r.status_code == 200
     except Exception:
         pass
 
@@ -264,8 +269,11 @@ def check_health() -> dict:
     return {
         "ultimateev_api": "online" if ultimateev_ok else "offline",
         "ultimateev_url": ULTIMATEEV_API,
-        "brockston_api": "online" if brockston_ok else "offline",
-        "brockston_url": BROCKSTON_API,
+        "studio_backend": "online" if studio_backend_ok else "offline",
+        "studio_backend_url": STUDIO_BACKEND_URL,
+        # Legacy keys for older clients
+        "brockston_api": "online" if studio_backend_ok else "offline",
+        "brockston_url": STUDIO_BACKEND_URL,
         "ollama": "online" if ollama_ok else "offline",
         "models": models,
     }
@@ -276,7 +284,7 @@ if __name__ == "__main__":
     print("=" * 40)
     health = check_health()
     print(f"UltimateEV ({health['ultimateev_url']}): {health['ultimateev_api']}")
-    print(f"Brockston educator ({health['brockston_url']}): {health['brockston_api']}")
+    print(f"Studio backend ({health['studio_backend_url']}): {health['studio_backend']}")
     print(f"Ollama: {health['ollama']}")
     if health["models"]:
         print(f"Models: {health['models']}")
