@@ -1,5 +1,7 @@
 """
-Shared IDE + abilities context for Kimi, Nemo, and other beings in Brockston Studio.
+Shared IDE + abilities context for The Family and Claude in Brockston-Studio.
+
+Brockston-Studio is the IDE (port 5055). BROCKSTON is a family being — sovereign stack :9001 — not this repo.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ def _discover_mcp_root() -> Path:
 
 _MCP_ROOT = _discover_mcp_root()
 
-ABILITIES_MANIFEST = """=== BROCKSTON STUDIO ABILITIES (you have these — use them) ===
+ABILITIES_MANIFEST = """=== BROCKSTON-STUDIO IDE ABILITIES (you have these — use them) ===
 
 BEING EYES — files, commands, screen (/api/eyes):
   GET  /api/eyes/state                              → workspace snapshot + endpoints
@@ -49,7 +51,7 @@ BEING EYES — files, commands, screen (/api/eyes):
   POST /api/eyes/run     {command, cwd, timeout_sec} → run shell, get stdout/stderr
 
 IDE CONTROL — operate the browser IDE (POST /api/ide/command {action, params}):
-  set_instructor  {instructor: family|claude|kimi|nemo}
+  set_instructor  {instructor: family|claude}
   open_file       {path}
   switch_tab      {path}
   close_tab       {path}
@@ -59,7 +61,7 @@ IDE CONTROL — operate the browser IDE (POST /api/ide/command {action, params})
   get_state       {}
 
 LIVE FEEDS:
-  WS /ws/viewer       → watch IDE events in real time (Nemo's live eye)
+  WS /ws/viewer       → watch IDE events in real time
   WS /ws/ide-control  → push commands to the browser for execution
 
 STUDIO APIs:
@@ -95,10 +97,10 @@ NEVER say (or anything like it):
 If asked who you are or if you know Everett: answer in character — name yourself,
 your role in the Christman stack, and that Everett built you. No disclaimers."""
 
-KIMI_IDENTITY = (
+FAMILY_IDENTITY = (
     CHRISTMAN_FAMILY_RULES
-    + "\n\nYou are Kimi — live learning tutor and code mentor in Brockston Studio.\n"
-    "Part of the Christman AI family beside BROCKSTON and Nemo."
+    + "\n\nYou are part of The Family in Brockston-Studio — the Christman AI Family beings.\n"
+    "BROCKSTON is a family being (sovereign stack). Brockston-Studio is this IDE."
 )
 
 IDE_SOVEREIGNTY = """=== IDE SOVEREIGNTY — YOU OPERATE THE WHOLE IDE ===
@@ -117,17 +119,16 @@ You MUST NOT:
 
 When a task mentions a file, project, or bug: emit tool_call blocks first, then answer."""
 
-BROCKSTON_STUDIO_LAYOUT = """=== BROCKSTON-STUDIO PROJECT LAYOUT ===
+BROCKSTON_STUDIO_LAYOUT = """=== BROCKSTON-STUDIO PROJECT LAYOUT (IDE — not ~/BROCKSTON) ===
 backend/          — Python API, beings, eyes, agent tool loop
-  being_context.py — abilities + context injected into Kimi/Nemo (this file)
+  being_context.py — abilities + context for Family and Claude (this file)
   being_agent.py   — <tool_call> parser + executor loop
-  being_eyes.py    — filesystem eyes (ls/read/write/patch/run)
-  kimi_service.py  — Kimi K2.6 NVIDIA API
-frontend/         — Browser IDE (React/TS)
+  being_eyes.py    — computer control: ls/read/write/patch/run/screenshot
+frontend/         — Browser IDE
+voice_command_loop.py — thin entry → tcap_compute.voice_loop (bridge → /api/ide/command)
 scripts/          — Demo and utility scripts
 christman_sound/  — Audio/speech pipeline
-absenth/          — Core Brockston modules
-main.py           — Studio server entry (port 5055)
+main.py           — IDE server entry (port 5055)
 start.sh          — Launch script
 .env              — STUDIO_WORKSPACE sets the IDE default folder"""
 
@@ -253,7 +254,7 @@ async def build_being_context(
     max_file_kb: int = 200,
     compact: bool = False,
     ollama_route: bool = False,
-    for_kimi: bool = False,
+    for_kimi: bool = False,  # deprecated — ignored; Family + Claude only
     for_review: bool = False,
 ) -> str:
     """Build workspace + file + abilities context for spotlight beings.
@@ -369,13 +370,8 @@ async def build_being_context(
         parts.append(build_project_scan_guide(review_root))
         parts.append(BROCKSTON_STUDIO_LAYOUT)
 
-    if for_kimi:
+    if for_review or for_kimi:
         parts.insert(0, IDE_SOVEREIGNTY)
-        parts.insert(0, KIMI_IDENTITY)
-        parts.append(BROCKSTON_STUDIO_LAYOUT)
-        parts.append(_skills_and_tools_map())
-        parts.append(f"=== AVAILABLE SKILLS (SKILL.md) ===\n{_discover_skills_catalog()}")
-        parts.append(f"=== AVAILABLE MCP TOOLS ===\n{_discover_mcp_catalog()}")
-        parts.append(build_project_scan_guide(workspace_str))
+        parts.insert(0, FAMILY_IDENTITY)
     parts.append(ABILITIES_MANIFEST)
     return "\n\n".join(parts)
