@@ -139,7 +139,6 @@ PIP_MAP = {
     "torchaudio":        "torchaudio",
     "requests":          "requests",
     "pyttsx3":           "pyttsx3",
-    "elevenlabs":        "elevenlabs",
     "deepgram":          "deepgram-sdk",
 }
 
