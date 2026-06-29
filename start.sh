@@ -231,6 +231,12 @@ wait_ready "http://127.0.0.1:$STUDIO_BACKEND_PORT/health" "Studio backend"     |
 wait_ready "http://127.0.0.1:$IDE_PORT/api/health" "Studio IDE"      || \
 wait_ready "http://127.0.0.1:$IDE_PORT/" "Studio IDE"                || true
 
+# Wire IDE board to tcap-compute (voice loop + studio bridge division)
+if [ "${TCAP_COMPUTE_ENABLED:-1}" != "0" ]; then
+    info "Wiring IDE board to tcap-compute..."
+    bash "$ROOT/scripts/wire_compute.sh" || warn "tcap-compute wiring incomplete — see logs/compute"
+fi
+
 # ----- Prewarm Ollama (load fast GENERAL for vocal/chat first; CODER is heavy, loads on demand)
 if curl -fsS "$OLLAMA_BASE_URL/api/tags" >/dev/null 2>&1; then
     info "Prewarming $LLM_MODEL_GENERAL for low-lag chat/vocal (CODER loads on heavy tasks)..."
@@ -250,6 +256,7 @@ echo "  Studio backend  ${C_DIM}http://localhost:$STUDIO_BACKEND_PORT${C_RESET}"
 echo "  UltimateEV    ${C_DIM}http://localhost:$ULTIMATEEV_PORT${C_RESET}"
 echo "  Ollama        ${C_DIM}$OLLAMA_BASE_URL${C_RESET}"
 echo ""
+echo "  Compute wire  ${C_DIM}voice + studio division (tcap-compute)${C_RESET}"
 echo "  Logs:         ${C_DIM}$LOG_DIR/${C_RESET}"
 echo "  Stop:         ${C_DIM}Ctrl+C${C_RESET}"
 echo "${C_BOLD}=========================================${C_RESET}"
