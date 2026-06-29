@@ -47,14 +47,14 @@ Full details: **[QUICKSTART.md](QUICKSTART.md)**
 | Multi-file editor | Monaco tabs, syntax highlighting, save to disk |
 | Live terminal | xterm.js synced with the file explorer (`cd` follows) |
 | Voice input | Browser speech recognition into chat |
-| Instructors | Family (Ollama), Nemo, Kimi (optional NVIDIA key), Claude (optional) |
+| Instructors | The Family (Ollama) and Claude (optional Anthropic key) |
 | Being Eyes | Beings can `ls` / `read` / `patch` / `run` on your machine |
 | IDE control | `/ws/ide-control` — remote agent can open files, run terminal commands |
 
 **Default folder:** `~/Code` (set `STUDIO_WORKSPACE` in `.env`). The browser remembers your last-opened folder.
 
 **Model split (local Ollama):**
-- `llama3.2` — fast chat, vocal, Nemo partner mode
+- `llama3.2` — fast chat and vocal for The Family
 - `qwen2.5-coder:32b` — code, tools, UltimateEV, suggest-fix
 
 ---
@@ -77,7 +77,6 @@ Check wiring: `curl http://localhost:5055/api/health`
 | Key | Enables |
 |-----|---------|
 | *(none)* | Full local IDE + Ollama beings |
-| `NVIDIA_API_KEY` | Kimi K2.6 tutor in the beings panel |
 | `ANTHROPIC_API_KEY` | Claude instructor |
 | `GITHUB_TOKEN` | Clone private repos from the IDE |
 
@@ -92,7 +91,7 @@ Never commit `.env` — it is gitignored.
 - `backend/venv/`, `logs/`, or personal voice WAVs in `Voice_Creation_Center/incoming/`
 - Machine-specific indexes (`inventory/index.json`, `express_index.json`, voice `manifest.json`)
 
-**They bring their own keys** by copying `.env.example` → `.env`. Optional services (Kimi, Claude) stay empty until they fill them in.
+**They bring their own keys** by copying `.env.example` → `.env`. Claude stays empty until they add `ANTHROPIC_API_KEY`.
 
 **Never put real API keys in source files** — only in `.env` on your machine.
 
