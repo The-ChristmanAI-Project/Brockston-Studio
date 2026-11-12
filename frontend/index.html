@@ -781,12 +781,8 @@
             border: 1px solid #FFB800 !important;
             box-shadow: 0 0 10px rgba(255, 184, 0, 0.45);
         }
-        #inst-grok { color: #0084FF !important; font-weight: 800; letter-spacing: 0.02em; }
-        #inst-grok.active {
-            background: #001428 !important;
-            border: 1px solid #0084FF !important;
-            box-shadow: 0 0 12px rgba(0, 132, 255, 0.55);
-        }
+        .inst-btn .inst-model { display:block; font-size:8px; line-height:1.15; color:#8a8a8a; font-weight:400; letter-spacing:0; }
+        .inst-btn.inst-unreachable { opacity:0.55; }
         #inst-auto { color: #c9a0ff !important; }
         #inst-auto.active {
             background: #120a1a !important;
@@ -807,10 +803,6 @@
         #ai-panel.fable5-mode {
             border: 1px solid #FFB800;
             box-shadow: inset 0 0 20px rgba(255, 184, 0, 0.08), 0 0 12px rgba(255, 184, 0, 0.2);
-        }
-        #ai-panel.grok-mode {
-            border: 1px solid #0084FF;
-            box-shadow: inset 0 0 24px rgba(0, 132, 255, 0.12), 0 0 14px rgba(0, 132, 255, 0.3);
         }
         
         audio { display: none; }
@@ -908,13 +900,12 @@
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('family')" id="inst-family" class="inst-btn" title="The Family — Brockston being + Christman beings" style="padding:3px 10px; background:#111; color:#ccc; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Family</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('claude')" id="inst-claude" class="inst-btn" title="Anthropic Claude" style="padding:3px 10px; background:#111; color:#40E0D0; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Claude</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('fable5')" id="inst-fable5" class="inst-btn" title="Fable-5 — Christman storyteller-educator (Anthropic)" style="padding:3px 10px; background:#111; color:#FFB800; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Fable-5</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('grok')" id="inst-grok" class="inst-btn" title="Super Heavy Grok — Big Daddy xAI flagship" style="padding:3px 10px; background:#111; color:#0084FF; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">GROK</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('nemoclaw')" id="inst-nemoclaw" class="inst-btn" title="NemoClaw — NVIDIA agent on Nemotron 3 Ultra" style="padding:3px 10px; background:#111; color:#5A8F00; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">NemoClaw</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('nemotron')" id="inst-nemotron" class="inst-btn" title="Nemotron 3 Ultra 550B — partner & code mentor" style="padding:3px 10px; background:#111; color:#40E0D0; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Nemotron</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('mistral')" id="inst-mistral" class="inst-btn" title="Mistral-Nemotron (NVIDIA NIM) — deep reasoning" style="padding:3px 10px; background:#111; color:#ff7f4d; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Mistral-Nemotron</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('kimi26')" id="inst-kimi26" class="inst-btn" title="Kimi · NVIDIA NIM K2.6 — learning tutor (kids, retention, code)" style="padding:3px 10px; background:#111; color:#76B900; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Kimi 2.6</button>
                     <button onclick="MODEL_ORCHESTRATOR.setInstructor('kimi27')" id="inst-kimi27" class="inst-btn" title="Kimi · NVIDIA NIM K2.7 — partner deck swarm + long-horizon coding" style="padding:3px 10px; background:#111; color:#A8E600; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Kimi 2.7</button>
-                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('auto')" id="inst-auto" class="inst-btn" title="Auto — Grok / Kimi / Nemotron / Fable-5 / Family" style="padding:3px 10px; background:#111; color:#c9a0ff; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Auto</button>
+                    <button onclick="MODEL_ORCHESTRATOR.setInstructor('auto')" id="inst-auto" class="inst-btn" title="Auto — Kimi / Nemotron / Fable-5 / Family" style="padding:3px 10px; background:#111; color:#c9a0ff; border:none; border-radius:3px; cursor:pointer; font-family:var(--font-term);">Auto</button>
                     <button onclick="showMusicLibrary()" title="Music & Voice MP3 Library — local voice refs + Apple Music links (like a personal streaming lib)" style="padding:3px 8px; background:#1f1f1f; color:var(--copper-light); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px;">Lib</button>
                     <button onclick="playMyAlbum()" title="Play your album '53 Years in the Making' — the player, clear as a bell!" style="padding:3px 8px; background:#1f1f1f; color:var(--copper); border:1px solid var(--copper); border-radius:3px; cursor:pointer; font-size:9px; font-weight:700;">▶ Album</button>
                 </div>
@@ -950,11 +941,11 @@
 {"tool":"ls","path":".","depth":2}
 &lt;/tool_call&gt;</pre>
                 <div><b style="color:#76B900;">ls</b> · <b style="color:#76B900;">read</b> · <b style="color:#76B900;">patch</b> · <b style="color:#76B900;">write</b> · <b style="color:#76B900;">run</b> · mkdir · move · delete</div>
-                <div style="color:#666;margin-top:6px;">Ask in English: <i>“ls backend depth 2 and read main.py”</i> — NemoClaw / Grok / Kimi / Family run the tools. Real fix = successful tool result, not a claim.</div>
+                <div style="color:#666;margin-top:6px;">Ask in English: <i>“ls backend depth 2 and read main.py”</i> — NemoClaw / Kimi / Family run the tools. Real fix = successful tool result, not a claim.</div>
             </div>
 
             <div id="chat-history">
-                <span class="system-tag">[CHRISTMAN FAMILY]: How can we help you love yourself more today? Open a file or talk to us. <strong>Family</strong> · <strong>Claude</strong> · <strong>Fable-5</strong> · <strong>GROK</strong> · <strong>NemoClaw</strong> · <strong>Nemotron</strong> · <strong>Mistral</strong> · <strong>Kimi NIM</strong> · <strong>Auto</strong>. Hit <strong>Tools</strong> above for the tool cheat sheet. ▶ Album ready.</span>
+                <span class="system-tag">[CHRISTMAN FAMILY]: How can we help you love yourself more today? Open a file or talk to us. <strong>Family</strong> · <strong>Claude</strong> · <strong>Fable-5</strong> · <strong>NemoClaw</strong> · <strong>Nemotron</strong> · <strong>Mistral</strong> · <strong>Kimi NIM</strong> · <strong>Auto</strong>. Hit <strong>Tools</strong> above for the tool cheat sheet. ▶ Album ready.</span>
             </div>
             <div id="chat-input-area">
                 <button id="mic-btn" title="Hold or click to speak your question (great for nonverbal)" 
@@ -1481,7 +1472,7 @@
 
         function prepareSpeechText(raw) {
             return String(raw || '')
-                .replace(/\[(?:KIMI REVIEW|KIMI K2\.7|KIMI K2\.6|KIMI|SUPER HEAVY GROK|GROK|FABLE-5|FABLE5|NEMOCLAW|NEMOTRON|NEMO|MISTRAL|FAMILY|BROCKSTON|CLAUDE|SYSTEM|DEMO|PROJECT REVIEW)[^\]]*\]:?\s*/gi, '')
+                .replace(/\[(?:KIMI REVIEW|KIMI K2\.7|KIMI K2\.6|KIMI|FABLE-5|FABLE5|NEMOCLAW|NEMOTRON|NEMO|MISTRAL|FAMILY|BROCKSTON|CLAUDE|SYSTEM|DEMO|PROJECT REVIEW)[^\]]*\]:?\s*/gi, '')
                 .replace(/\{"tool"\s*:[^}]+\}/g, '')
                 .replace(/\[.*?\]/g, '')
                 .replace(/`{1,3}[\s\S]*?`{1,3}/g, ' code block ')
@@ -1707,6 +1698,24 @@
             return 'tutor';
         }
 
+        // The model that answered: what the reply itself reports, else what the server's health reports.
+        function answeredBy(key, data) {
+            const w = data && data.wiring;
+            if (w && (w.label || w.model)) return w.label || w.model;
+            if (data && typeof data.model === 'string' && data.model) return data.model;
+            const a = MODEL_ORCHESTRATOR.answering(key);
+            return a ? a.label : '';
+        }
+        function labelWithModel(label, key, data) {
+            const m = answeredBy(key, data);
+            return m ? `${label} · ${m}` : label;
+        }
+        function instructorKeyForEndpoint(endpoint, body) {
+            if (endpoint === '/kimi') return (body && body.variant === 'k2.7') ? 'kimi27' : 'kimi26';
+            if (endpoint === '/chat') return 'family';
+            return endpoint.replace(/^\//, '');
+        }
+
         async function postToInstructor(endpoint, body, label, color) {
             const res = await fetch(`${API_BASE}${endpoint}`, {
                 method: 'POST',
@@ -1721,7 +1730,7 @@
             const profileColor = color
                 || (MODEL_ORCHESTRATOR.getCurrentInstructor() || {}).color
                 || null;
-            appendMessage(label, data.response, 'ai', profileColor);
+            appendMessage(labelWithModel(label, instructorKeyForEndpoint(endpoint, body), data), data.response, 'ai', profileColor);
             // Speak with the active instructor's ttsBeing (never raw "auto")
             speakText(data.response, false, MODEL_ORCHESTRATOR.currentInstructor === 'auto' ? null : MODEL_ORCHESTRATOR.currentInstructor);
             return data;
@@ -1769,8 +1778,6 @@
                     await sendToClaude(payloadMessage, 'CLAUDE', color);
                 } else if (endpoint === '/api/fable5') {
                     await sendToFable5(payloadMessage, 'FABLE-5', color);
-                } else if (endpoint === '/api/grok') {
-                    await postToInstructor('/grok', { message: payloadMessage }, 'SUPER HEAVY GROK', color);
                 } else if (endpoint === '/api/nemotron') {
                     await postToInstructor('/nemotron', {
                         message: payloadMessage,
@@ -1825,9 +1832,6 @@
                 sendToClaude(prompt, 'CLAUDE', color);
             } else if (endpoint === '/api/fable5') {
                 sendToFable5(prompt, 'FABLE-5', color)
-                    .catch(e => appendMessage('SYSTEM', '[ERROR] ' + e.message, 'error'));
-            } else if (endpoint === '/api/grok') {
-                postToInstructor('/grok', { message: prompt }, 'SUPER HEAVY GROK', color)
                     .catch(e => appendMessage('SYSTEM', '[ERROR] ' + e.message, 'error'));
             } else if (endpoint === '/api/nemotron') {
                 postToInstructor('/nemotron', { message: prompt, mode: 'code' }, 'NEMOTRON', color)
@@ -1903,7 +1907,7 @@
                     throw new Error(detail || `Server error: ${res.status}`);
                 }
                 const data = await res.json();
-                appendMessage(label, data.response || '', 'ai', instructor.color);
+                appendMessage(labelWithModel(label, instructorKey, data), data.response || '', 'ai', instructor.color);
                 const speech = extractReviewForSpeech(data.response || '');
                 if (speech) {
                     speakText(speech, true, null);
@@ -1936,7 +1940,7 @@
                 const profileColor = color
                     || (MODEL_ORCHESTRATOR.instructors.claude || {}).color
                     || '#40E0D0';
-                appendMessage(whoLabel, data.content || data.response || '', 'ai', profileColor);
+                appendMessage(labelWithModel(whoLabel, 'claude', data), data.content || data.response || '', 'ai', profileColor);
                 speakText(data.content || data.response || '', null, 'claude');
             } catch (err) {
                 console.error(err);
@@ -1965,7 +1969,7 @@
                 const profileColor = color
                     || (MODEL_ORCHESTRATOR.instructors.fable5 || {}).color
                     || '#FFB800';
-                appendMessage(whoLabel, data.content || data.response || '', 'ai', profileColor);
+                appendMessage(labelWithModel(whoLabel, 'fable5', data), data.content || data.response || '', 'ai', profileColor);
                 speakText(data.content || data.response || '', null, 'fable5');
             } catch (err) {
                 console.error(err);
@@ -2706,16 +2710,6 @@
                     chatLabel: 'FABLE-5',
                     description: 'Fable-5 — Christman storyteller-educator on Anthropic'
                 },
-                'grok': {
-                    name: 'Super Heavy Grok',
-                    model: 'grok-4.5 (xAI Super Heavy)',
-                    endpoint: '/api/grok',
-                    color: '#0084FF',
-                    voice: 'Daniel',
-                    ttsBeing: 'ultimateev',
-                    chatLabel: 'SUPER HEAVY GROK',
-                    description: 'Big Daddy Super Heavy Grok — xAI flagship, max horsepower'
-                },
                 'nemoclaw': {
                     name: 'NemoClaw',
                     model: 'nvidia/nemotron-3-ultra-550b-a55b (agent)',
@@ -2783,7 +2777,7 @@
                     color: '#c9a0ff',
                     voice: 'Daniel',
                     ttsBeing: 'brockston',
-                    description: 'Picks Super Heavy Grok / Kimi / Nemotron / Fable-5 / Family by task'
+                    description: 'Picks Kimi / Nemotron / Fable-5 / Family by task'
                 }
             },
 
@@ -2803,9 +2797,42 @@
                             this.instructors[key].api_key_set = live.api_key_set;
                         }
                     }
+                    this.labelButtons();
                     this.setInstructor(this.currentInstructor, { announce: false });
                 } catch (e) {
                     console.warn('[MODEL_ORCHESTRATOR] health sync failed', e);
+                }
+            },
+
+            // What the server says answers under each being's name, and whether it can be reached.
+            answering: function(key) {
+                const live = this._healthInstructors[key];
+                if (!live) return null;
+                let state = '';
+                if (live.backend === 'offline') state = 'offline';
+                else if (live.api_key_set === false && (live.backend === 'anthropic' || live.backend === 'nvidia')) state = 'no key';
+                return { model: live.model || '', label: live.label || live.model || '', state, keyEnv: live.api_key_env || '' };
+            },
+
+            // Each being's button names the model that answers when it is pressed.
+            labelButtons: function() {
+                for (const key of Object.keys(this.instructors)) {
+                    const btn = document.getElementById('inst-' + key);
+                    if (!btn || key === 'auto') continue;
+                    const a = this.answering(key);
+                    if (!a) continue;
+                    let tag = btn.querySelector('.inst-model');
+                    if (!tag) {
+                        tag = document.createElement('span');
+                        tag.className = 'inst-model';
+                        btn.appendChild(tag);
+                    }
+                    tag.textContent = a.state ? `${a.model} · ${a.state}` : a.model;
+                    btn.classList.toggle('inst-unreachable', !!a.state);
+                    let tip = `${this.instructors[key].name} — answered by ${a.label}`;
+                    if (a.state === 'no key') tip += ` — ${a.keyEnv} is not set`;
+                    if (a.state === 'offline') tip += ' — offline';
+                    btn.title = tip;
                 }
             },
 
@@ -2822,36 +2849,28 @@
                 const m = (message || '').toLowerCase();
                 const hasFile = !!activeTabPath;
 
-                // Big Daddy Super Heavy Grok when called by name or max-power asks
-                if (/\b(super\s*heavy|big\s*daddy|grok|xai|maximum\s*horsepower)\b/.test(m)) {
-                    if (this._isAvailable('grok')) return 'grok';
-                }
                 // Fable-5 storyteller / narrative
                 if (/\b(fable-?5|fable5|storytell|story\s*time|narrative\s*arc|tell\s*(the\s*)?story)\b/.test(m)) {
                     if (this._isAvailable('fable5')) return 'fable5';
                 }
-                // NVIDIA partner deck / pitch → Kimi NIM 2.7 + Grok swarm
+                // NVIDIA partner deck / pitch → Kimi NIM 2.7
                 if (/\b(pitch|partner\s*deck|nvidia\s*(deck|partner|pitch|nim)|investor|grant\s*narrative|slide\s*deck|fundraising)\b/.test(m)) {
                     if (this._isAvailable('kimi27')) return 'kimi27';
-                    if (this._isAvailable('grok')) return 'grok';
                     if (this._isAvailable('kimi26')) return 'kimi26';
                     if (this._isAvailable('mistral')) return 'mistral';
                 }
                 if (/\b(review project|whole project|scan project|audit repo)\b/.test(m)) {
-                    if (this._isAvailable('grok')) return 'grok';
                     if (this._isAvailable('kimi27')) return 'kimi27';
                     if (this._isAvailable('nemoclaw')) return 'nemoclaw';
                     if (this._isAvailable('nemotron')) return 'nemotron';
                 }
                 if (/\b(fix|refactor|patch|bug|implement|write tests|run command|execute|ls |read |patch )\b/.test(m) || hasFile) {
-                    if (this._isAvailable('grok')) return 'grok';
                     if (this._isAvailable('nemoclaw')) return 'nemoclaw';
                     if (this._isAvailable('kimi26')) return 'kimi26';
                     if (this._isAvailable('nemotron')) return 'nemotron';
                 }
                 if (/\b(architect|architecture|design|compare|trade.?off|strategy|why should|plan|reason)\b/.test(m)) {
                     if (this._isAvailable('mistral')) return 'mistral';
-                    if (this._isAvailable('grok')) return 'grok';
                     if (this._isAvailable('kimi27')) return 'kimi27';
                 }
                 if (/\b(teach|tutor|learn|student|kid|child|nonverbal|retention|neuro)\b/.test(m)) {
@@ -2859,7 +2878,6 @@
                     if (this._isAvailable('fable5')) return 'fable5';
                     return 'family';
                 }
-                if (this._isAvailable('grok')) return 'grok';
                 if (this._isAvailable('kimi27')) return 'kimi27';
                 if (this._isAvailable('nemoclaw')) return 'nemoclaw';
                 if (this._isAvailable('mistral')) return 'mistral';
@@ -2894,7 +2912,7 @@
                 const input = document.getElementById('chat-input');
                 if (input) {
                     input.placeholder = instructorKey === 'auto'
-                        ? 'Ask anything — Auto picks Grok / Kimi NIM / Nemotron / Fable-5...'
+                        ? 'Ask anything — Auto picks Kimi NIM / Nemotron / Fable-5...'
                         : `Ask ${instructor.name} (${instructor.model})...`;
                 }
 
@@ -2906,7 +2924,7 @@
                 if (aiPanel) {
                     aiPanel.classList.remove(
                         'claude-mode', 'nemoclaw-mode', 'nemotron-mode', 'mistral-mode',
-                        'kimi-mode', 'kimi26-mode', 'kimi27-mode', 'fable5-mode', 'grok-mode'
+                        'kimi-mode', 'kimi26-mode', 'kimi27-mode', 'fable5-mode'
                     );
                     if (instructorKey === 'claude') aiPanel.classList.add('claude-mode');
                     if (instructorKey === 'nemoclaw') aiPanel.classList.add('nemoclaw-mode');
@@ -2915,7 +2933,6 @@
                     if (instructorKey === 'kimi26' || instructorKey === 'kimi') aiPanel.classList.add('kimi26-mode');
                     if (instructorKey === 'kimi27') aiPanel.classList.add('kimi27-mode');
                     if (instructorKey === 'fable5') aiPanel.classList.add('fable5-mode');
-                    if (instructorKey === 'grok') aiPanel.classList.add('grok-mode');
                 }
 
                 if (instructorKey === 'nemotron' && (instructorMode.nemotron !== 'code' && instructorMode.nemotron !== 'partner')) {

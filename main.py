@@ -101,18 +101,6 @@ except Exception as e:
     _kimi_svc = None
     logger.warning(f"Kimi service not available: {e}")
 
-# Super Heavy Grok — Big Daddy xAI flagship
-try:
-    from backend.grok_service import get_grok_service
-    _grok_svc = get_grok_service()
-    if not _grok_svc.is_available:
-        logger.warning("Super Heavy Grok offline — set XAI_API_KEY or GROK_API_KEY")
-    else:
-        logger.info("Super Heavy Grok linked — available at /api/grok")
-except Exception as e:
-    _grok_svc = None
-    logger.warning(f"Grok service not available: {e}")
-
 class ChatRequest(BaseModel):
     message: str
     context: str | None = None
@@ -138,14 +126,10 @@ class KimiRequest(BaseModel):
     variant: str = "k2.6"  # k2.6 | k2.7
     model: str | None = None
 
-class GrokRequest(BaseModel):
-    message: str
-    context: str | None = None
-
 class ProjectReviewRequest(BaseModel):
     path: str | None = None
     message: str | None = None
-    instructor: str = "family"  # + fable5 | grok | kimi26 | kimi27 | auto
+    instructor: str = "family"  # + fable5 | kimi26 | kimi27 | auto
 
 @app.get("/api/health")
 async def health_check():
@@ -153,7 +137,6 @@ async def health_check():
     from backend.nemo_service import NVIDIA_NEMO_MODEL
     from backend.mistral_service import NVIDIA_MISTRAL_MODEL
     from backend.kimi_service import NVIDIA_KIMI_K26_MODEL, NVIDIA_KIMI_K27_MODEL
-    from backend.grok_service import GROK_MODEL as XAI_GROK_MODEL
 
     fable5_model = os.getenv("FABLE5_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"))
     anthropic_key = bool(os.getenv("ANTHROPIC_API_KEY", "").strip())
@@ -175,9 +158,6 @@ async def health_check():
     )
     kimi27_wiring = (
         _kimi_svc.wiring_info("k2.7") if _kimi_svc else {"backend": "offline", "label": "unavailable"}
-    )
-    grok_wiring = (
-        _grok_svc.wiring_info() if _grok_svc else {"backend": "offline", "label": "unavailable"}
     )
     kimi_key_set = bool(_kimi_svc and _kimi_svc.api_key_configured)
 
@@ -208,7 +188,6 @@ async def health_check():
             "kimi26": kimi26_wiring.get("label", NVIDIA_KIMI_K26_MODEL),
             "kimi27": kimi27_wiring.get("label", NVIDIA_KIMI_K27_MODEL),
             "fable5": f"{fable5_model} (Fable-5 · Anthropic)",
-            "grok": grok_wiring.get("label", XAI_GROK_MODEL),
         },
         "instructors": {
             "family": {
@@ -283,19 +262,11 @@ async def health_check():
                 "api_key_env": "NVIDIA_KIMI_API_KEY",
                 "api_key_set": kimi_key_set,
             },
-            "grok": {
-                "name": "Super Heavy Grok",
-                "backend": grok_wiring.get("backend", "offline"),
-                "model": grok_wiring.get("model", XAI_GROK_MODEL),
-                "label": grok_wiring.get("label", "unavailable"),
-                "api_key_env": "XAI_API_KEY",
-                "api_key_set": bool(_grok_svc and _grok_svc.api_key_configured),
-            },
             "auto": {
                 "name": "Auto",
                 "backend": "router",
                 "model": "auto-switcher",
-                "label": "Auto — Grok / Kimi / Nemotron / Fable-5 / Family by task",
+                "label": "Auto — Kimi / Nemotron / Fable-5 / Family by task",
                 "api_key_env": "—",
                 "api_key_set": True,
             },
@@ -309,7 +280,6 @@ async def health_check():
             "kimi26": kimi26_wiring.get("label", "unavailable"),
             "kimi27": kimi27_wiring.get("label", "unavailable"),
             "fable5": f"{fable5_model} (Fable-5)",
-            "grok": grok_wiring.get("label", "unavailable"),
             "being_agent_tools": AGENT_MODEL,
         },
         "features": {
@@ -317,7 +287,6 @@ async def health_check():
             "auto_switcher": True,
             "kimi_swarm": True,
             "fable5": True,
-            "super_heavy_grok": True,
         },
     }
 
@@ -371,7 +340,7 @@ async def _run_project_review(
         instructor = "kimi26"
     if instructor not in (
         "family", "claude", "fable5", "nemotron", "nemoclaw", "mistral",
-        "kimi", "kimi26", "kimi27", "grok",
+        "kimi", "kimi26", "kimi27",
     ):
         instructor = "family"
 
@@ -450,24 +419,6 @@ async def _run_project_review(
                 lambda: _mistral_svc.generate_content(task, context=full_context),
             )
             result = {"text": reply, "tool_count": 0, "tools_executed": []}
-    elif instructor == "grok" and _grok_svc and _grok_svc.is_available:
-        from backend.being_agent import run_being_agent as _run_ba
-        loop = asyncio.get_event_loop()
-
-        async def _grok_gen(prompt: str) -> str:
-            return await loop.run_in_executor(
-                None,
-                lambda: _grok_svc.generate_content(prompt, context=None),
-            )
-
-        result = await _run_ba(
-            _grok_gen,
-            message=task,
-            context=full_context,
-            max_steps=max_steps,
-            scope_root=project_path,
-            review_instructor="grok",
-        )
     else:
         result = await run_being_agent(
             message=task,
@@ -911,102 +862,6 @@ async def kimi_endpoint(request: KimiRequest):
                 detail="NVIDIA Kimi returned 500. Retry in 30s, smaller scope, or switch to NemoClaw/Mistral.",
             )
         raise fastapi.HTTPException(status_code=500, detail=err)
-
-
-@app.post("/api/grok")
-async def grok_endpoint(request: GrokRequest):
-    """Super Heavy Grok — Big Daddy xAI flagship instructor."""
-    logger.info("Super Heavy Grok request: %s", request.message[:120])
-    if not _grok_svc or not _grok_svc.is_available:
-        raise fastapi.HTTPException(
-            status_code=503,
-            detail="Super Heavy Grok offline — set XAI_API_KEY or GROK_API_KEY in .env",
-        )
-    try:
-        from backend.being_agent import (
-            run_being_agent,
-            wants_agent_tools,
-            wants_project_review,
-            review_agent_max_steps,
-            strip_tool_blocks,
-            _is_tool_leak,
-            _fallback_summary_from_tools,
-        )
-        from backend.being_context import (
-            build_being_context,
-            extract_project_root_path,
-            GROK_IDENTITY,
-        )
-
-        is_review = wants_project_review(request.message)
-        project_path = extract_project_root_path(request.message)
-        full_context = await build_being_context(
-            message=request.message,
-            extra_context=request.context,
-            project_path=project_path,
-            compact=not is_review,
-            for_review=is_review,
-            read_open_file=not is_review,
-        )
-        full_context = f"{GROK_IDENTITY}\n\n{full_context}"
-
-        loop = asyncio.get_event_loop()
-
-        async def generate(prompt: str) -> str:
-            return await loop.run_in_executor(
-                None,
-                lambda: _grok_svc.generate_content(prompt, context=None),
-            )
-
-        if wants_agent_tools(request.message, "code") or is_review:
-            result = await run_being_agent(
-                generate,
-                message=request.message,
-                context=full_context,
-                max_steps=review_agent_max_steps() if is_review else 6,
-                scope_root=project_path if is_review else None,
-                review_instructor="grok" if is_review else None,
-            )
-            text = strip_tool_blocks(result.get("text", ""))
-            if _is_tool_leak(text) and result.get("tools_executed"):
-                text = _fallback_summary_from_tools(
-                    result["tools_executed"],
-                    user_message=request.message,
-                )
-            tool_count = result.get("tool_count", 0)
-            prefix = (
-                f"[SUPER HEAVY GROK — {tool_count} tool(s)]: "
-                if tool_count
-                else "[SUPER HEAVY GROK]: "
-            )
-            wiring = _grok_svc.wiring_info()
-            return {
-                "response": f"{prefix}{text}",
-                "source": "grok",
-                "model": wiring.get("model"),
-                "wiring": wiring,
-                "tools_executed": result.get("tools_executed", []),
-                "tool_count": tool_count,
-                "agent": True,
-            }
-
-        reply = await loop.run_in_executor(
-            None,
-            lambda: _grok_svc.generate_content(
-                request.message, context=full_context
-            ),
-        )
-        wiring = _grok_svc.wiring_info()
-        return {
-            "response": f"[SUPER HEAVY GROK]: {reply}",
-            "source": "grok",
-            "model": wiring.get("model"),
-            "wiring": wiring,
-            "agent": False,
-        }
-    except Exception as e:
-        logger.error("Super Heavy Grok error: %s", e)
-        raise fastapi.HTTPException(status_code=500, detail=str(e))
 
 
 # ==========================================
