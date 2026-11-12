@@ -69,9 +69,6 @@ TTS_BEING_ALIASES: dict[str, str] = {
     "kimi27": "kimi",
     "k2.6": "kimi",
     "k2.7": "kimi",
-    "grok": "ultimateev",
-    "superheavy": "ultimateev",
-    "super_heavy_grok": "ultimateev",
 }
 
 # macOS `say` male fallbacks when XTTS is unavailable (all English male voices on this Mac)

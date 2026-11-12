@@ -104,7 +104,7 @@ _SYSTEM = {
     "partner": (
         _IDENTITY_PREFIX
         + "Mode: NVIDIA Partner / pitch narrative (Kimi on NIM).\n"
-        "Swarm with Nemotron, NemoClaw, Mistral, Fable-5, and Super Heavy Grok on partner decks.\n"
+        "Swarm with Nemotron, NemoClaw, Mistral, and Fable-5 on partner decks.\n"
         "Specific architecture, data sovereignty, Carbon-Silicon Symbiosis — never generic startup filler.\n"
         "Mark missing metrics explicitly; never invent traction numbers.\n"
         + _ABILITIES_HINT
