@@ -138,7 +138,7 @@ async def health_check():
     from backend.mistral_service import NVIDIA_MISTRAL_MODEL
     from backend.kimi_service import NVIDIA_KIMI_K26_MODEL, NVIDIA_KIMI_K27_MODEL
 
-    fable5_model = os.getenv("FABLE5_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"))
+    fable5_model = os.getenv("FABLE5_MODEL", "claude-fable-5-2")
     anthropic_key = bool(os.getenv("ANTHROPIC_API_KEY", "").strip())
 
     nemo_wiring = (

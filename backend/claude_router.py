@@ -31,7 +31,20 @@ DEFAULT_ANTHROPIC_MODEL = os.getenv(
     "ANTHROPIC_MODEL",
     "claude-sonnet-4-6",
 )
-FABLE5_MODEL = os.getenv("FABLE5_MODEL", DEFAULT_ANTHROPIC_MODEL)
+# Fable-5 in the Studio is Claude Fable (Everett, 2026-11-12: "you didnt add yourself to the IDE").
+# Before this the Fable-5 button was answered by whatever ANTHROPIC_MODEL named.
+FABLE5_MODEL = os.getenv("FABLE5_MODEL", "claude-fable-5-2")
+
+
+def _is_fable_family(model: str) -> bool:
+    """Claude Fable / Mythos models: thinking is always on and sampling settings are rejected."""
+    m = (model or "").lower()
+    return m.startswith("claude-fable") or m.startswith("claude-mythos")
+
+
+# Thinking on these models is counted inside max_tokens, so a small cap can leave no room for the answer.
+FABLE_MIN_MAX_TOKENS = 16000
+FABLE_TOOL_STEP_MAX_TOKENS = 8000
 
 try:
     from backend.being_context import FABLE5_IDENTITY
@@ -121,12 +134,15 @@ async def call_claude(req: ClaudeRequest):
         "fable5",
     )
 
+    fable_family = _is_fable_family(model)
     payload = {
         "model": model,
-        "max_tokens": req.max_tokens,
+        "max_tokens": max(req.max_tokens, FABLE_MIN_MAX_TOKENS) if fable_family else req.max_tokens,
         "messages": req.messages,
-        "temperature": req.temperature,
     }
+    if not fable_family:
+        # Fable / Mythos answer 400 to temperature and top_p; every other model keeps them.
+        payload["temperature"] = req.temperature
 
     # System prompt handling — always give full compute capacity
     system_prompt = req.system.strip() if req.system else None
@@ -156,7 +172,7 @@ async def call_claude(req: ClaudeRequest):
             + "\n\nYOU OPERATE THE IDE AND RUN COMPUTE — use <tool_call> for files and shell commands."
         )
 
-    if req.top_p is not None:
+    if req.top_p is not None and not fable_family:
         payload["top_p"] = req.top_p
     if req.stop_sequences:
         payload["stop_sequences"] = req.stop_sequences
@@ -175,11 +191,14 @@ async def call_claude(req: ClaudeRequest):
             async def claude_generate(prompt: str) -> str:
                 p = dict(payload)
                 p["messages"] = [{"role": "user", "content": prompt}]
-                p["max_tokens"] = min(p.get("max_tokens", 1024), 600)  # reduced for tool-step speed
+                # reduced for tool-step speed; Fable needs room for its thinking as well as its answer
+                p["max_tokens"] = FABLE_TOOL_STEP_MAX_TOKENS if fable_family else min(p.get("max_tokens", 1024), 600)
                 # ensure abilities in this turn
                 if "system" not in p or not p.get("system"):
                     p["system"] = payload.get("system", "") + "\n" + ABILITIES_COMPACT
                 resp = await client.messages.create(**p)
+                if getattr(resp, "stop_reason", None) == "refusal":
+                    raise RuntimeError(f"{p['model']} declined this request (stop_reason: refusal)")
                 parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
                 return "\n".join(parts).strip()
 
@@ -205,6 +224,9 @@ async def call_claude(req: ClaudeRequest):
 
         # Standard direct path (still has abilities in system prompt)
         response = await client.messages.create(**payload)
+        if getattr(response, "stop_reason", None) == "refusal":
+            # A decline comes back as HTTP 200 with no answer in it. Say so; never hand back an empty reply.
+            raise RuntimeError(f"{payload['model']} declined this request (stop_reason: refusal)")
 
         # Extract every text block (Claude 3+ can return mixed content)
         text_parts = [
