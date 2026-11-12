@@ -366,9 +366,29 @@
             background-size: contain;
             background-repeat: no-repeat;
             background-position: center;
-            width: 320px;
-            height: 320px;
+            /* Never taller than the editor pane, so the hint under it stays in view. */
+            width: min(320px, 60%);
+            height: min(320px, 60%);
             filter: drop-shadow(0 0 12px rgba(184, 115, 51, 0.35)) drop-shadow(0 0 6px rgba(255, 95, 31, 0.2)) drop-shadow(0 0 4px rgba(64, 224, 208, 0.1));
+            transition: opacity 0.25s ease;
+        }
+
+        /* With a file open the crest stays, but faint enough that the code reads cleanly over it. */
+        #editor-wrapper.has-file #watermark {
+            opacity: 0.05;
+        }
+
+        /* The empty-editor hint sits under the crest, not across it. */
+        #editor-placeholder {
+            position: absolute;
+            top: calc(50% + min(160px, 30%) + 14px);
+            left: 50%;
+            transform: translateX(-50%);
+            color: #666;
+            font-style: italic;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 2;
         }
 
         .editor-tabs {
@@ -874,7 +894,7 @@
                 </div>
                 <div class="editor-tabs" id="editor-tabs"></div>
                 <div id="editor-content"></div>
-                <div id="editor-placeholder" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#444;font-style:italic;pointer-events:none;z-index:2;">// Select a file or open from explorer</div>
+                <div id="editor-placeholder">// Select a file or open from explorer</div>
             </div>
             <div id="terminal-container">
                 <div id="terminal"></div>
@@ -1337,6 +1357,7 @@
             if (fname) fname.textContent = path;
             if (lname) lname.textContent = lang;
             if (placeholder) placeholder.style.display = 'none';
+            document.getElementById('editor-wrapper').classList.add('has-file');
         }
         function closeTab(path) {
             const idx = openTabs.findIndex(t => t.path === path);
@@ -1353,6 +1374,7 @@
                     const fname = document.getElementById('sb-file-name');
                     if (fname) fname.textContent = 'no file open';
                     if (placeholder) placeholder.style.display = '';
+                    document.getElementById('editor-wrapper').classList.remove('has-file');
                 }
             }
             renderTabs();
@@ -1368,6 +1390,7 @@
             }
             switchTab(filepath);
             if (placeholder) placeholder.style.display = 'none';
+            document.getElementById('editor-wrapper').classList.add('has-file');
             renderTabs();
         }
 
